@@ -1,0 +1,44 @@
+[
+  {
+    "ID": "Creature_001_Store",
+    "CreatureID": "CoolDog_Base",
+    "BuyCost": "250",
+    "Quantity": "1"
+  },
+  {
+    "ID": "Creature_002_Store",
+    "CreatureID": "BaldingMan_Base",
+    "BuyCost": "250",
+    "Quantity": "1"
+  },
+  {
+    "ID": "Creature_003_Store",
+    "CreatureID": "SoftEyeling_Base",
+    "BuyCost": "250",
+    "Quantity": "1"
+  },
+  {
+    "ID": "Creature_004_Store",
+    "CreatureID": "AncientScholar_Base",
+    "BuyCost": "1000",
+    "Quantity": "1"
+  },
+  {
+    "ID": "Creature_005_Store",
+    "CreatureID": "MaiseWalker_Base",
+    "BuyCost": "1000",
+    "Quantity": "1"
+  },
+  {
+    "ID": "Creature_006_Store",
+    "CreatureID": "CottonSaurusRex_Base",
+    "BuyCost": "3000",
+    "Quantity": "1"
+  },
+  {
+    "ID": "Creature_007_Store",
+    "CreatureID": "DiamondDan_Base",
+    "BuyCost": "3000",
+    "Quantity": "1"
+  }
+]
