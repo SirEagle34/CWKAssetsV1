@@ -1,0 +1,79 @@
+{% extends "admin_base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <div>
+        <h1 class="h2 mb-1">Gift Codes</h1>
+        <div class="text-body-secondary">Create and manage redeem codes.</div>
+    </div>
+    <a class="btn btn-primary" href="/admin/gift-codes/create">
+        <i class="bi bi-plus-lg"></i> Create Gift Code
+    </a>
+</div>
+
+<style>
+.gift-neon {
+    border: 1px solid rgba(13,110,253,.35);
+    box-shadow: 0 0 18px rgba(13,110,253,.12);
+    transition: .2s ease;
+}
+.gift-neon:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 28px rgba(13,110,253,.22);
+}
+.code-pill {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .08em;
+}
+</style>
+
+<div class="row g-3">
+{% for gift in codes %}
+<div class="col-12 col-xl-6">
+    <div class="card gift-neon h-100">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start gap-3">
+                <div>
+                    <div class="badge text-bg-dark code-pill fs-6 mb-2">{{ gift.code }}</div>
+                    <h5 class="card-title mb-1">{{ gift.subject or "Gift Code" }}</h5>
+                    <p class="card-text text-body-secondary mb-3">{{ gift.message or "No message." }}</p>
+                </div>
+                {% if gift.enabled %}
+                    <span class="badge text-bg-success">Enabled</span>
+                {% else %}
+                    <span class="badge text-bg-secondary">Disabled</span>
+                {% endif %}
+            </div>
+
+            <div class="row g-2 small mb-3">
+                <div class="col-6"><strong>Soft:</strong> {{ gift.rewards.soft_currency or 0 }}</div>
+                <div class="col-6"><strong>Free Gems:</strong> {{ gift.rewards.free_hard_currency or 0 }}</div>
+                <div class="col-6"><strong>Paid Gems:</strong> {{ gift.rewards.paid_hard_currency or 0 }}</div>
+                <div class="col-6"><strong>Uses:</strong> {{ gift.used_count }} / {{ gift.max_uses if gift.max_uses else "∞" }}</div>
+            </div>
+
+            <div class="small text-body-secondary mb-3">
+                Creatures: {{ gift.rewards.creatures|length }} |
+                Action Cards: {{ gift.rewards.action_cards|length }}
+            </div>
+
+            <div class="d-flex gap-2">
+                <form method="post" action="/admin/gift-codes/{{ gift.code }}/toggle">
+                    <button class="btn btn-outline-warning btn-sm" type="submit">
+                        {% if gift.enabled %}Disable{% else %}Enable{% endif %}
+                    </button>
+                </form>
+                <form method="post" action="/admin/gift-codes/{{ gift.code }}/delete"
+                      onsubmit="return confirm('Delete {{ gift.code }}?');">
+                    <button class="btn btn-outline-danger btn-sm" type="submit">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="col-12">
+    <div class="alert alert-info">No gift codes have been created yet.</div>
+</div>
+{% endfor %}
+</div>
+{% endblock %}
