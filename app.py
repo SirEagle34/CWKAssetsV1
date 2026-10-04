@@ -4863,6 +4863,143 @@ def AdminGiftCodeCreate():
         "/admin/gift-codes"
     )
 
+# ============================================================
+# GIFT CODE REWARD CATALOG API
+# ============================================================
+
+@app.route(
+    "/admin/gift-codes/catalog/<kind>",
+    methods=["GET"]
+)
+@login_required
+def AdminGiftCodeCatalog(kind):
+
+    # Only Gift Code administrators can access the catalog.
+    if not GiftCodeAdminAllowed():
+        return abort(404)
+
+    # --------------------------------------------------------
+    # SELECT CATALOG
+    # --------------------------------------------------------
+
+    if kind == "creatures":
+
+        catalog_path = (
+            "data/persist/blueprints/"
+            "db_Creatures.json"
+        )
+
+        fields = [
+            "ID",
+            "Name",
+            "Prefab",
+            "Faction",
+            "Rarity"
+        ]
+
+    elif kind == "action-cards":
+
+        catalog_path = (
+            "data/persist/blueprints/"
+            "db_ActionCards.json"
+        )
+
+        fields = [
+            "ID",
+            "Name",
+            "TypeText",
+            "Faction",
+            "Rarity",
+            "Cost"
+        ]
+
+    else:
+
+        return jsonify({
+            "success": False,
+            "error": "UNKNOWN_CATALOG"
+        }), 404
+
+    # --------------------------------------------------------
+    # LOAD JSON
+    # --------------------------------------------------------
+
+    try:
+
+        with open(
+            catalog_path,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            raw_data = json.load(f)
+
+    except Exception as e:
+
+        Log(
+            "giftcode",
+            "Failed to load catalog "
+            + catalog_path
+            + ": "
+            + repr(e)
+        )
+
+        return jsonify({
+            "success": False,
+            "error": "CATALOG_LOAD_FAILED"
+        }), 500
+
+    # --------------------------------------------------------
+    # NORMALIZE CATALOG
+    # --------------------------------------------------------
+
+    if not isinstance(
+        raw_data,
+        list
+    ):
+
+        raw_data = []
+
+    items = []
+
+    for item in raw_data:
+
+        if not isinstance(
+            item,
+            dict
+        ):
+            continue
+
+        entry = {}
+
+        for field in fields:
+
+            value = item.get(
+                field
+            )
+
+            if (
+                value is not None
+                and value != ""
+            ):
+
+                entry[field] = value
+
+        # ID is required.
+        if entry.get("ID"):
+
+            items.append(
+                entry
+            )
+
+    # --------------------------------------------------------
+    # RESPONSE
+    # --------------------------------------------------------
+
+    return jsonify({
+        "success": True,
+        "items": items
+    })
 
 @app.route(
     "/admin/gift-codes/<code>/toggle",
