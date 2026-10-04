@@ -4211,6 +4211,953 @@ def GrantCalendarReward(player, reward):
         )
     }
 
+
+# ============================================================
+# GIFT CODES
+# ============================================================
+
+GIFT_CODES_PATH = "data/persist/gift_codes.json"
+GIFT_CODES_LOCK = threading.Lock()
+
+
+def EnsureGiftCodesFile():
+    os.makedirs(
+        os.path.dirname(GIFT_CODES_PATH),
+        exist_ok=True
+    )
+
+    if not os.path.exists(GIFT_CODES_PATH):
+        with open(
+            GIFT_CODES_PATH,
+            "w",
+            encoding="utf-8"
+        ) as f:
+            json.dump(
+                {"codes": []},
+                f,
+                ensure_ascii=False,
+                indent=4
+            )
+
+
+def LoadGiftCodes():
+    EnsureGiftCodesFile()
+
+    try:
+        with open(
+            GIFT_CODES_PATH,
+            "r",
+            encoding="utf-8"
+        ) as f:
+            data = json.load(f)
+
+        if not isinstance(data, dict):
+            return {"codes": []}
+
+        if not isinstance(data.get("codes"), list):
+            data["codes"] = []
+
+        return data
+
+    except Exception as e:
+        Log(
+            "giftcode",
+            "Failed to load gift codes: " + repr(e)
+        )
+        return {"codes": []}
+
+
+def SaveGiftCodes(data):
+    EnsureGiftCodesFile()
+
+    temporary_path = GIFT_CODES_PATH + ".tmp"
+
+    with open(
+        temporary_path,
+        "w",
+        encoding="utf-8"
+    ) as f:
+        json.dump(
+            data,
+            f,
+            ensure_ascii=False,
+            indent=4
+        )
+
+    os.replace(
+        temporary_path,
+        GIFT_CODES_PATH
+    )
+
+
+def NormalizeGiftCode(code):
+    if code is None:
+        return ""
+
+    return str(code).strip().upper()
+
+
+def FindGiftCode(data, code):
+    normalized = NormalizeGiftCode(code)
+
+    for item in data.get("codes", []):
+        if NormalizeGiftCode(item.get("code")) == normalized:
+            return item
+
+    return None
+
+
+def ParseGiftCodeRewardList(raw_value, field_name):
+    if raw_value is None or raw_value.strip() == "":
+        return []
+
+    try:
+        parsed = json.loads(raw_value)
+    except Exception:
+        raise ValueError(
+            field_name + " must contain valid JSON."
+        )
+
+    if not isinstance(parsed, list):
+        raise ValueError(
+            field_name + " must be a JSON array."
+        )
+
+    return parsed
+
+
+def GiftCodeIsActive(gift):
+    if not bool(gift.get("enabled", True)):
+        return False
+
+    now = datetime.now(timezone.utc)
+
+    start_date = gift.get("start_date")
+    end_date = gift.get("end_date")
+
+    if start_date:
+        try:
+            start = datetime.fromisoformat(
+                str(start_date).replace("Z", "+00:00")
+            )
+
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
+
+            if now < start:
+                return False
+
+        except ValueError:
+            return False
+
+    if end_date:
+        try:
+            end = datetime.fromisoformat(
+                str(end_date).replace("Z", "+00:00")
+            )
+
+            if end.tzinfo is None:
+                end = end.replace(tzinfo=timezone.utc)
+
+            if now > end:
+                return False
+
+        except ValueError:
+            return False
+
+    return True
+
+
+def GrantGiftCodeReward(player, gift):
+    game_field = player.game
+
+    save_json = None
+
+    if game_field:
+
+        game_text = None
+
+        if isinstance(
+            game_field,
+            (bytes, bytearray)
+        ):
+            try:
+                game_text = game_field.decode("utf-8")
+            except Exception:
+                game_text = None
+
+        else:
+            game_text = game_field
+
+        if (
+            isinstance(game_text, str)
+            and game_text.strip().startswith("{")
+        ):
+            try:
+                save_json = json.loads(game_text)
+            except Exception:
+                save_json = None
+
+        if save_json is None:
+            try:
+                decrypted = DecryptGameData(
+                    game_field
+                )
+
+                if isinstance(decrypted, dict):
+                    save_json = decrypted
+
+                elif isinstance(decrypted, str):
+                    save_json = json.loads(decrypted)
+
+            except Exception:
+                save_json = None
+
+    if save_json is None:
+        return {
+            "success": False,
+            "error": "INVALID_PLAYER_SAVE"
+        }
+
+    rewards = gift.get("rewards", {})
+
+    if not isinstance(rewards, dict):
+        return {
+            "success": False,
+            "error": "INVALID_REWARDS"
+        }
+
+    granted = {
+        "soft_currency": 0,
+        "free_hard_currency": 0,
+        "paid_hard_currency": 0,
+        "creatures": [],
+        "action_cards": []
+    }
+
+    # --------------------------------------------------------
+    # CURRENCIES
+    # --------------------------------------------------------
+
+    soft_currency = int(
+        rewards.get("soft_currency", 0) or 0
+    )
+
+    free_hard_currency = int(
+        rewards.get("free_hard_currency", 0) or 0
+    )
+
+    paid_hard_currency = int(
+        rewards.get("paid_hard_currency", 0) or 0
+    )
+
+    if soft_currency < 0:
+        return {
+            "success": False,
+            "error": "INVALID_SOFT_CURRENCY"
+        }
+
+    if free_hard_currency < 0:
+        return {
+            "success": False,
+            "error": "INVALID_FREE_HARD_CURRENCY"
+        }
+
+    if paid_hard_currency < 0:
+        return {
+            "success": False,
+            "error": "INVALID_PAID_HARD_CURRENCY"
+        }
+
+    save_json["SoftCurrency"] = (
+        int(save_json.get("SoftCurrency", 0) or 0)
+        + soft_currency
+    )
+
+    save_json["FreeHardCurrency"] = (
+        int(save_json.get("FreeHardCurrency", 0) or 0)
+        + free_hard_currency
+    )
+
+    save_json["PaidHardCurrency"] = (
+        int(save_json.get("PaidHardCurrency", 0) or 0)
+        + paid_hard_currency
+    )
+
+    granted["soft_currency"] = soft_currency
+    granted["free_hard_currency"] = free_hard_currency
+    granted["paid_hard_currency"] = paid_hard_currency
+
+    # --------------------------------------------------------
+    # INVENTORY
+    # --------------------------------------------------------
+
+    inventory = save_json.get("Inventory")
+
+    if inventory is None:
+        inventory = []
+        save_json["Inventory"] = inventory
+
+    if not isinstance(inventory, list):
+        return {
+            "success": False,
+            "error": "INVALID_INVENTORY"
+        }
+
+    max_uid = 0
+
+    for item in inventory:
+        if not isinstance(item, dict):
+            continue
+
+        try:
+            uid = int(item.get("UniqueID", 0))
+            if uid > max_uid:
+                max_uid = uid
+        except Exception:
+            pass
+
+    next_uid = max_uid + 1
+
+    # --------------------------------------------------------
+    # CREATURES
+    # --------------------------------------------------------
+
+    creatures = rewards.get("creatures", [])
+
+    if not isinstance(creatures, list):
+        return {
+            "success": False,
+            "error": "INVALID_CREATURE_REWARDS"
+        }
+
+    for reward in creatures:
+
+        if not isinstance(reward, dict):
+            return {
+                "success": False,
+                "error": "INVALID_CREATURE_REWARD"
+            }
+
+        creature_id = str(
+            reward.get("id", "")
+        ).strip()
+
+        if not creature_id:
+            return {
+                "success": False,
+                "error": "CREATURE_ID_REQUIRED"
+            }
+
+        amount = int(
+            reward.get("amount", 1)
+        )
+
+        star_rating = int(
+            reward.get("star_rating", 1)
+        )
+
+        if amount < 1 or amount > 999:
+            return {
+                "success": False,
+                "error": "INVALID_CREATURE_AMOUNT"
+            }
+
+        if star_rating < 1 or star_rating > 6:
+            return {
+                "success": False,
+                "error": "INVALID_CREATURE_STAR_RATING"
+            }
+
+        for _ in range(amount):
+
+            inventory.append({
+                "_T": "CR",
+                "ID": creature_id,
+                "UniqueID": int(next_uid),
+                "Xp": 0,
+                "Favorite": 0,
+                "Passive": 1,
+                "PassiveFeeds": 0,
+                "StarRating": star_rating
+            })
+
+            next_uid += 1
+
+        granted["creatures"].append({
+            "id": creature_id,
+            "amount": amount,
+            "star_rating": star_rating
+        })
+
+    # --------------------------------------------------------
+    # ACTION CARDS / EX CARDS
+    # --------------------------------------------------------
+
+    action_cards = rewards.get(
+        "action_cards",
+        []
+    )
+
+    if not isinstance(action_cards, list):
+        return {
+            "success": False,
+            "error": "INVALID_ACTION_CARD_REWARDS"
+        }
+
+    for reward in action_cards:
+
+        if not isinstance(reward, dict):
+            return {
+                "success": False,
+                "error": "INVALID_ACTION_CARD_REWARD"
+            }
+
+        card_id = str(
+            reward.get("id", "")
+        ).strip()
+
+        if not card_id:
+            return {
+                "success": False,
+                "error": "ACTION_CARD_ID_REQUIRED"
+            }
+
+        amount = int(
+            reward.get("amount", 1)
+        )
+
+        if amount < 1 or amount > 999:
+            return {
+                "success": False,
+                "error": "INVALID_ACTION_CARD_AMOUNT"
+            }
+
+        # ExCard inventory entries use the same
+        # UniqueID system as creature entries.
+        for _ in range(amount):
+
+            inventory.append({
+                "_T": "EX",
+                "ID": card_id,
+                "UniqueID": int(next_uid),
+                "Favorite": 0
+            })
+
+            next_uid += 1
+
+        granted["action_cards"].append({
+            "id": card_id,
+            "amount": amount
+        })
+
+    player.game = json.dumps(
+        save_json,
+        ensure_ascii=False
+    )
+
+    return {
+        "success": True,
+        "reward": granted
+    }
+
+
+def GiftCodeAdminAllowed():
+    if not current_user.is_authenticated:
+        return False
+
+    if not isAdmin(current_user):
+        return False
+
+    return int(getattr(current_user, "rank", 999)) == 0
+
+
+@app.route(
+    "/admin/gift-codes",
+    methods=["GET"]
+)
+@login_required
+def AdminGiftCodes():
+
+    if not GiftCodeAdminAllowed():
+        return abort(404)
+
+    with GIFT_CODES_LOCK:
+        data = LoadGiftCodes()
+
+    codes = data.get("codes", [])
+
+    for gift in codes:
+        gift["used_count"] = len(
+            gift.get("used_by", [])
+        )
+
+    return render_template(
+        "admin_giftcodes.html",
+        codes=codes
+    )
+
+
+@app.route(
+    "/admin/gift-codes/create",
+    methods=["GET", "POST"]
+)
+@login_required
+def AdminGiftCodeCreate():
+
+    if not GiftCodeAdminAllowed():
+        return abort(404)
+
+    if request.method == "GET":
+        return render_template(
+            "admin_giftcode_create.html"
+        )
+
+    code = NormalizeGiftCode(
+        request.form.get("code", "")
+    )
+
+    if (
+        not code
+        or not re.fullmatch(
+            r"[A-Z0-9_-]{3,64}",
+            code
+        )
+    ):
+        return make_response(
+            "Invalid gift code. Use 3-64 letters, numbers, '_' or '-'.",
+            400
+        )
+
+    try:
+        soft_currency = int(
+            request.form.get(
+                "soft_currency",
+                0
+            ) or 0
+        )
+
+        free_hard_currency = int(
+            request.form.get(
+                "free_hard_currency",
+                0
+            ) or 0
+        )
+
+        paid_hard_currency = int(
+            request.form.get(
+                "paid_hard_currency",
+                0
+            ) or 0
+        )
+
+        max_uses = int(
+            request.form.get(
+                "max_uses",
+                0
+            ) or 0
+        )
+
+        if (
+            soft_currency < 0
+            or free_hard_currency < 0
+            or paid_hard_currency < 0
+            or max_uses < 0
+        ):
+            raise ValueError()
+
+        creatures = ParseGiftCodeRewardList(
+            request.form.get(
+                "creatures_json",
+                ""
+            ),
+            "Creatures JSON"
+        )
+
+        action_cards = ParseGiftCodeRewardList(
+            request.form.get(
+                "action_cards_json",
+                ""
+            ),
+            "Action Cards JSON"
+        )
+
+    except ValueError as e:
+
+        return make_response(
+            str(e)
+            if str(e)
+            else "Reward values are invalid.",
+            400
+        )
+
+    start_date = (
+        request.form.get(
+            "start_date",
+            ""
+        ).strip()
+        or None
+    )
+
+    end_date = (
+        request.form.get(
+            "end_date",
+            ""
+        ).strip()
+        or None
+    )
+
+    gift = {
+        "code": code,
+        "enabled": True,
+        "subject": request.form.get(
+            "subject",
+            ""
+        ).strip(),
+        "message": request.form.get(
+            "message",
+            ""
+        ).strip(),
+        "start_date": start_date,
+        "end_date": end_date,
+        "max_uses": max_uses,
+        "used_by": [],
+        "created_at": datetime.now(
+            timezone.utc
+        ).isoformat(),
+        "created_by": current_user.username,
+        "rewards": {
+            "soft_currency": soft_currency,
+            "free_hard_currency": free_hard_currency,
+            "paid_hard_currency": paid_hard_currency,
+            "creatures": creatures,
+            "action_cards": action_cards
+        }
+    }
+
+    with GIFT_CODES_LOCK:
+
+        data = LoadGiftCodes()
+
+        if FindGiftCode(
+            data,
+            code
+        ) is not None:
+
+            return make_response(
+                "Gift code already exists.",
+                409
+            )
+
+        data["codes"].append(gift)
+        SaveGiftCodes(data)
+
+    Log(
+        "admin",
+        current_user.username
+        + " created gift code "
+        + code
+    )
+
+    return redirect(
+        "/admin/gift-codes"
+    )
+
+
+@app.route(
+    "/admin/gift-codes/<code>/toggle",
+    methods=["POST"]
+)
+@login_required
+def AdminGiftCodeToggle(code):
+
+    if not GiftCodeAdminAllowed():
+        return abort(404)
+
+    with GIFT_CODES_LOCK:
+
+        data = LoadGiftCodes()
+        gift = FindGiftCode(data, code)
+
+        if gift is None:
+            return make_response(
+                "Gift code not found.",
+                404
+            )
+
+        gift["enabled"] = not bool(
+            gift.get("enabled", True)
+        )
+
+        SaveGiftCodes(data)
+
+    Log(
+        "admin",
+        current_user.username
+        + " toggled gift code "
+        + NormalizeGiftCode(code)
+    )
+
+    return redirect(
+        "/admin/gift-codes"
+    )
+
+
+@app.route(
+    "/admin/gift-codes/<code>/delete",
+    methods=["POST"]
+)
+@login_required
+def AdminGiftCodeDelete(code):
+
+    if not GiftCodeAdminAllowed():
+        return abort(404)
+
+    normalized = NormalizeGiftCode(code)
+
+    with GIFT_CODES_LOCK:
+
+        data = LoadGiftCodes()
+
+        old_count = len(
+            data["codes"]
+        )
+
+        data["codes"] = [
+            gift
+            for gift in data["codes"]
+            if NormalizeGiftCode(
+                gift.get("code")
+            ) != normalized
+        ]
+
+        if len(data["codes"]) == old_count:
+            return make_response(
+                "Gift code not found.",
+                404
+            )
+
+        SaveGiftCodes(data)
+
+    Log(
+        "admin",
+        current_user.username
+        + " deleted gift code "
+        + normalized
+    )
+
+    return redirect(
+        "/admin/gift-codes"
+    )
+
+
+@app.route(
+    "/multiplayer/redeemcodeDW/",
+    methods=["POST"]
+)
+def MultiplayerRedeemCode():
+
+    try:
+
+        payload = request.get_json(
+            silent=True
+        )
+
+        if not isinstance(payload, dict):
+
+            client_data = parse_qs(
+                request.get_data().decode(
+                    "utf-8"
+                )
+            )
+
+            payload = {
+                key: value[0]
+                if len(value) == 1
+                else value
+                for key, value in client_data.items()
+            }
+
+        redeem_code = NormalizeGiftCode(
+            payload.get(
+                "redeemcode",
+                payload.get("code", "")
+            )
+        )
+
+        player_id = payload.get(
+            "player_id"
+        )
+
+        if not player_id:
+            player_id = request.headers.get(
+                "Player-Id"
+            )
+
+        if not redeem_code:
+            return jsonify({
+                "success": False,
+                "error": "REDEEM_CODE_REQUIRED"
+            }), 400
+
+        if not player_id:
+            return jsonify({
+                "success": False,
+                "error": "PLAYER_ID_REQUIRED"
+            }), 400
+
+        if InvalidUsername(
+            str(player_id)
+        ):
+            return jsonify({
+                "success": False,
+                "error": "INVALID_USERNAME"
+            }), 400
+
+        if IsUserBanned(
+            str(player_id),
+            IPFromRequest(request)
+        ):
+            return jsonify({
+                "success": False,
+                "error": "USER_BANNED"
+            }), 400
+
+        player = Player.query.filter_by(
+            username=str(player_id)
+        ).first()
+
+        if player is None:
+            return jsonify({
+                "success": False,
+                "error": "PLAYER_NOT_FOUND"
+            }), 404
+
+        with GIFT_CODES_LOCK:
+
+            data = LoadGiftCodes()
+
+            gift = FindGiftCode(
+                data,
+                redeem_code
+            )
+
+            if gift is None:
+                return jsonify({
+                    "success": False,
+                    "error": "INVALID_REDEEM_CODE"
+                }), 400
+
+            if not GiftCodeIsActive(gift):
+                return jsonify({
+                    "success": False,
+                    "error": "REDEEM_CODE_INACTIVE"
+                }), 400
+
+            used_by = gift.get(
+                "used_by",
+                []
+            )
+
+            if not isinstance(
+                used_by,
+                list
+            ):
+                used_by = []
+
+            if str(player.username) in used_by:
+                return jsonify({
+                    "success": False,
+                    "error": "ALREADY_REDEEMED"
+                }), 400
+
+            max_uses = int(
+                gift.get(
+                    "max_uses",
+                    0
+                ) or 0
+            )
+
+            if (
+                max_uses > 0
+                and len(used_by) >= max_uses
+            ):
+                return jsonify({
+                    "success": False,
+                    "error": "REDEEM_CODE_LIMIT_REACHED"
+                }), 400
+
+            result = GrantGiftCodeReward(
+                player,
+                gift
+            )
+
+            if not result.get("success"):
+
+                db.session.rollback()
+
+                return jsonify(result), 400
+
+            used_by.append(
+                str(player.username)
+            )
+
+            gift["used_by"] = used_by
+
+            SaveGiftCodes(data)
+
+            try:
+                db.session.commit()
+
+            except Exception as e:
+
+                db.session.rollback()
+
+                return jsonify({
+                    "success": False,
+                    "error": "REDEEM_SAVE_FAILED",
+                    "message": str(e)
+                }), 500
+
+        Log(
+            "redeemcode",
+            str(player.username)
+            + " redeemed "
+            + redeem_code
+        )
+
+        return jsonify({
+            "success": True,
+            "redeemcode": redeem_code,
+            "subject": gift.get(
+                "subject",
+                ""
+            ),
+            "message": gift.get(
+                "message",
+                ""
+            ),
+            "reward": result.get(
+                "reward",
+                {}
+            )
+        }), 200
+
+    except Exception as e:
+
+        db.session.rollback()
+
+        Log(
+            "redeemcode",
+            "Redeem error: " + repr(e)
+        )
+
+        return jsonify({
+            "success": False,
+            "error": "SERVER_ERROR"
+        }), 500
+
+
 @app.route("/persist/static/pvp_banlist", methods=['GET'])
 def GetPVPBanlist():
 	"""
