@@ -18,9 +18,24 @@
     border-radius: .75rem;
     padding: 1rem;
 }
+.catalog-results {
+    max-height: 280px;
+    overflow-y: auto;
+}
+.catalog-item {
+    cursor: pointer;
+}
+.catalog-item:hover {
+    background: rgba(13,110,253,.08);
+}
+.selected-reward {
+    border: 1px solid var(--bs-border-color);
+    border-radius: .5rem;
+    padding: .65rem .75rem;
+}
 </style>
 
-<form method="post">
+<form method="post" id="giftCodeForm">
 <div class="card neon-panel mb-4">
     <div class="card-body">
         <h5 class="card-title">Code</h5>
@@ -85,16 +100,70 @@
 <div class="card neon-panel mb-4">
     <div class="card-body">
         <h5 class="card-title">Creatures</h5>
-        <p class="text-body-secondary small">JSON array. Example: one creature with 2 copies at Star 3.</p>
-        <textarea class="form-control font-monospace" name="creatures_json" rows="5" placeholder='[{"id":"Creature_ID","amount":2,"star_rating":3}]'></textarea>
+        <p class="text-body-secondary small">
+            Search by Creature ID or Name. Select a creature and set amount/star rating.
+        </p>
+
+        <div class="row g-2 mb-3">
+            <div class="col-md-8">
+                <input
+                    class="form-control"
+                    id="creatureSearch"
+                    type="search"
+                    placeholder="Search Creature ID or Name..."
+                    autocomplete="off">
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-outline-primary w-100" type="button" id="reloadCreatures">
+                    <i class="bi bi-arrow-clockwise"></i> Reload Creatures
+                </button>
+            </div>
+        </div>
+
+        <div id="creatureStatus" class="small text-body-secondary mb-2">
+            Loading creature database...
+        </div>
+
+        <div id="creatureResults" class="catalog-results mb-3"></div>
+
+        <div id="creatureSelected" class="d-flex flex-column gap-2"></div>
+
+        <input type="hidden" name="creatures_json" id="creaturesJson">
     </div>
 </div>
 
 <div class="card neon-panel mb-4">
     <div class="card-body">
         <h5 class="card-title">Action Cards / ExCards</h5>
-        <p class="text-body-secondary small">JSON array. Example: 3 copies.</p>
-        <textarea class="form-control font-monospace" name="action_cards_json" rows="5" placeholder='[{"id":"ActionCard_ID","amount":3}]'></textarea>
+        <p class="text-body-secondary small">
+            Search by Action Card ID or Name and select the cards to give.
+        </p>
+
+        <div class="row g-2 mb-3">
+            <div class="col-md-8">
+                <input
+                    class="form-control"
+                    id="actionCardSearch"
+                    type="search"
+                    placeholder="Search Action Card ID or Name..."
+                    autocomplete="off">
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-outline-primary w-100" type="button" id="reloadActionCards">
+                    <i class="bi bi-arrow-clockwise"></i> Reload Action Cards
+                </button>
+            </div>
+        </div>
+
+        <div id="actionCardStatus" class="small text-body-secondary mb-2">
+            Loading action card database...
+        </div>
+
+        <div id="actionCardResults" class="catalog-results mb-3"></div>
+
+        <div id="actionCardSelected" class="d-flex flex-column gap-2"></div>
+
+        <input type="hidden" name="action_cards_json" id="actionCardsJson">
     </div>
 </div>
 
@@ -102,4 +171,448 @@
     <i class="bi bi-gift"></i> Create Gift Code
 </button>
 </form>
+
+<script>
+(function () {
+    "use strict";
+
+    let creatures = [];
+    let actionCards = [];
+
+    const selectedCreatures = [];
+    const selectedActionCards = [];
+
+    const creatureSearch = document.getElementById("creatureSearch");
+    const creatureResults = document.getElementById("creatureResults");
+    const creatureSelected = document.getElementById("creatureSelected");
+    const creatureStatus = document.getElementById("creatureStatus");
+    const creaturesJson = document.getElementById("creaturesJson");
+
+    const actionCardSearch = document.getElementById("actionCardSearch");
+    const actionCardResults = document.getElementById("actionCardResults");
+    const actionCardSelected = document.getElementById("actionCardSelected");
+    const actionCardStatus = document.getElementById("actionCardStatus");
+    const actionCardsJson = document.getElementById("actionCardsJson");
+
+    function escapeHtml(value) {
+        return String(value === undefined || value === null ? "" : value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function normalize(value) {
+        return String(value || "").toLowerCase().trim();
+    }
+
+    function catalogMatches(item, search) {
+        if (!search) {
+            return true;
+        }
+
+        const query = normalize(search);
+
+        return normalize(item.ID).includes(query) ||
+               normalize(item.Name).includes(query);
+    }
+
+    function updateCreatureJson() {
+        creaturesJson.value = JSON.stringify(
+            selectedCreatures.map(function (item) {
+                return {
+                    id: item.id,
+                    amount: item.amount,
+                    star_rating: item.star_rating
+                };
+            })
+        );
+    }
+
+    function updateActionCardJson() {
+        actionCardsJson.value = JSON.stringify(
+            selectedActionCards.map(function (item) {
+                return {
+                    id: item.id,
+                    amount: item.amount
+                };
+            })
+        );
+    }
+
+    function renderCreatureResults() {
+        const search = creatureSearch.value;
+
+        const matches = creatures
+            .filter(function (item) {
+                return catalogMatches(item, search);
+            })
+            .slice(0, 100);
+
+        if (!matches.length) {
+            creatureResults.innerHTML =
+                '<div class="text-body-secondary small p-2">No creatures found.</div>';
+            return;
+        }
+
+        creatureResults.innerHTML = matches.map(function (item) {
+            return (
+                '<div class="catalog-item reward-row mb-2" data-creature-id="' +
+                escapeHtml(item.ID) +
+                '">' +
+                    '<div class="d-flex justify-content-between align-items-center">' +
+                        '<div>' +
+                            '<strong>' + escapeHtml(item.Name || item.ID) + '</strong>' +
+                            '<div class="small text-body-secondary">' +
+                                escapeHtml(item.ID) +
+                                (item.Faction ? " · " + escapeHtml(item.Faction) : "") +
+                                (item.Rarity !== undefined ? " · Rarity " + escapeHtml(item.Rarity) : "") +
+                            '</div>' +
+                        '</div>' +
+                        '<button type="button" class="btn btn-sm btn-outline-primary">Select</button>' +
+                    '</div>' +
+                '</div>'
+            );
+        }).join("");
+    }
+
+    function renderActionCardResults() {
+        const search = actionCardSearch.value;
+
+        const matches = actionCards
+            .filter(function (item) {
+                return catalogMatches(item, search);
+            })
+            .slice(0, 100);
+
+        if (!matches.length) {
+            actionCardResults.innerHTML =
+                '<div class="text-body-secondary small p-2">No action cards found.</div>';
+            return;
+        }
+
+        actionCardResults.innerHTML = matches.map(function (item) {
+            return (
+                '<div class="catalog-item reward-row mb-2" data-action-card-id="' +
+                escapeHtml(item.ID) +
+                '">' +
+                    '<div class="d-flex justify-content-between align-items-center">' +
+                        '<div>' +
+                            '<strong>' + escapeHtml(item.Name || item.ID) + '</strong>' +
+                            '<div class="small text-body-secondary">' +
+                                escapeHtml(item.ID) +
+                                (item.TypeText ? " · " + escapeHtml(item.TypeText) : "") +
+                                (item.Faction ? " · " + escapeHtml(item.Faction) : "") +
+                            '</div>' +
+                        '</div>' +
+                        '<button type="button" class="btn btn-sm btn-outline-primary">Select</button>' +
+                    '</div>' +
+                '</div>'
+            );
+        }).join("");
+    }
+
+    function renderSelectedCreatures() {
+        if (!selectedCreatures.length) {
+            creatureSelected.innerHTML =
+                '<div class="text-body-secondary small">No creatures selected.</div>';
+            updateCreatureJson();
+            return;
+        }
+
+        creatureSelected.innerHTML = selectedCreatures.map(function (item, index) {
+            return (
+                '<div class="selected-reward">' +
+                    '<div class="row g-2 align-items-end">' +
+                        '<div class="col-md-5">' +
+                            '<div class="fw-semibold">' + escapeHtml(item.name || item.id) + '</div>' +
+                            '<div class="small text-body-secondary">' + escapeHtml(item.id) + '</div>' +
+                        '</div>' +
+                        '<div class="col-md-2">' +
+                            '<label class="form-label small mb-1">Amount</label>' +
+                            '<input class="form-control form-control-sm creature-amount" type="number" min="1" value="' +
+                                escapeHtml(item.amount) +
+                            '" data-index="' + index + '">' +
+                        '</div>' +
+                        '<div class="col-md-2">' +
+                            '<label class="form-label small mb-1">Star Rating</label>' +
+                            '<input class="form-control form-control-sm creature-star" type="number" min="1" max="6" value="' +
+                                escapeHtml(item.star_rating) +
+                            '" data-index="' + index + '">' +
+                        '</div>' +
+                        '<div class="col-md-3">' +
+                            '<button type="button" class="btn btn-sm btn-outline-danger w-100 creature-remove" data-index="' +
+                                index +
+                            '">' +
+                                '<i class="bi bi-trash"></i> Remove' +
+                            '</button>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>'
+            );
+        }).join("");
+
+        updateCreatureJson();
+    }
+
+    function renderSelectedActionCards() {
+        if (!selectedActionCards.length) {
+            actionCardSelected.innerHTML =
+                '<div class="text-body-secondary small">No action cards selected.</div>';
+            updateActionCardJson();
+            return;
+        }
+
+        actionCardSelected.innerHTML = selectedActionCards.map(function (item, index) {
+            return (
+                '<div class="selected-reward">' +
+                    '<div class="row g-2 align-items-end">' +
+                        '<div class="col-md-8">' +
+                            '<div class="fw-semibold">' + escapeHtml(item.name || item.id) + '</div>' +
+                            '<div class="small text-body-secondary">' + escapeHtml(item.id) + '</div>' +
+                        '</div>' +
+                        '<div class="col-md-2">' +
+                            '<label class="form-label small mb-1">Amount</label>' +
+                            '<input class="form-control form-control-sm action-card-amount" type="number" min="1" value="' +
+                                escapeHtml(item.amount) +
+                            '" data-index="' + index + '">' +
+                        '</div>' +
+                        '<div class="col-md-2">' +
+                            '<button type="button" class="btn btn-sm btn-outline-danger w-100 action-card-remove" data-index="' +
+                                index +
+                            '">' +
+                                '<i class="bi bi-trash"></i> Remove' +
+                            '</button>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>'
+            );
+        }).join("");
+
+        updateActionCardJson();
+    }
+
+    function selectCreature(item) {
+        const existing = selectedCreatures.find(function (reward) {
+            return reward.id === item.ID;
+        });
+
+        if (existing) {
+            existing.amount += 1;
+            renderSelectedCreatures();
+            return;
+        }
+
+        selectedCreatures.push({
+            id: item.ID,
+            name: item.Name || item.ID,
+            amount: 1,
+            star_rating: 1
+        });
+
+        renderSelectedCreatures();
+    }
+
+    function selectActionCard(item) {
+        const existing = selectedActionCards.find(function (reward) {
+            return reward.id === item.ID;
+        });
+
+        if (existing) {
+            existing.amount += 1;
+            renderSelectedActionCards();
+            return;
+        }
+
+        selectedActionCards.push({
+            id: item.ID,
+            name: item.Name || item.ID,
+            amount: 1
+        });
+
+        renderSelectedActionCards();
+    }
+
+    async function loadCatalog(url, statusElement, onSuccess) {
+        statusElement.textContent = "Loading...";
+
+        try {
+            const response = await fetch(url, {
+                method: "GET",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json"
+                }
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || "Catalog request failed.");
+            }
+
+            onSuccess(Array.isArray(data.items) ? data.items : []);
+        } catch (error) {
+            statusElement.textContent = "Failed to load catalog: " + error.message;
+        }
+    }
+
+    async function loadCreatures() {
+        await loadCatalog(
+            "/admin/gift-codes/catalog/creatures",
+            creatureStatus,
+            function (items) {
+                creatures = items;
+                creatureStatus.textContent =
+                    creatures.length + " creatures loaded.";
+                renderCreatureResults();
+            }
+        );
+    }
+
+    async function loadActionCards() {
+        await loadCatalog(
+            "/admin/gift-codes/catalog/action-cards",
+            actionCardStatus,
+            function (items) {
+                actionCards = items;
+                actionCardStatus.textContent =
+                    actionCards.length + " action cards loaded.";
+                renderActionCardResults();
+            }
+        );
+    }
+
+    creatureSearch.addEventListener("input", renderCreatureResults);
+    actionCardSearch.addEventListener("input", renderActionCardResults);
+
+    creatureResults.addEventListener("click", function (event) {
+        const row = event.target.closest("[data-creature-id]");
+
+        if (!row) {
+            return;
+        }
+
+        const id = row.getAttribute("data-creature-id");
+
+        const item = creatures.find(function (entry) {
+            return String(entry.ID) === String(id);
+        });
+
+        if (item) {
+            selectCreature(item);
+        }
+    });
+
+    actionCardResults.addEventListener("click", function (event) {
+        const row = event.target.closest("[data-action-card-id]");
+
+        if (!row) {
+            return;
+        }
+
+        const id = row.getAttribute("data-action-card-id");
+
+        const item = actionCards.find(function (entry) {
+            return String(entry.ID) === String(id);
+        });
+
+        if (item) {
+            selectActionCard(item);
+        }
+    });
+
+    creatureSelected.addEventListener("input", function (event) {
+        const index = Number(event.target.getAttribute("data-index"));
+
+        if (Number.isNaN(index) || !selectedCreatures[index]) {
+            return;
+        }
+
+        if (event.target.classList.contains("creature-amount")) {
+            selectedCreatures[index].amount =
+                Math.max(1, Number(event.target.value) || 1);
+        }
+
+        if (event.target.classList.contains("creature-star")) {
+            selectedCreatures[index].star_rating =
+                Math.min(6, Math.max(1, Number(event.target.value) || 1));
+        }
+
+        updateCreatureJson();
+    });
+
+    creatureSelected.addEventListener("click", function (event) {
+        const button = event.target.closest(".creature-remove");
+
+        if (!button) {
+            return;
+        }
+
+        const index = Number(button.getAttribute("data-index"));
+
+        if (!Number.isNaN(index)) {
+            selectedCreatures.splice(index, 1);
+            renderSelectedCreatures();
+        }
+    });
+
+    actionCardSelected.addEventListener("input", function (event) {
+        if (!event.target.classList.contains("action-card-amount")) {
+            return;
+        }
+
+        const index = Number(event.target.getAttribute("data-index"));
+
+        if (Number.isNaN(index) || !selectedActionCards[index]) {
+            return;
+        }
+
+        selectedActionCards[index].amount =
+            Math.max(1, Number(event.target.value) || 1);
+
+        updateActionCardJson();
+    });
+
+    actionCardSelected.addEventListener("click", function (event) {
+        const button = event.target.closest(".action-card-remove");
+
+        if (!button) {
+            return;
+        }
+
+        const index = Number(button.getAttribute("data-index"));
+
+        if (!Number.isNaN(index)) {
+            selectedActionCards.splice(index, 1);
+            renderSelectedActionCards();
+        }
+    });
+
+    document.getElementById("reloadCreatures").addEventListener(
+        "click",
+        loadCreatures
+    );
+
+    document.getElementById("reloadActionCards").addEventListener(
+        "click",
+        loadActionCards
+    );
+
+    document.getElementById("giftCodeForm").addEventListener(
+        "submit",
+        function () {
+            updateCreatureJson();
+            updateActionCardJson();
+        }
+    );
+
+    renderSelectedCreatures();
+    renderSelectedActionCards();
+
+    loadCreatures();
+    loadActionCards();
+})();
+</script>
 {% endblock %}
