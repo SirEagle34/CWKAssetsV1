@@ -464,7 +464,10 @@ public class RewardManager
 				"[RedeemCode] Server response is NULL!"
 			);
 
-			callback?.Invoke(ResponseFlag.Error);
+			callback?.Invoke(
+				ResponseFlag.Error,
+				new List<string>()
+			);
 			return;
 		}
 
@@ -497,7 +500,10 @@ public class RewardManager
 				"[RedeemCode] Server returned success=false."
 			);
 
-			callback?.Invoke(ResponseFlag.Error);
+			callback?.Invoke(
+				ResponseFlag.Error,
+				new List<string>()
+			);
 			return;
 		}
 
@@ -524,7 +530,10 @@ public class RewardManager
 				"[RedeemCode] Server did not return code."
 			);
 
-			callback?.Invoke(ResponseFlag.Error);
+			callback?.Invoke(
+				ResponseFlag.Error,
+				new List<string>()
+			);
 			return;
 		}
 
@@ -538,7 +547,10 @@ public class RewardManager
 				code
 			);
 
-			callback?.Invoke(ResponseFlag.Error);
+			callback?.Invoke(
+				ResponseFlag.Error,
+				new List<string>()
+			);
 			return;
 		}
 
