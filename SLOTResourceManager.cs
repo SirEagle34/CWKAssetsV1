@@ -2701,12 +2701,15 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		if (!IsUsingAssetBundles())
 			yield break;
 
-		if (BundlesToLoadUpFront == null ||
-			BundlesToLoadUpFront.Count == 0)
+		List<string> bundlesToLoadUpFront =
+			BuildBundlesToLoadUpFront();
+
+		if (bundlesToLoadUpFront == null ||
+			bundlesToLoadUpFront.Count == 0)
 		{
 			Debug.Log(
 				"[SLOTResourceManager] " +
-				"No BundlesToLoadUpFront configured."
+				"No valid BundlesToLoadUpFront configured."
 			);
 
 			yield break;
