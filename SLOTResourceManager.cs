@@ -1738,9 +1738,6 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 				finalAssetPath =
 					finalAssetPath.Trim('/');
 
-				// TEMPORARY BUNDLE CONTENT DIAGNOSTIC.
-				// Print the exact asset names Unity sees inside the bundle.
-				// This lets us verify the real AssetBundle path without guessing.
 				Debug.Log(
 					"[SLOTResourceManager] Bundle assets: " +
 					assetBundle.name
@@ -1756,7 +1753,7 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 				{
 					Debug.Log(
 						"[SLOTResourceManager]   " +
-					bundleAssetNames[assetIndex]
+						bundleAssetNames[assetIndex]
 					);
 				}
 
@@ -3027,3 +3024,437 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 					OnResourceLoadDone();
 
 					break;
+				}
+
+				Debug.LogError(
+					"[SLOTResourceManager] " +
+					"Bundle preparation failed.\n" +
+					"Bundle: " + bundleName +
+					"\nAttempt: " + retryCount +
+					"/" + MAX_RETRY_COUNT +
+					"\nError: " + error
+				);
+
+				if (retryCount >= MAX_RETRY_COUNT)
+				{
+					mPrimaryBundlesLoadFailed = true;
+
+					Debug.LogError(
+						"[SLOTResourceManager] " +
+						"Bundle permanently failed: " +
+						bundleName
+					);
+
+					yield break;
+				}
+
+				int selection = -1;
+
+				Singleton<SimplePopupController>
+					.Instance
+					.ShowMessage(
+						string.Empty,
+						KFFLocalization.Get(
+							"!!ERROR_LOADING_ASSET_BODY"
+						),
+						delegate
+						{
+							selection = 1;
+						},
+						KFFLocalization.Get(
+							"!!RETRY"
+						)
+					);
+
+				while (selection == -1)
+				{
+					yield return null;
+				}
+
+				if (selection == 0)
+				{
+					mPrimaryBundlesLoadFailed = true;
+					yield break;
+				}
+			}
+		}
+
+		mCurrentlyBackgroundLoading = false;
+
+		Debug.Log(
+			"[SLOTResourceManager] " +
+			"Initial bundle preparation completed."
+		);
+
+		// Only now is the single startup progress session complete.
+		FinishResourceLoadProgress();
+	}
+
+	// ============================================================
+	// PRIMARY BUNDLES
+	// ============================================================
+
+	public IEnumerator
+		LoadPrimaryBundlesCouroutine()
+	{
+		mPrimaryBundlesLoadFailed =
+			false;
+
+		if (!IsUsingAssetBundles())
+		{
+			yield break;
+		}
+
+		// ========================================================
+		// MAIN SCENES
+		//
+		// LOCAL ONLY.
+		// NEVER DOWNLOAD.
+		// ========================================================
+
+		Debug.Log(
+			"[SLOTResourceManager] " +
+			"MainScenesBundle is LOCAL. " +
+			"Remote download skipped."
+		);
+
+		// ========================================================
+		// MANDATORY PRIMARY BUNDLES
+		// ========================================================
+
+		List<string> bundlesToLoad =
+			new List<string>();
+
+		string mainResourcesBundle =
+			GetMainResourcesBundleName();
+
+		if (!string.IsNullOrEmpty(
+			mainResourcesBundle))
+		{
+			bundlesToLoad.Add(
+				mainResourcesBundle
+			);
+		}
+
+		// ========================================================
+		// LOAD PRIMARY BUNDLES
+		// ========================================================
+
+		if (bundlesToLoad.Count > 0)
+		{
+			// Build the complete startup progress total BEFORE the
+			// first download starts. This prevents 100% -> 0%.
+			List<string> startupBundles =
+				BuildBundlesToLoadUpFront();
+
+			int startupTotal =
+				bundlesToLoad.Count +
+				(startupBundles != null
+					? startupBundles.Count
+					: 0);
+
+			StartResourceLoadProgress(
+				startupTotal
+			);
+
+			// Keep the single startup progress session alive until
+			// PreloadBundlesImmediately() has finished.
+			mKeepResourceLoadProgressAlive = true;
+
+			mCurrentlyBackgroundLoading =
+				false;
+
+			for (
+				int i = 0;
+				i < bundlesToLoad.Count;
+				i++)
+			{
+				string bundleName =
+					NormalizeBundleName(
+						bundlesToLoad[i]
+					);
+
+				if (
+					IsMainScenesBundle(
+						bundleName))
+				{
+					Debug.Log(
+						"[SLOTResourceManager] " +
+						"Skipping local MainScenesBundle."
+					);
+
+					OnResourceLoadDone();
+
+					continue;
+				}
+
+				// ------------------------------------------------
+				// RAM CACHE
+				// ------------------------------------------------
+
+				AssetBundle existingBundle =
+					Singleton<
+						KFFAssetBundleManager
+					>.Instance
+						.GetAssetBundleByName(
+							bundleName
+						);
+
+				if (existingBundle != null)
+				{
+					Debug.Log(
+						"[SLOTResourceManager] " +
+						"Primary bundle already loaded: " +
+						bundleName
+					);
+
+					if (
+						bundleName ==
+						GetMainResourcesBundleName())
+					{
+						mResourcesBundle =
+							existingBundle;
+					}
+
+					OnResourceLoadDone();
+
+					continue;
+				}
+
+				// ------------------------------------------------
+				// LOAD
+				// ------------------------------------------------
+
+				bool loaded =
+					false;
+
+				int retryCount =
+					0;
+
+				while (
+					!loaded &&
+					retryCount <
+					MAX_RETRY_COUNT)
+				{
+					retryCount++;
+
+					bool success =
+						false;
+
+					string error =
+						null;
+
+					AssetBundle loadedBundle =
+						null;
+
+					Debug.Log(
+						"[SLOTResourceManager] " +
+						"Primary bundle load " +
+						retryCount +
+						"/" +
+						MAX_RETRY_COUNT +
+						": " +
+						bundleName
+					);
+
+					yield return StartCoroutine(
+						Singleton<
+							KFFAssetBundleManager
+						>.Instance
+						.LoadAssetBundleCoroutine(
+							assetBundleBaseURL,
+							bundleName,
+							delegate(
+								bool result,
+								string errorMessage,
+								AssetBundle bundle)
+							{
+								success =
+									result;
+
+								error =
+									errorMessage;
+
+								loadedBundle =
+									bundle;
+							}
+						)
+					);
+
+					if (
+						success &&
+						loadedBundle != null)
+					{
+						loaded =
+							true;
+
+						if (
+							bundleName ==
+							GetMainResourcesBundleName())
+						{
+							mResourcesBundle =
+								loadedBundle;
+						}
+
+						Debug.Log(
+							"[SLOTResourceManager] " +
+							"Primary bundle ready: " +
+							bundleName
+						);
+
+						OnResourceLoadDone();
+
+						break;
+					}
+
+					Debug.LogError(
+						"[SLOTResourceManager] " +
+						"Primary bundle failed.\n" +
+						"Bundle: " +
+						bundleName +
+						"\nAttempt: " +
+						retryCount +
+						"/" +
+						MAX_RETRY_COUNT +
+						"\nError: " +
+						error
+					);
+
+					if (
+						retryCount >=
+						MAX_RETRY_COUNT)
+					{
+						mPrimaryBundlesLoadFailed =
+							true;
+
+						yield break;
+					}
+
+					int selection =
+						-1;
+
+					Singleton<
+						SimplePopupController
+					>.Instance
+						.ShowMessage(
+							string.Empty,
+							KFFLocalization.Get(
+								"!!ERROR_LOADING_ASSET_BODY"
+							),
+							delegate
+							{
+								selection = 1;
+							},
+							KFFLocalization.Get(
+								"!!RETRY"
+							)
+						);
+
+					while (
+						selection == -1)
+					{
+						yield return null;
+					}
+
+					if (selection == 0)
+					{
+						mPrimaryBundlesLoadFailed =
+							true;
+
+						yield break;
+					}
+				}
+			}
+		}
+
+		// ========================================================
+		// UPFRONT BUNDLES
+		// ========================================================
+
+		yield return StartCoroutine(
+			PreloadBundlesImmediately()
+		);
+
+		if (mPrimaryBundlesLoadFailed)
+		{
+			Debug.LogError(
+				"[SLOTResourceManager] " +
+				"Initial bundle preparation failed."
+			);
+
+			yield break;
+		}
+
+		mCurrentlyBackgroundLoading =
+			false;
+
+		Debug.Log(
+			"[SLOTResourceManager] " +
+			"ALL INITIAL ASSETBUNDLES ARE READY."
+		);
+	}
+
+	private bool IsFakePreloadBundle(string bundleName)
+	{
+		if (string.IsNullOrEmpty(bundleName))
+			return true;
+
+		string name = NormalizeBundleName(bundleName);
+
+		switch (name)
+		{
+			case "gameboard_forest":
+			case "warrior":
+			case "thief":
+			case "diablo_base":
+			case "genie_evo_01":
+			case "kraken_base":
+			case "snakequeen_base":
+			case "mermaid_base":
+			case "headless_base":
+			case "ftueaudiobundle":
+			case "introbattle":
+				return true;
+		}
+
+		return false;
+	}
+
+	private List<string> BuildBundlesToLoadUpFront()
+	{
+		List<string> result = new List<string>();
+
+		AddBundleList(result, SystemAssetBundles);
+		AddBundleList(result, CreatureAssetBundles);
+		AddBundleList(result, HeroAssetBundles);
+		AddBundleList(result, EnvironmentAssetBundles);
+		AddBundleList(result, ExtraAssetBundlesPack);
+
+		return result;
+	}
+
+	private void AddBundleList(
+		List<string> target,
+		List<string> source)
+	{
+		if (source == null)
+			return;
+
+		for (int i = 0; i < source.Count; i++)
+		{
+			string bundle = NormalizeBundleName(source[i]);
+
+			if (string.IsNullOrEmpty(bundle))
+				continue;
+
+			if (IsMainScenesBundle(bundle))
+				continue;
+
+			if (IsFakePreloadBundle(bundle))
+				continue;
+
+			if (!target.Contains(bundle))
+				target.Add(bundle);
+		}
+	}
+}
