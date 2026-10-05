@@ -1315,6 +1315,99 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 	}
 
 	// ============================================================
+	// ASSETBUNDLE ASSET PATH RESOLVER
+	// ============================================================
+
+	private string ResolveAssetBundlePath(
+		AssetBundle assetBundle,
+		string requestedPath)
+	{
+		if (assetBundle == null ||
+			string.IsNullOrEmpty(requestedPath))
+		{
+			return requestedPath;
+		}
+
+		string normalizedRequested =
+			requestedPath
+				.Replace("\\", "/")
+				.Trim('/')
+				.ToLowerInvariant();
+
+		string requestedFileName =
+			Path.GetFileNameWithoutExtension(
+				normalizedRequested
+			);
+
+		string[] assetNames =
+			assetBundle.GetAllAssetNames();
+
+		// 1. Exact AssetBundle path.
+		for (int i = 0; i < assetNames.Length; i++)
+		{
+			string candidate =
+				assetNames[i]
+					.Replace("\\", "/")
+					.Trim('/')
+					.ToLowerInvariant();
+
+			if (candidate == normalizedRequested)
+			{
+				return assetNames[i];
+			}
+		}
+
+		// 2. Same path, ignoring the file extension.
+		for (int i = 0; i < assetNames.Length; i++)
+		{
+			string candidate =
+				assetNames[i]
+					.Replace("\\", "/")
+					.Trim('/')
+					.ToLowerInvariant();
+
+			string candidateWithoutExtension =
+				Path.ChangeExtension(
+					candidate,
+					null
+				);
+
+			if (candidateWithoutExtension ==
+				normalizedRequested)
+			{
+				return assetNames[i];
+			}
+		}
+
+		// 3. Final fallback: match the actual asset filename.
+		// This handles old Resources-style requests such as:
+		//   Jake/Jake
+		//   Inn_BG/Inn_BG
+		//   GameBoard/GameBoard_TreeFort/GameBoard_TreeFort
+		for (int i = 0; i < assetNames.Length; i++)
+		{
+			string candidate =
+				assetNames[i]
+					.Replace("\\", "/")
+					.Trim('/')
+					.ToLowerInvariant();
+
+			string candidateFileName =
+				Path.GetFileNameWithoutExtension(
+					candidate
+				);
+
+			if (candidateFileName ==
+				requestedFileName)
+			{
+				return assetNames[i];
+			}
+		}
+
+		return requestedPath;
+	}
+
+	// ============================================================
 	// QUEUED RESOURCE COROUTINE
 	// ============================================================
 
@@ -1738,28 +1831,17 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 				finalAssetPath =
 					finalAssetPath.Trim('/');
 
-				Debug.Log(
-					"[SLOTResourceManager] Bundle assets: " +
-					assetBundle.name
-				);
-
-				string[] bundleAssetNames =
-					assetBundle.GetAllAssetNames();
-
-				for (
-					int assetIndex = 0;
-					assetIndex < bundleAssetNames.Length;
-					assetIndex++)
-				{
-					Debug.Log(
-						"[SLOTResourceManager]   " +
-						bundleAssetNames[assetIndex]
+				string resolvedAssetPath =
+					ResolveAssetBundlePath(
+						assetBundle,
+						finalAssetPath
 					);
-				}
 
 				Debug.Log(
-					"[SLOTResourceManager] Requested asset path: " +
+					"[SLOTResourceManager] Asset resolve: " +
 					finalAssetPath +
+					" -> " +
+					resolvedAssetPath +
 					" | Bundle: " +
 					assetBundle.name
 				);
@@ -1768,7 +1850,7 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 					bundleRequest =
 						assetBundle
 							.LoadAssetAsync(
-								finalAssetPath
+								resolvedAssetPath
 							);
 
 				UnityEngine.Object result2 =
@@ -1790,6 +1872,8 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 						"[SLOTResourceManager] " +
 						"Asset not found in bundle: " +
 						finalAssetPath +
+						" | Resolved: " +
+						resolvedAssetPath +
 						" | Bundle: " +
 						queuedLoad.AssetBundle
 					);
@@ -1799,10 +1883,9 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 					Debug.Log(
 						"[SLOTResourceManager] " +
 						"Asset loaded: " +
-						finalAssetPath +
+						resolvedAssetPath +
 						" | Bundle: " +
 						queuedLoad.AssetBundle
-					);
 				}
 
 				if (
@@ -2209,7 +2292,19 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 
 		UICamera.UnlockInput();
 
-		callback(objData);
+		if (objData == null)
+		{
+			Debug.LogError(
+				"[SLOTResourceManager] LoadLeaderResources failed. " +
+				"Leader: " +
+				(leader != null ? leader.Prefab : "NULL")
+			);
+		}
+
+		if (callback != null)
+		{
+			callback(objData);
+		}
 	}
 
 	// ============================================================
