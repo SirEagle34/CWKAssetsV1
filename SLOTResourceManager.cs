@@ -2505,7 +2505,7 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			if (normalizedTexture.StartsWith("ui/"))
 			{
 				assetBundle =
-					GetGeneralUIBundleName();
+					GetMainResourcesBundleName();
 			}
 		}
 
