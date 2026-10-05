@@ -2287,21 +2287,11 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			yield break;
 		}
 
-		// CreatureData.ID and CreatureData.Prefab are not always
-		// the same thing. Intro/tutorial entries can use a logical ID
-		// such as TUT_Opp_Attacker while the real prefab is FieldReaper.
-		// Always prefer the canonical CreatureDataManager mapping when
-		// it exists so the AssetBundle loader uses the real prefab name.
+		// CreatureData.ID is the logical/data ID.
+		// CreatureData.Prefab is the actual prefab folder/name.
+		// Example:
+		// TUT_Opp_Attacker -> Pig -> Pig/Pig.prefab
 		string creatureName = creature.Prefab;
-
-		CreatureData canonicalCreature =
-			CreatureDataManager.Instance.GetData(creature.ID);
-
-		if (canonicalCreature != null &&
-			!string.IsNullOrEmpty(canonicalCreature.Prefab))
-		{
-			creatureName = canonicalCreature.Prefab;
-		}
 
 		if (string.IsNullOrEmpty(creatureName))
 		{
@@ -2322,10 +2312,9 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			NormalizeBundleName(creatureName);
 
 		string assetPath =
-			"Creatures/" +
 			creatureName +
 			"/" +
-			creatureName.ToLowerInvariant() +
+			creatureName +
 			".prefab";
 
 		Debug.Log(
