@@ -249,105 +249,86 @@ public class DWBattleLane : Singleton<DWBattleLane>
 	public void PoolLaneObjects()
 	{
 		LaneObjectPool.Clear();
-		for (int i = 0; i < Singleton<DWGame>.Instance.UserLoadout.CreatureSet.Count; i++)
+
+		PoolLaneObjectsForPlayer(
+			PlayerType.User,
+			Singleton<DWGame>.Instance.UserLoadout
+		);
+
+		PoolLaneObjectsForPlayer(
+			PlayerType.Opponent,
+			Singleton<DWGame>.Instance.OpLoadout
+		);
+	}
+
+	private void PoolLaneObjectsForPlayer(
+		PlayerType playerType,
+		Loadout loadout)
+	{
+		if (loadout == null ||
+			loadout.CreatureSet == null)
 		{
-			if (Singleton<DWGame>.Instance.UserLoadout.CreatureSet[i] != null)
-			{
-				GameObject gameObject = LaneObjParents[0].InstantiateAsChild(LaneObjectPrefab);
-				DWBattleLaneObject component = gameObject.GetComponent<DWBattleLaneObject>();
-				if (component.ShadowBlob != null)
-				{
-					component.ShadowBlob.PrepareCache(Singleton<DWGame>.Instance.UserLoadout.CreatureSet[i].Creature);
-				}
-				LaneObjectPool[Singleton<DWGame>.Instance.UserLoadout.CreatureSet[i].Creature] = component;
-				gameObject.SetActive(false);
-			}
-		}
-		for (int j = 0; j < Singleton<DWGame>.Instance.OpLoadout.CreatureSet.Count; j++)
-		{
-			if (Singleton<DWGame>.Instance.OpLoadout.CreatureSet[j] != null)
-			{
-				GameObject gameObject2 = LaneObjParents[1].InstantiateAsChild(LaneObjectPrefab);
-				DWBattleLaneObject component2 = gameObject2.GetComponent<DWBattleLaneObject>();
-				if (component2.ShadowBlob != null)
-				{
-					component2.ShadowBlob.PrepareCache(Singleton<DWGame>.Instance.OpLoadout.CreatureSet[j].Creature);
-				}
-				LaneObjectPool[Singleton<DWGame>.Instance.OpLoadout.CreatureSet[j].Creature] = component2;
-				gameObject2.SetActive(false);
-			}
-		}
-		// IntroBattle can use tutorial creatures that are not in either loadout.
-		// Add lane-object pool entries for the exact CreatureItem instances
-		// referenced by the tutorial board.
-		if (Singleton<TutorialController>.Instance.IsBlockActive("IntroBattle"))
-		{
-			TutorialBoardData boardData =
-				Singleton<TutorialController>.Instance.GetTutorialBoard();
-
-			PlayerState user =
-				MasterBoardState.GetPlayerState(PlayerType.User);
-
-			PlayerState opp =
-				MasterBoardState.GetPlayerState(PlayerType.Opponent);
-
-			foreach (TutorialBoardEntry entry in boardData.Entries)
-			{
-				if (!entry.isOut)
-				{
-					continue;
-				}
-
-				PlayerState playerState =
-					entry.whichPlayer == PlayerType.User
-						? user
-						: opp;
-
-				if (playerState == null || playerState.DeploymentList == null)
-				{
-					continue;
-				}
-
-				CreatureState tutorialCreature =
-					playerState.DeploymentList.Find(
-						(CreatureState m) =>
-							m != null &&
-							m.Data != null &&
-							m.Data.Form != null &&
-							m.Data.Form.ID == entry.CreatureID
-					);
-
-				if (tutorialCreature == null ||
-					tutorialCreature.Data == null ||
-					LaneObjectPool.ContainsKey(tutorialCreature.Data))
-				{
-					continue;
-				}
-
-				GameObject tutorialLaneObject =
-					LaneObjParents[entry.whichPlayer.IntValue]
-						.InstantiateAsChild(LaneObjectPrefab);
-
-				DWBattleLaneObject component =
-					tutorialLaneObject.GetComponent<DWBattleLaneObject>();
-
-				if (component != null && component.ShadowBlob != null)
-				{
-					component.ShadowBlob.PrepareCache(
-						tutorialCreature.Data
-					);
-				}
-
-				if (component != null)
-				{
-					LaneObjectPool[tutorialCreature.Data] = component;
-				}
-
-				tutorialLaneObject.SetActive(false);
-			}
+			return;
 		}
 
-		VanishFXAfterDeath = Resources.Load("VFX/Actions/VFX_Action_Death", typeof(GameObject)) as GameObject;
+		foreach (InventorySlotItem item in loadout.CreatureSet)
+		{
+			if (item == null || item.Creature == null)
+			{
+				continue;
+			}
+
+			PoolLaneObject(
+				playerType,
+				item.Creature
+			);
+		}
+	}
+
+	private void PoolLaneObject(
+		PlayerType playerType,
+		CreatureItem creature)
+	{
+		if (creature == null ||
+			LaneObjectPool.ContainsKey(creature))
+		{
+			return;
+		}
+
+		GameObject gameObject =
+			LaneObjParents[playerType.IntValue]
+				.InstantiateAsChild(LaneObjectPrefab);
+
+		DWBattleLaneObject component =
+			gameObject.GetComponent<DWBattleLaneObject>();
+
+		if (component == null)
+		{
+			gameObject.SetActive(false);
+			return;
+		}
+
+		if (component.ShadowBlob != null)
+		{
+			component.ShadowBlob.PrepareCache(
+				creature
+			);
+		}
+
+		LaneObjectPool[creature] =
+			component;
+
+		gameObject.SetActive(false);
+	}
+
+	public void PoolTutorialLaneObject(
+		PlayerType playerType,
+		CreatureItem creature)
+	{
+		PoolLaneObject(
+			playerType,
+			creature
+		);
 	}
 
 	public void HideTargetIndicators()
@@ -1600,10 +1581,14 @@ public class DWBattleLane : Singleton<DWBattleLane>
 		{
 			foreach (DWBattleLaneObject item in BattleLaneObjects[i])
 			{
-				if (item != null)
+				if (item == null || item.HealthBar == null)
 				{
-					item.HealthBar.SetAttackValues(DamageType.Physical);
+					continue;
 				}
+
+				item.HealthBar.SetAttackValues(
+					DamageType.Physical
+				);
 			}
 		}
 	}
