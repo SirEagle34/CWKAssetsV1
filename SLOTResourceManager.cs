@@ -1669,13 +1669,25 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 						".mp3",
 						StringComparison.OrdinalIgnoreCase))
 				{
-					finalAssetPath +=
+					string resourceExtension =
 						Singleton<
 							KFFAssetBundleManager
 						>.Instance
 							.GetResourceExtension(
 								finalAssetPath
 							);
+
+					if (!string.IsNullOrEmpty(resourceExtension))
+					{
+						finalAssetPath += resourceExtension;
+					}
+					else if (
+						finalAssetPath.StartsWith(
+							"GameBoard/",
+							StringComparison.OrdinalIgnoreCase))
+					{
+						finalAssetPath += ".prefab";
+					}
 				}
 
 				// -------------------------------------------------
