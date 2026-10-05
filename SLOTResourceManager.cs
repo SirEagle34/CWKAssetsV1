@@ -1473,11 +1473,28 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			}
 		}
 
-		// 3. Final fallback: match the actual asset filename.
-		// This handles old Resources-style requests such as:
-		//   Jake/Jake
-		//   Inn_BG/Inn_BG
-		//   GameBoard/GameBoard_TreeFort/GameBoard_TreeFort
+		// 3. Match by suffix. This is safer than filename-only
+		// matching when two folders contain the same prefab name.
+		string suffix =
+			"/" + normalizedRequested;
+
+		for (int i = 0; i < assetNames.Length; i++)
+		{
+			string candidate =
+				assetNames[i]
+					.Replace("\\", "/")
+					.Trim('/')
+					.ToLowerInvariant();
+
+			if (candidate.EndsWith(
+				suffix,
+				StringComparison.OrdinalIgnoreCase))
+			{
+				return assetNames[i];
+			}
+		}
+
+		// 4. Final fallback: match the actual asset filename.
 		for (int i = 0; i < assetNames.Length; i++)
 		{
 			string candidate =
@@ -2934,10 +2951,9 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		// ========================================================
 
 		string assetPath =
-			"Creatures/" +
 			creature.Prefab +
 			"/" +
-			creature.Prefab.ToLowerInvariant() +
+			creature.Prefab +
 			".prefab";
 
 		QueueResourceLoad(
