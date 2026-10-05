@@ -688,6 +688,11 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 	};
 
 
+	public List<string> ExtraAssetBundlesPack = new List<string>
+	{
+		"extra000001"
+	};
+
 	// ============================================================
 	// SYSTEM / GENERAL BUNDLES
 	// ============================================================
@@ -3361,6 +3366,7 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		AddBundleList(result, CreatureAssetBundles);
 		AddBundleList(result, HeroAssetBundles);
 		AddBundleList(result, EnvironmentAssetBundles);
+		AddBundleList(result, ExtraAssetBundlesPack);
 
 		return result;
 	}
