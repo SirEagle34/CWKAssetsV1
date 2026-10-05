@@ -1217,6 +1217,84 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			}
 		}
 
+		// Dedicated migrated bundles (UI, creatures, characters, etc.)
+		// are also valid synchronous Resources replacements. This keeps
+		// legacy LoadResource callers working after the Resources
+		// hierarchy was split into AssetBundles.
+		if (IsUsingAssetBundles())
+		{
+			string bundleName =
+				ResolveResourceBundleName(
+					path,
+					null
+				);
+
+			AssetBundle dedicatedBundle =
+				Singleton<KFFAssetBundleManager>
+					.Instance
+					.GetAssetBundleByName(
+						bundleName
+					);
+
+			if (
+				dedicatedBundle != null &&
+				dedicatedBundle != mResourcesBundle)
+			{
+				string resourcePath =
+					path.Trim('/');
+
+				if (
+					resourcePath.StartsWith(
+						"Assets/Resources/",
+						StringComparison.OrdinalIgnoreCase))
+				{
+					resourcePath =
+						resourcePath.Substring(
+							"Assets/Resources/".Length
+						);
+				}
+				else if (
+					resourcePath.StartsWith(
+						"Resources/",
+						StringComparison.OrdinalIgnoreCase))
+				{
+					resourcePath =
+						resourcePath.Substring(
+							"Resources/".Length
+						);
+				}
+
+				if (IsHiLoRezResource(path))
+				{
+					resourcePath =
+						GetResourceName(
+							resourcePath
+						);
+				}
+
+				resourcePath =
+					ResolveAssetBundlePath(
+						dedicatedBundle,
+						resourcePath
+					);
+
+				UnityEngine.Object loadedObject =
+					(t == null)
+						? dedicatedBundle.LoadAsset(
+							resourcePath
+						)
+						: dedicatedBundle.LoadAsset(
+							resourcePath,
+							t
+						);
+
+				if (loadedObject != null)
+				{
+					return loadedObject;
+				}
+			}
+		}
+
 		if (
 			KFFLODManager.IsLowEndDevice() &&
 			IsHiLoRezResource(path))
