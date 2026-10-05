@@ -1439,12 +1439,28 @@ else
 			Transform tr = ((i != 0) ? Singleton<DWBattleLane>.Instance.P2CharacterPos : Singleton<DWBattleLane>.Instance.P1CharacterPos);
 			yield return StartCoroutine(Singleton<SLOTResourceManager>.Instance.LoadLeaderResources(CurrentCharacter, delegate(GameObject loadedObjData)
 			{
-				//NewCharacter = SLOTGame.InstantiateFX(loadedObjData, tr.position, tr.rotation) as GameObject;
-				GameObject resource = Resources.Load("Characters/" + CurrentCharacter.Prefab + "/" + CurrentCharacter.Prefab, typeof(GameObject)) as GameObject;
-				NewCharacter = Instantiate(resource, tr.position, tr.rotation) as GameObject;
+				if (loadedObjData == null)
+				{
+					Debug.LogError(
+						"[DWGame] CreateCharacters: leader asset failed to load: " +
+						(CurrentCharacter != null ? CurrentCharacter.Prefab : "NULL")
+					);
+					return;
+				}
+
+				NewCharacter = Instantiate(
+					loadedObjData,
+					tr.position,
+					tr.rotation
+				) as GameObject;
 			}));
 			if (NewCharacter == null)
 			{
+				Debug.LogError(
+					"[DWGame] CreateCharacters: NewCharacter is null. " +
+					"Skipping character index " + i
+				);
+				continue;
 			}
 			OffsetCharacterObject(offsetX: (i != 0) ? (0f - CurrentCharacter.CharacterOffsetX) : CurrentCharacter.CharacterOffsetX, offsetY: CurrentCharacter.CharacterOffsetY, tr: tr, chair: NewCharacter.transform);
 			Singleton<DWBattleLane>.Instance.StoreCharacterObj(i, NewCharacter);
