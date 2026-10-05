@@ -1271,8 +1271,12 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		queuedResourceLoad.AssetPath =
 			path;
 
+		// Legacy Resources.Load callers often do not provide a bundle.
+		// Resolve the bundle centrally so every caller uses the same
+		// Resources -> AssetBundle mapping.
 		queuedResourceLoad.AssetBundle =
-			NormalizeBundleName(
+			ResolveResourceBundleName(
+				path,
 				assetBundleName
 			);
 
@@ -1312,6 +1316,96 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 					LoadResourceCoroutine()
 				);
 		}
+	}
+
+	// ============================================================
+	// RESOURCE -> ASSETBUNDLE RESOLVER
+	// ============================================================
+
+	private string ResolveResourceBundleName(
+		string assetPath,
+		string assetBundleName)
+	{
+		string normalizedBundle =
+			NormalizeBundleName(assetBundleName);
+
+		// An explicit bundle always wins. Creature, character,
+		// environment, gameboard and audio callers already know
+		// which dedicated bundle they need.
+		if (!string.IsNullOrEmpty(normalizedBundle))
+		{
+			return normalizedBundle;
+		}
+
+		string normalizedPath =
+			(assetPath ?? string.Empty)
+				.Replace("\\\\", "/")
+				.Trim('/');
+
+		if (normalizedPath.StartsWith(
+			"Assets/Resources/",
+			StringComparison.OrdinalIgnoreCase))
+		{
+			normalizedPath =
+				normalizedPath.Substring(
+					"Assets/Resources/".Length
+				);
+		}
+		else if (normalizedPath.StartsWith(
+			"Resources/",
+			StringComparison.OrdinalIgnoreCase))
+		{
+			normalizedPath =
+				normalizedPath.Substring(
+					"Resources/".Length
+				);
+		}
+
+		string lowerPath =
+			normalizedPath.ToLowerInvariant();
+
+		// If an old caller omitted the bundle for an asset that was
+		// moved to its own bundle, infer that bundle from the legacy
+		// Resources path.
+		string[] dedicatedRoots =
+		{
+			"creatures/",
+			"characters/",
+			"environment/",
+			"gameboard/"
+		};
+
+		for (int i = 0; i < dedicatedRoots.Length; i++)
+		{
+			string root = dedicatedRoots[i];
+
+			if (!lowerPath.StartsWith(
+				root,
+				StringComparison.OrdinalIgnoreCase))
+			{
+				continue;
+			}
+
+			int start = root.Length;
+			int end = lowerPath.IndexOf('/', start);
+
+			if (end > start)
+			{
+				return NormalizeBundleName(
+					lowerPath.Substring(
+						start,
+						end - start
+					)
+				);
+			}
+
+			break;
+		}
+
+		// MainResourcesBundle contains the migrated Resources hierarchy:
+		// Atlases, Banners, UI, Textures, Materials, VFX, etc.
+		// Therefore every remaining legacy Resources path belongs here.
+		return GetMainResourcesBundleName();
 	}
 
 	// ============================================================
@@ -1426,6 +1520,12 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 
 			if (IsUsingAssetBundles())
 			{
+				queuedLoad.AssetBundle =
+					ResolveResourceBundleName(
+						queuedLoad.AssetPath,
+						queuedLoad.AssetBundle
+					);
+
 				if (
 					string.IsNullOrEmpty(
 						queuedLoad.AssetBundle))
@@ -2489,28 +2589,13 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			queuedTextureLoad =
 				new QueuedTextureLoad();
 
-		// Legacy UI callers may not provide a bundle name.
-		// UI/Icons_ActionPortraits and the other normal UI assets
-		// are stored in the GeneralBundle after the AssetBundle
-		// migration, so resolve the missing bundle here instead of
-		// letting LoadResourceCoroutine reject the request.
-		if (string.IsNullOrEmpty(assetBundle))
-		{
-			string normalizedTexture =
-				(texture ?? string.Empty)
-					.Replace("\\\\", "/")
-					.TrimStart('/')
-					.ToLowerInvariant();
-
-			if (normalizedTexture.StartsWith("ui/"))
-			{
-				assetBundle =
-					GetMainResourcesBundleName();
-			}
-		}
-
+		// Use the same central resolver as normal resource loads.
+		// UI assets are part of MainResourcesBundle after the
+		// AssetBundle migration unless a caller explicitly supplies
+		// another bundle.
 		queuedTextureLoad.AssetBundle =
-			NormalizeBundleName(
+			ResolveResourceBundleName(
+				texture,
 				assetBundle
 			);
 
