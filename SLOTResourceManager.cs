@@ -1649,6 +1649,33 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 				string finalAssetPath =
 					queuedLoad.AssetPath;
 
+				// AssetBundle paths do not include the Resources category
+				// directory. Convert the old resource path to the actual
+				// path stored inside the bundle.
+				if (
+					finalAssetPath.StartsWith(
+						"Characters/",
+						StringComparison.OrdinalIgnoreCase) ||
+					finalAssetPath.StartsWith(
+						"Creatures/",
+						StringComparison.OrdinalIgnoreCase) ||
+					finalAssetPath.StartsWith(
+						"Environment/",
+						StringComparison.OrdinalIgnoreCase))
+				{
+					int slashIndex =
+						finalAssetPath.IndexOf('/');
+
+					if (slashIndex >= 0 &&
+						slashIndex + 1 < finalAssetPath.Length)
+					{
+						finalAssetPath =
+							finalAssetPath.Substring(
+								slashIndex + 1
+							);
+					}
+				}
+
 				if (
 					!finalAssetPath.EndsWith(
 						".prefab",
