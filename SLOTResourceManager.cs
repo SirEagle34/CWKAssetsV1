@@ -2841,11 +2841,9 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		// PROGRESS
 		// ========================================================
 
-		// Continue the same startup session. Do NOT reset to 0%.
-		AppendResourceLoadProgress(
-			bundles.Count
-		);
-
+		// The complete startup total was registered before the
+		// primary bundle download started. Do NOT reset or append
+		// another total here.
 		mCurrentlyBackgroundLoading = false;
 
 		Debug.Log(
@@ -3077,12 +3075,23 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 
 		if (bundlesToLoad.Count > 0)
 		{
+			// Build the complete startup progress total BEFORE the
+			// first download starts. This prevents 100% -> 0%.
+			List<string> startupBundles =
+				BuildBundlesToLoadUpFront();
+
+			int startupTotal =
+				bundlesToLoad.Count +
+				(startupBundles != null
+					? startupBundles.Count
+					: 0);
+
 			StartResourceLoadProgress(
-				bundlesToLoad.Count
+				startupTotal
 			);
 
-			// Keep startup progress alive while the upfront bundle
-			// list is appended below.
+			// Keep the single startup progress session alive until
+			// PreloadBundlesImmediately() has finished.
 			mKeepResourceLoadProgressAlive = true;
 
 			mCurrentlyBackgroundLoading =
