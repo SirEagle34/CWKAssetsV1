@@ -277,6 +277,76 @@ public class DWBattleLane : Singleton<DWBattleLane>
 				gameObject2.SetActive(false);
 			}
 		}
+		// IntroBattle can use tutorial creatures that are not in either loadout.
+		// Add lane-object pool entries for the exact CreatureItem instances
+		// referenced by the tutorial board.
+		if (Singleton<TutorialController>.Instance.IsBlockActive("IntroBattle"))
+		{
+			TutorialBoardData boardData =
+				Singleton<TutorialController>.Instance.GetTutorialBoard();
+
+			PlayerState user =
+				MasterBoardState.GetPlayerState(PlayerType.User);
+
+			PlayerState opp =
+				MasterBoardState.GetPlayerState(PlayerType.Opponent);
+
+			foreach (TutorialBoardEntry entry in boardData.Entries)
+			{
+				if (!entry.isOut)
+				{
+					continue;
+				}
+
+				PlayerState playerState =
+					entry.whichPlayer == PlayerType.User
+						? user
+						: opp;
+
+				if (playerState == null || playerState.DeploymentList == null)
+				{
+					continue;
+				}
+
+				CreatureState tutorialCreature =
+					playerState.DeploymentList.Find(
+						(CreatureState m) =>
+							m != null &&
+							m.Data != null &&
+							m.Data.Form != null &&
+							m.Data.Form.ID == entry.CreatureID
+					);
+
+				if (tutorialCreature == null ||
+					tutorialCreature.Data == null ||
+					LaneObjectPool.ContainsKey(tutorialCreature.Data))
+				{
+					continue;
+				}
+
+				GameObject tutorialLaneObject =
+					LaneObjParents[entry.whichPlayer.IntValue]
+						.InstantiateAsChild(LaneObjectPrefab);
+
+				DWBattleLaneObject component =
+					tutorialLaneObject.GetComponent<DWBattleLaneObject>();
+
+				if (component != null && component.ShadowBlob != null)
+				{
+					component.ShadowBlob.PrepareCache(
+						tutorialCreature.Data
+					);
+				}
+
+				if (component != null)
+				{
+					LaneObjectPool[tutorialCreature.Data] = component;
+				}
+
+				tutorialLaneObject.SetActive(false);
+			}
+		}
+
 		VanishFXAfterDeath = Resources.Load("VFX/Actions/VFX_Action_Death", typeof(GameObject)) as GameObject;
 	}
 
