@@ -2489,6 +2489,26 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			queuedTextureLoad =
 				new QueuedTextureLoad();
 
+		// Legacy UI callers may not provide a bundle name.
+		// UI/Icons_ActionPortraits and the other normal UI assets
+		// are stored in the GeneralBundle after the AssetBundle
+		// migration, so resolve the missing bundle here instead of
+		// letting LoadResourceCoroutine reject the request.
+		if (string.IsNullOrEmpty(assetBundle))
+		{
+			string normalizedTexture =
+				(texture ?? string.Empty)
+					.Replace("\\\\", "/")
+					.TrimStart('/')
+					.ToLowerInvariant();
+
+			if (normalizedTexture.StartsWith("ui/"))
+			{
+				assetBundle =
+					GetGeneralUIBundleName();
+			}
+		}
+
 		queuedTextureLoad.AssetBundle =
 			NormalizeBundleName(
 				assetBundle
