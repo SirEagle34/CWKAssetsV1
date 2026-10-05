@@ -1610,70 +1610,93 @@ else
 		yield return null;
 	}
 
+	private IEnumerator PoolIntroBattleCreatures()
+	{
+		TutorialBoardData boardData =
+			Singleton<TutorialController>.Instance.GetTutorialBoard();
+
+		if (boardData == null || boardData.Entries == null)
+		{
+			yield break;
+		}
+
+		PlayerState user =
+			MasterBoardState.GetPlayerState(PlayerType.User);
+
+		PlayerState opponent =
+			MasterBoardState.GetPlayerState(PlayerType.Opponent);
+
+		foreach (TutorialBoardEntry entry in boardData.Entries)
+		{
+			PlayerState playerState =
+				entry.whichPlayer == PlayerType.User
+					? user
+					: opponent;
+
+			if (playerState == null ||
+				playerState.DeploymentList == null)
+			{
+				continue;
+			}
+
+			CreatureState creatureState =
+				playerState.DeploymentList.Find(
+					(CreatureState m) =>
+						m != null &&
+						m.Data != null &&
+						m.Data.Form != null &&
+						m.Data.Form.ID == entry.CreatureID
+				);
+
+			if (creatureState == null)
+			{
+				continue;
+			}
+
+			CreatureItem creature = creatureState.Data;
+
+			// CreaturePool
+			yield return StartCoroutine(
+				PoolCreatureData(creature)
+			);
+
+			// LaneObjectPool sadece sahaya çıkacak tutorial creature'lar için.
+			if (entry.isOut)
+			{
+				Singleton<DWBattleLane>.Instance.PoolTutorialLaneObject(
+					entry.whichPlayer,
+					creature
+				);
+			}
+		}
+	}
+	
 	private IEnumerator PoolCreatureObjects()
 	{
 		Singleton<DWBattleLane>.Instance.PoolLaneObjects();
 		yield return null;
 
-		foreach (InventorySlotItem creature2 in UserLoadout.CreatureSet)
+		foreach (InventorySlotItem item in UserLoadout.CreatureSet)
 		{
-			if (creature2 != null)
+			if (item != null)
 			{
-				yield return StartCoroutine(PoolCreatureData(creature2.Creature));
+				yield return StartCoroutine(PoolCreatureData(item.Creature));
 			}
 		}
 
 		yield return null;
 
-		foreach (InventorySlotItem creature in OpLoadout.CreatureSet)
+		foreach (InventorySlotItem item in OpLoadout.CreatureSet)
 		{
-			if (creature != null)
+			if (item != null)
 			{
-				yield return StartCoroutine(PoolCreatureData(creature.Creature));
+				yield return StartCoroutine(PoolCreatureData(item.Creature));
 			}
 		}
 
-		// IntroBattle may deploy tutorial creatures that are not part of
-		// the normal loadout. Pool those exact CreatureItem instances too.
 		if (Singleton<TutorialController>.Instance.IsBlockActive("IntroBattle"))
 		{
-			TutorialBoardData boardData =
-				Singleton<TutorialController>.Instance.GetTutorialBoard();
-
-			PlayerState user =
-				MasterBoardState.GetPlayerState(PlayerType.User);
-
-			PlayerState opp =
-				MasterBoardState.GetPlayerState(PlayerType.Opponent);
-
-			foreach (TutorialBoardEntry entry in boardData.Entries)
-			{
-				PlayerState playerState =
-					entry.whichPlayer == PlayerType.User
-						? user
-						: opp;
-
-				if (playerState == null || playerState.DeploymentList == null)
-				{
-					continue;
-				}
-
-				CreatureState tutorialCreature =
-					playerState.DeploymentList.Find(
-						(CreatureState m) =>
-							m != null &&
-							m.Data != null &&
-							m.Data.Form != null &&
-							m.Data.Form.ID == entry.CreatureID
-					);
-
-				if (tutorialCreature != null)
-				{
-					yield return StartCoroutine(
-						PoolCreatureData(tutorialCreature.Data)
-					);
-				}
-			}
+			yield return StartCoroutine(PoolIntroBattleCreatures());
 		}
 
 		yield return null;
@@ -1692,19 +1715,16 @@ else
 		}
 
 		GameObject creatureObj = null;
-		Object objData = null;
-		Texture2D tex = null;
+
 		yield return StartCoroutine(
 			Singleton<SLOTResourceManager>.Instance.LoadCreatureResources(
 				creature.Form,
 				delegate(GameObject loadedObjData)
 				{
-					if (loadedObjData == null)
+					if (loadedObjData != null)
 					{
-						return;
+						creatureObj = Instantiate(loadedObjData);
 					}
-
-					creatureObj = Instantiate(loadedObjData);
 				}
 			)
 		);
@@ -1714,51 +1734,76 @@ else
 			yield break;
 		}
 
-		Texture2D resourceTex = Resources.Load("Creatures/" + creature.Form.Prefab + "/Textures/" + creature.Faction + "/" + creature.Form.PrefabTexture, typeof(Texture2D)) as Texture2D;
+		Texture2D resourceTex = Resources.Load(
+			"Creatures/" +
+			creature.Form.Prefab +
+			"/Textures/" +
+			creature.Faction +
+			"/" +
+			creature.Form.PrefabTexture,
+			typeof(Texture2D)
+		) as Texture2D;
 
 		Singleton<DWBattleLane>.Instance.CreaturePool.Add(
 			creature,
 			creatureObj
 		);
-		if (tex != null)
+
+		if (resourceTex != null)
 		{
-			Renderer[] mats = creatureObj.GetComponentsInChildren<Renderer>(true);
-			Renderer[] array = mats;
-			foreach (Renderer mat in array)
+			Renderer[] renderers =
+				creatureObj.GetComponentsInChildren<Renderer>(true);
+
+			foreach (Renderer renderer in renderers)
 			{
-				mat.material.mainTexture = resourceTex;
+				if (renderer != null && renderer.material != null)
+				{
+					renderer.material.mainTexture = resourceTex;
+				}
 			}
 		}
-		if (creatureObj != null)
+
+		Animator animator =
+			creatureObj.GetComponentInChildren<Animator>();
+
+		if (animator != null)
 		{
-			creatureObj.GetComponentInChildren<Animator>().StartPlayback();
-			creatureObj.GetComponentInChildren<Animator>().StopPlayback();
-			creatureObj.SetActive(false);
+			animator.StartPlayback();
+			animator.StopPlayback();
 		}
+
+		creatureObj.SetActive(false);
+
 		if (!Singleton<DWBattleLane>.Instance.CreatureVFXPool.ContainsKey(creature.Form.HitVFX))
 		{
 			PoolCreatureVFX(creature.Form.HitVFX);
 		}
+
 		if (!Singleton<DWBattleLane>.Instance.CreatureVFXPool.ContainsKey(creature.Form.ShootVFX))
 		{
 			PoolCreatureVFX(creature.Form.ShootVFX);
 		}
+
 		if (!Singleton<DWBattleLane>.Instance.CreatureVFXPool.ContainsKey(creature.Form.WeaponTrailVFX))
 		{
 			PoolCreatureVFX(creature.Form.WeaponTrailVFX);
 		}
+
 		if (!Singleton<DWBattleLane>.Instance.CreatureVFXPool.ContainsKey(creature.Form.AttackChargeVFX))
 		{
 			PoolCreatureVFX(creature.Form.AttackChargeVFX);
 		}
+
 		if (!Singleton<DWBattleLane>.Instance.CreatureVFXPool.ContainsKey(creature.Form.CritHitVFX))
 		{
 			PoolCreatureVFX(creature.Form.CritHitVFX);
 		}
+
 		if (!Singleton<DWBattleLane>.Instance.CreatureVFXPool.ContainsKey(creature.Form.PersistentVFX))
 		{
 			PoolCreatureVFX(creature.Form.PersistentVFX);
 		}
+
 		if (!Singleton<DWBattleLane>.Instance.CreatureVFXPool.ContainsKey(creature.Form.RezInVFX))
 		{
 			PoolCreatureVFX(creature.Form.RezInVFX);
