@@ -4907,7 +4907,7 @@ def AdminGiftCodeCatalog(kind):
         fields = [
             "ID",
             "Name",
-            "TypeText",
+            "Description",
             "Faction",
             "Rarity",
             "Cost"
