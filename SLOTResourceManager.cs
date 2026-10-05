@@ -741,6 +741,9 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 	private int mBundleIndex;
 	private int mTotalBundles = -1;
 
+	// Keeps startup downloads in one continuous progress session.
+	private bool mKeepResourceLoadProgressAlive;
+
 	private WWW mInProgressWWW;
 
 	private bool mCurrentlyBackgroundLoading;
@@ -1886,6 +1889,38 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 
 		mTotalBundles =
 			totalBundles;
+
+		mKeepResourceLoadProgressAlive = false;
+	}
+
+	private void AppendResourceLoadProgress(
+		int additionalBundles)
+	{
+		if (additionalBundles <= 0)
+		{
+			return;
+		}
+
+		if (mTotalBundles <= 0)
+		{
+			mBundleIndex = 0;
+			mTotalBundles = additionalBundles;
+		}
+		else
+		{
+			mTotalBundles += additionalBundles;
+		}
+	}
+
+	private void FinishResourceLoadProgress()
+	{
+		mKeepResourceLoadProgressAlive = false;
+
+		if (mTotalBundles > 0 &&
+			mBundleIndex >= mTotalBundles)
+		{
+			mTotalBundles = -1;
+		}
 	}
 
 	private bool ProgressHiddenDuringPreload()
@@ -1976,7 +2011,8 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 
 		if (
 			mBundleIndex >=
-			mTotalBundles)
+			mTotalBundles &&
+			!mKeepResourceLoadProgressAlive)
 		{
 			mTotalBundles =
 				-1;
@@ -2805,7 +2841,8 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		// PROGRESS
 		// ========================================================
 
-		StartResourceLoadProgress(
+		// Continue the same startup session. Do NOT reset to 0%.
+		AppendResourceLoadProgress(
 			bundles.Count
 		);
 
@@ -2983,6 +3020,9 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			"[SLOTResourceManager] " +
 			"Initial bundle preparation completed."
 		);
+
+		// Only now is the single startup progress session complete.
+		FinishResourceLoadProgress();
 	}
 
 	// ============================================================
@@ -3040,6 +3080,10 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			StartResourceLoadProgress(
 				bundlesToLoad.Count
 			);
+
+			// Keep startup progress alive while the upfront bundle
+			// list is appended below.
+			mKeepResourceLoadProgressAlive = true;
 
 			mCurrentlyBackgroundLoading =
 				false;
