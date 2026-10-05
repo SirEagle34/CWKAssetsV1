@@ -1704,7 +1704,8 @@ else
 
 	private IEnumerator PoolCreatureData(CreatureItem creature)
 	{
-		if (creature == null)
+		if (creature == null ||
+			creature.Form == null)
 		{
 			yield break;
 		}
@@ -1713,6 +1714,13 @@ else
 		{
 			yield break;
 		}
+
+		Debug.Log(
+			"[DWGame] PoolCreatureData: ID=" +
+			creature.Form.ID +
+			" Prefab=" +
+			creature.Form.Prefab
+		);
 
 		GameObject creatureObj = null;
 
@@ -1731,6 +1739,13 @@ else
 
 		if (creatureObj == null)
 		{
+			Debug.LogError(
+				"[DWGame] CreaturePool load failed: ID=" +
+				creature.Form.ID +
+				" Prefab=" +
+				creature.Form.Prefab
+			);
+
 			yield break;
 		}
 
