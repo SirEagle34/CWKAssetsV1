@@ -5175,34 +5175,36 @@ def MultiplayerRedeemCode():
                 "error": "PLAYER_ID_REQUIRED"
             }), 400
 
-        if InvalidUsername(player_id):
-            print(
-                "[RedeemCode] 400: INVALID_USERNAME:",
-                repr(player_id)
-            )
-            return jsonify({
-                "success": False,
-                "error": "INVALID_USERNAME"
-            }), 400
-
-        if IsUserBanned(
-            player_id,
-            IPFromRequest(request)
-        ):
-            return jsonify({
-                "success": False,
-                "error": "USER_BANNED"
-            }), 400
-
+        # The legacy Unity client uses PlayerID as the database
+        # username. Card Wars player IDs may be UUIDs, so do not
+        # reject them through the legacy InvalidUsername() filter
+        # before checking the actual Player table.
         player = Player.query.filter_by(
             username=player_id
         ).first()
 
         if player is None:
+            print(
+                "[RedeemCode] PLAYER_NOT_FOUND:",
+                repr(player_id)
+            )
             return jsonify({
                 "success": False,
                 "error": "PLAYER_NOT_FOUND"
             }), 404
+
+        if IsUserBanned(
+            player_id,
+            IPFromRequest(request)
+        ):
+            print(
+                "[RedeemCode] 400: USER_BANNED:",
+                repr(player_id)
+            )
+            return jsonify({
+                "success": False,
+                "error": "USER_BANNED"
+            }), 400
 
         with GIFT_CODES_LOCK:
             data = LoadGiftCodes()
