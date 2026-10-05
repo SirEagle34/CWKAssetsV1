@@ -2721,11 +2721,11 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			new HashSet<string>();
 
 		for (int i = 0;
-			i < BundlesToLoadUpFront.Count;
+			i < bundlesToLoadUpFront.Count;
 			i++)
 		{
 			string originalName =
-				BundlesToLoadUpFront[i];
+				bundlesToLoadUpFront[i];
 
 			if (string.IsNullOrEmpty(originalName))
 				continue;
