@@ -310,13 +310,41 @@ public class SocialController : Singleton<SocialController>
 		RewardManager.RedeemCodeReward(code, OnRedeemResult);
 	}
 
-	private void OnRedeemResult(ResponseFlag result)
+	private void OnRedeemResult(
+		ResponseFlag result,
+		List<string> rewardDescriptions)
 	{
 		if (result == ResponseFlag.Success)
 		{
+			string description = string.Empty;
+
+			if (rewardDescriptions != null)
+			{
+				for (int i = 0; i < rewardDescriptions.Count; i++)
+				{
+					if (string.IsNullOrEmpty(rewardDescriptions[i]))
+					{
+						continue;
+					}
+
+					if (description.Length > 0)
+					{
+						description += "\n";
+					}
+
+					description += "• " + rewardDescriptions[i];
+				}
+			}
+
+			if (string.IsNullOrEmpty(description))
+			{
+				description =
+					KFFLocalization.Get("!!REDEEMCODE_SUCCESS");
+			}
+
 			Singleton<SimplePopupController>.Instance.ShowMessage(
-				string.Empty,
-				KFFLocalization.Get("!!REDEEMCODE_SUCCESS")
+				KFFLocalization.Get("!!REDEEMCODE_SUCCESS_TITLE"),
+				description
 			);
 		}
 		else
@@ -361,7 +389,7 @@ public class SocialController : Singleton<SocialController>
 		}
 		ResponseFlag resultFlag = ResponseFlag.None;
 		Singleton<BusyIconPanelController>.Instance.Show();
-		RewardManager.RedeemCodeReward(id, delegate(ResponseFlag flag)
+		RewardManager.RedeemCodeReward(id, delegate(ResponseFlag flag, List<string> rewards)
 		{
 			resultFlag = flag;
 		});
