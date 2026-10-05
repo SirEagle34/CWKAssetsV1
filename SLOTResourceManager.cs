@@ -699,8 +699,7 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		"ftuebundle",
 		"generalbundle",
 		"mainaudiobundle",
-		"mainresourcesbundle",
-		"ui"
+		"mainresourcesbundle"
 	};
 
 
@@ -1193,6 +1192,29 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			string resourcePath =
 				path.Trim('/');
 
+			// Legacy Resources paths are not stored with the
+			// "Resources/" prefix inside MainResourcesBundle.
+			if (
+				resourcePath.StartsWith(
+					"Assets/Resources/",
+					StringComparison.OrdinalIgnoreCase))
+			{
+				resourcePath =
+					resourcePath.Substring(
+						"Assets/Resources/".Length
+					);
+			}
+			else if (
+				resourcePath.StartsWith(
+					"Resources/",
+					StringComparison.OrdinalIgnoreCase))
+			{
+				resourcePath =
+					resourcePath.Substring(
+						"Resources/".Length
+					);
+			}
+
 			if (IsHiLoRezResource(path))
 			{
 				resourcePath =
@@ -1442,20 +1464,6 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 
 		string lowerPath =
 			normalizedPath.ToLowerInvariant();
-
-		// UI was migrated from Resources/ui/... into the dedicated
-		// "ui" AssetBundle. Old callers may still pass:
-		//
-		// Resources/ui/icon_leagues/Finn_Battle_Image.png
-		//
-		// without an explicit bundle name.
-		if (
-			lowerPath.StartsWith(
-				"ui/",
-				StringComparison.OrdinalIgnoreCase))
-		{
-			return "ui";
-		}
 
 		// If an old caller omitted the bundle for an asset that was
 		// moved to its own bundle, infer that bundle from the legacy
@@ -1953,7 +1961,7 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 					queuedLoad.AssetPath;
 
 				// Strip the legacy Resources directory. Bundle asset names
-				// use ui/... rather than Resources/ui/...
+				// use the path below Resources/... rather than the legacy prefix.
 				if (
 					finalAssetPath.StartsWith(
 						"Assets/Resources/",
