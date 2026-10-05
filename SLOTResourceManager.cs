@@ -699,7 +699,8 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		"ftuebundle",
 		"generalbundle",
 		"mainaudiobundle",
-		"mainresourcesbundle"
+		"mainresourcesbundle",
+		"ui"
 	};
 
 
@@ -1364,6 +1365,20 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		string lowerPath =
 			normalizedPath.ToLowerInvariant();
 
+		// UI was migrated from Resources/ui/... into the dedicated
+		// "ui" AssetBundle. Old callers may still pass:
+		//
+		// Resources/ui/icon_leagues/Finn_Battle_Image.png
+		//
+		// without an explicit bundle name.
+		if (
+			lowerPath.StartsWith(
+				"ui/",
+				StringComparison.OrdinalIgnoreCase))
+		{
+			return "ui";
+		}
+
 		// If an old caller omitted the bundle for an asset that was
 		// moved to its own bundle, infer that bundle from the legacy
 		// Resources path.
@@ -1859,9 +1874,32 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 				string finalAssetPath =
 					queuedLoad.AssetPath;
 
-				// AssetBundle paths do not include the Resources category
-				// directory. Convert the old resource path to the actual
-				// path stored inside the bundle.
+				// Strip the legacy Resources directory. Bundle asset names
+				// use ui/... rather than Resources/ui/...
+				if (
+					finalAssetPath.StartsWith(
+						"Assets/Resources/",
+						StringComparison.OrdinalIgnoreCase))
+				{
+					finalAssetPath =
+						finalAssetPath.Substring(
+							"Assets/Resources/".Length
+						);
+				}
+				else if (
+					finalAssetPath.StartsWith(
+						"Resources/",
+						StringComparison.OrdinalIgnoreCase))
+				{
+					finalAssetPath =
+						finalAssetPath.Substring(
+							"Resources/".Length
+						);
+				}
+
+			// AssetBundle paths do not include the Resources category
+			// directory. Convert the old resource path to the actual
+			// path stored inside the bundle.
 				if (
 					finalAssetPath.StartsWith(
 						"Characters/",
