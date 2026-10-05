@@ -552,7 +552,6 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		"whiteninja",
 		"whiteninja_evo",
 		"wintercow",
-		"witheredffantry",
 		"wizardelf",
 		"wizardofpoo",
 		"wurstwednesday",
@@ -580,7 +579,6 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		"bmo_beta",
 		"bmo_hal",
 		"bmo_sweater",
-		"breakfastprincess",
 		"charlie",
 		"cinnamonbun",
 		"cinnamonbun_zombie",
@@ -682,7 +680,6 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		"princessbubblegum_sweater",
 		"princessbubblegum_zombie",
 		"prismo",
-		"test",
 		"treasurecat",
 		"younggrandprixe"
 	};
