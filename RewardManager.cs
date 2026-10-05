@@ -39,7 +39,10 @@ public class RewardManager
 		public int Stars;
 	}
 
-	public delegate void RedeemCodeCallback(ResponseFlag flag);
+	public delegate void RedeemCodeCallback(
+		ResponseFlag flag,
+		List<string> rewardDescriptions
+	);
 
 	private static QuestData mCurrentQuest;
 
@@ -400,7 +403,10 @@ public class RewardManager
 
 		if (saveData.UsedRedeemCodes.Contains(code))
 		{
-			callback(ResponseFlag.Error);
+			callback(
+				ResponseFlag.Error,
+				new List<string>()
+			);
 			return;
 		}
 
@@ -416,7 +422,10 @@ public class RewardManager
 
 			Singleton<PlayerInfoScript>.Instance.Save();
 
-			callback(ResponseFlag.Success);
+			callback(
+				ResponseFlag.Success,
+				GetLocalRedeemRewardDescriptions(code)
+			);
 			return;
 		}
 
@@ -538,6 +547,7 @@ public class RewardManager
 		// ============================================================
 
 		bool rewardAdded = false;
+		List<string> rewardDescriptions = new List<string>();
 
 		// ------------------------------------------------------------
 		// SOFT CURRENCY / COINS
@@ -555,6 +565,10 @@ public class RewardManager
 				softCurrency;
 
 			rewardAdded = true;
+
+			rewardDescriptions.Add(
+				softCurrency.ToString("N0") + " Coins"
+			);
 
 			Debug.Log(
 				"[RedeemCode] Coins received: " +
@@ -579,6 +593,10 @@ public class RewardManager
 			);
 
 			rewardAdded = true;
+
+			rewardDescriptions.Add(
+				freeHardCurrency.ToString("N0") + " Gems"
+			);
 
 			Debug.Log(
 				"[RedeemCode] Gems received: " +
@@ -683,6 +701,10 @@ public class RewardManager
 
 					rewardAdded = true;
 
+					rewardDescriptions.Add(
+						creatureItem.Name
+					);
+
 					Debug.Log(
 						"[RedeemCode] Creature received: " +
 						creatureID
@@ -761,6 +783,10 @@ public class RewardManager
 
 					rewardAdded = true;
 
+					rewardDescriptions.Add(
+						cardItem.Name
+					);
+
 					Debug.Log(
 						"[RedeemCode] Action Card received: " +
 						actionCardID
@@ -781,7 +807,8 @@ public class RewardManager
 			);
 
 			callback?.Invoke(
-				ResponseFlag.Error
+				ResponseFlag.Error,
+				new List<string>()
 			);
 
 			return;
@@ -803,7 +830,8 @@ public class RewardManager
 		);
 
 		callback?.Invoke(
-			ResponseFlag.Success
+			ResponseFlag.Success,
+			rewardDescriptions
 		);
 	}
 
@@ -894,6 +922,92 @@ public class RewardManager
 		mRedeemCodeCallback = null; // 🔥 önemli: leak + overwrite fix
 
 		cb?.Invoke(flag);
+	}
+
+
+	private static List<string> GetLocalRedeemRewardDescriptions(
+		string code)
+	{
+		List<string> rewards = new List<string>();
+
+		switch (code)
+		{
+		case "P1NKTR33":
+		case "CORNCRAZY":
+		case "JUSTSACK":
+			{
+				string creatureID = string.Empty;
+
+				if (code == "P1NKTR33")
+				{
+					creatureID = "SnuggleTree_Awaken";
+				}
+				else if (code == "CORNCRAZY")
+				{
+					creatureID = "CornRonin_Awaken";
+				}
+				else
+				{
+					creatureID = "SackOfPain_Awaken";
+				}
+
+				CreatureItem creatureItem =
+					new CreatureItem(creatureID);
+
+				rewards.Add(creatureItem.Name);
+			}
+			break;
+
+		case "EPICDARKMAGICTHEDARKPOWER":
+			rewards.Add("75,000 Gems");
+			break;
+
+		case "FREEGEMS29":
+			rewards.Add("29,000 Gems");
+			break;
+
+		case "SPECIALCARD_01":
+		case "SPECIALCARD_02":
+		case "SPECIALCARD_03":
+		case "SPECIALCARD_04":
+		case "SPECIALCARD_05":
+		case "SPECIALCARD_06":
+		case "SPECIALCARD_07":
+		case "SPECIALCARD_08":
+		case "SPECIALCARD_09":
+		case "SPECIALCARD_10":
+		case "SPECIALCARD_11":
+		case "SPECIALCARD_12":
+		case "SPECIALCARD_13":
+		case "SPECIALCARD_14":
+			{
+				string cardID = string.Empty;
+
+				switch (code)
+				{
+				case "SPECIALCARD_01": cardID = "Leader_Finn_06"; break;
+				case "SPECIALCARD_02": cardID = "Leader_Jake_08"; break;
+				case "SPECIALCARD_03": cardID = "Leader_FlamePrincess_06"; break;
+				case "SPECIALCARD_04": cardID = "Leader_IceKing_06"; break;
+				case "SPECIALCARD_05": cardID = "Leader_LumpySpacePrincess_06"; break;
+				case "SPECIALCARD_06": cardID = "Leader_GrandPrixe_06"; break;
+				case "SPECIALCARD_07": cardID = "Leader_GrandPrixe_07"; break;
+				case "SPECIALCARD_08": cardID = "Leader_Marceline_06"; break;
+				case "SPECIALCARD_09": cardID = "Leader_EarlOfLemongrab_05"; break;
+				case "SPECIALCARD_10": cardID = "Leader_BMO_06"; break;
+				case "SPECIALCARD_11": cardID = "Leader_PeppermintButler_05"; break;
+				case "SPECIALCARD_12": cardID = "Leader_Hunson_03"; break;
+				case "SPECIALCARD_13": cardID = "Leader_Banana_02"; break;
+				case "SPECIALCARD_14": cardID = "Leader_Jake_06"; break;
+				}
+
+				CardItem cardItem = new CardItem(cardID);
+				rewards.Add(cardItem.Name);
+			}
+			break;
+		}
+
+		return rewards;
 	}
 
 	private static Dictionary<string, Action> redeemCodes = new Dictionary<string, Action>()
