@@ -2003,6 +2003,7 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 						resolvedAssetPath +
 						" | Bundle: " +
 						queuedLoad.AssetBundle
+					);
 				}
 
 				if (
