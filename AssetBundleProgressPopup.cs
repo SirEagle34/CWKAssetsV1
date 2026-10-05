@@ -219,80 +219,34 @@ public class AssetBundleProgressPopup :
 			resourceManager.CurrentDownloadBundle;
 
 		// ========================================================
-		// CURRENT FILE PROGRESS
+		// SINGLE PROGRESS BAR
 		// ========================================================
-
-		if (currentTotalBytes > 0)
+		//
+		// The startup progress is already a GLOBAL progress value.
+		// Do not show a second per-file progress bar. A second bar
+		// makes the UI look like the download restarted for every
+		// bundle.
+		//
+		if (FileProgressBar != null)
 		{
-			float currentProgress =
-				(float)currentBytes /
-				(float)currentTotalBytes;
-
-			currentProgress =
-				Mathf.Clamp01(currentProgress);
-
-			if (FileProgressBar != null)
+			if (FileProgressBar.transform.parent != null)
 			{
-				FileProgressBar
-					.transform
-					.parent
-					.gameObject
-					.SetActive(true);
-
-				FileProgressBar.fillAmount =
-					currentProgress;
-			}
-
-			if (LoadingLabel != null)
-			{
-				LoadingLabel.localPosition =
-					mBaseLabelPos;
-			}
-
-			mShowFileProgress = true;
-		}
-		else if (fileProgress >= 0f)
-		{
-			if (FileProgressBar != null)
-			{
-				FileProgressBar
-					.transform
-					.parent
-					.gameObject
-					.SetActive(true);
-
-				FileProgressBar.fillAmount =
-					Mathf.Clamp01(fileProgress);
-			}
-
-			mShowFileProgress = true;
-		}
-		else
-		{
-			if (FileProgressBar != null &&
-				FileProgressBar.transform.parent != null)
-			{
-				FileProgressBar
-					.transform
-					.parent
-					.gameObject
+				FileProgressBar.transform.parent.gameObject
 					.SetActive(false);
 			}
-
-			if (LoadingLabel != null)
+			else
 			{
-				Vector3 pos =
-					mBaseLabelPos;
-
-				pos.y +=
-					SingleBarLabelOffset;
-
-				LoadingLabel.localPosition =
-					pos;
+				FileProgressBar.gameObject.SetActive(false);
 			}
-
-			mShowFileProgress = false;
 		}
+
+		if (LoadingLabel != null)
+		{
+			LoadingLabel.localPosition =
+				mBaseLabelPos;
+		}
+
+		mShowFileProgress = false;
 
 		// ========================================================
 		// CURRENT FILE NAME
