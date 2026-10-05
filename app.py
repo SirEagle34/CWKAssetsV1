@@ -5094,42 +5094,71 @@ def AdminGiftCodeDelete(code):
 )
 def MultiplayerRedeemCode():
 
-    try:
+    """
+    Redeem-code API compatible with the legacy Unity client.
+    Accept both JSON and form-encoded requests and common legacy
+    field aliases for the code and player ID.
+    """
 
-        payload = request.get_json(
-            silent=True
-        )
+    try:
+        payload = request.get_json(silent=True)
 
         if not isinstance(payload, dict):
-
             client_data = parse_qs(
-                request.get_data().decode(
-                    "utf-8"
-                )
+                request.get_data().decode("utf-8")
             )
 
             payload = {
-                key: value[0]
-                if len(value) == 1
-                else value
+                key: (
+                    value[0]
+                    if len(value) == 1
+                    else value
+                )
                 for key, value in client_data.items()
             }
 
+        if not isinstance(payload, dict):
+            payload = {}
+
+        raw_code = (
+            payload.get("redeemcode")
+            or payload.get("redeem_code")
+            or payload.get("code")
+            or payload.get("RedeemCode")
+            or request.args.get("redeemcode")
+            or request.args.get("code")
+            or ""
+        )
+
         redeem_code = NormalizeGiftCode(
-            payload.get(
-                "redeemcode",
-                payload.get("code", "")
-            )
+            raw_code
         )
 
-        player_id = payload.get(
-            "player_id"
+        player_id = (
+            payload.get("player_id")
+            or payload.get("playerid")
+            or payload.get("playerId")
+            or payload.get("userid")
+            or payload.get("user_id")
+            or payload.get("Player-Id")
+            or request.headers.get("Player-Id")
+            or request.headers.get("player_id")
+            or request.args.get("player_id")
+            or request.args.get("playerid")
         )
 
-        if not player_id:
-            player_id = request.headers.get(
-                "Player-Id"
-            )
+        if player_id is not None:
+            player_id = str(
+                player_id
+            ).strip()
+
+        print("========================================")
+        print("[RedeemCode] REQUEST")
+        print("[RedeemCode] Content-Type:", request.content_type)
+        print("[RedeemCode] Payload:", payload)
+        print("[RedeemCode] Code:", repr(redeem_code))
+        print("[RedeemCode] Player ID:", repr(player_id))
+        print("========================================")
 
         if not redeem_code:
             return jsonify({
@@ -5138,21 +5167,26 @@ def MultiplayerRedeemCode():
             }), 400
 
         if not player_id:
+            print(
+                "[RedeemCode] 400: PLAYER_ID_REQUIRED"
+            )
             return jsonify({
                 "success": False,
                 "error": "PLAYER_ID_REQUIRED"
             }), 400
 
-        if InvalidUsername(
-            str(player_id)
-        ):
+        if InvalidUsername(player_id):
+            print(
+                "[RedeemCode] 400: INVALID_USERNAME:",
+                repr(player_id)
+            )
             return jsonify({
                 "success": False,
                 "error": "INVALID_USERNAME"
             }), 400
 
         if IsUserBanned(
-            str(player_id),
+            player_id,
             IPFromRequest(request)
         ):
             return jsonify({
@@ -5161,7 +5195,7 @@ def MultiplayerRedeemCode():
             }), 400
 
         player = Player.query.filter_by(
-            username=str(player_id)
+            username=player_id
         ).first()
 
         if player is None:
@@ -5171,7 +5205,6 @@ def MultiplayerRedeemCode():
             }), 404
 
         with GIFT_CODES_LOCK:
-
             data = LoadGiftCodes()
 
             gift = FindGiftCode(
@@ -5196,13 +5229,10 @@ def MultiplayerRedeemCode():
                 []
             )
 
-            if not isinstance(
-                used_by,
-                list
-            ):
+            if not isinstance(used_by, list):
                 used_by = []
 
-            if str(player.username) in used_by:
+            if player.username in used_by:
                 return jsonify({
                     "success": False,
                     "error": "ALREADY_REDEEMED"
@@ -5230,26 +5260,20 @@ def MultiplayerRedeemCode():
             )
 
             if not result.get("success"):
-
                 db.session.rollback()
-
                 return jsonify(result), 400
 
+            # Mark the code used only after the reward was granted.
             used_by.append(
-                str(player.username)
+                player.username
             )
-
             gift["used_by"] = used_by
-
             SaveGiftCodes(data)
 
             try:
                 db.session.commit()
-
             except Exception as e:
-
                 db.session.rollback()
-
                 return jsonify({
                     "success": False,
                     "error": "REDEEM_SAVE_FAILED",
@@ -5258,35 +5282,68 @@ def MultiplayerRedeemCode():
 
         Log(
             "redeemcode",
-            str(player.username)
+            player.username
             + " redeemed "
             + redeem_code
         )
 
-        return jsonify({
+        # RewardManager.RedeemServerCallback expects these
+        # top-level legacy fields. Keep the modern "reward"
+        # object too for compatibility.
+        reward = result.get(
+            "reward",
+            {}
+        )
+
+        if not isinstance(reward, dict):
+            reward = {}
+
+        response = {
             "success": True,
+            "code": redeem_code,
             "redeemcode": redeem_code,
-            "subject": gift.get(
-                "subject",
-                ""
+            "subject": gift.get("subject", ""),
+            "message": gift.get("message", ""),
+            "soft_currency": int(
+                reward.get("soft_currency", 0) or 0
             ),
-            "message": gift.get(
-                "message",
-                ""
+            "free_hard_currency": int(
+                reward.get("free_hard_currency", 0) or 0
             ),
-            "reward": result.get(
-                "reward",
-                {}
-            )
-        }), 200
+            "paid_hard_currency": int(
+                reward.get("paid_hard_currency", 0) or 0
+            ),
+            "creatures": reward.get(
+                "creatures",
+                []
+            ),
+            "action_cards": reward.get(
+                "action_cards",
+                []
+            ),
+            "reward": reward
+        }
+
+        print(
+            "[RedeemCode] SUCCESS RESPONSE:",
+            response
+        )
+
+        return jsonify(response), 200
 
     except Exception as e:
-
         db.session.rollback()
+
+        print(
+            "[RedeemCode] EXCEPTION:",
+            repr(e)
+        )
+        traceback.print_exc()
 
         Log(
             "redeemcode",
-            "Redeem error: " + repr(e)
+            "Redeem error: "
+            + repr(e)
         )
 
         return jsonify({
