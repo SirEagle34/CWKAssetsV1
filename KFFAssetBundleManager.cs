@@ -729,12 +729,36 @@ public class KFFAssetBundleManager : Singleton<KFFAssetBundleManager>
 
 		AssetInfo info;
 
+		// AssetInfo keys are stored without the file extension.
+		// Try the exact key first for compatibility.
 		if (
 			assetInfoDict.TryGetValue(
 				resourcePath,
 				out info))
 		{
 			return info.assetBundle;
+		}
+
+		// Then try the canonical extension-less key.
+		string extension =
+			Path.GetExtension(resourcePath);
+
+		if (!string.IsNullOrEmpty(extension))
+		{
+			string withoutExtension =
+				resourcePath.Substring(
+					0,
+					resourcePath.Length -
+					extension.Length
+				);
+
+			if (
+				assetInfoDict.TryGetValue(
+					withoutExtension,
+					out info))
+			{
+				return info.assetBundle;
+			}
 		}
 
 		return null;
