@@ -1614,6 +1614,7 @@ else
 	{
 		Singleton<DWBattleLane>.Instance.PoolLaneObjects();
 		yield return null;
+
 		foreach (InventorySlotItem creature2 in UserLoadout.CreatureSet)
 		{
 			if (creature2 != null)
@@ -1621,7 +1622,9 @@ else
 				yield return StartCoroutine(PoolCreatureData(creature2.Creature));
 			}
 		}
+
 		yield return null;
+
 		foreach (InventorySlotItem creature in OpLoadout.CreatureSet)
 		{
 			if (creature != null)
@@ -1629,12 +1632,61 @@ else
 				yield return StartCoroutine(PoolCreatureData(creature.Creature));
 			}
 		}
+
+		// IntroBattle may deploy tutorial creatures that are not part of
+		// the normal loadout. Pool those exact CreatureItem instances too.
+		if (Singleton<TutorialController>.Instance.IsBlockActive("IntroBattle"))
+		{
+			TutorialBoardData boardData =
+				Singleton<TutorialController>.Instance.GetTutorialBoard();
+
+			PlayerState user =
+				MasterBoardState.GetPlayerState(PlayerType.User);
+
+			PlayerState opp =
+				MasterBoardState.GetPlayerState(PlayerType.Opponent);
+
+			foreach (TutorialBoardEntry entry in boardData.Entries)
+			{
+				PlayerState playerState =
+					entry.whichPlayer == PlayerType.User
+						? user
+						: opp;
+
+				if (playerState == null || playerState.DeploymentList == null)
+				{
+					continue;
+				}
+
+				CreatureState tutorialCreature =
+					playerState.DeploymentList.Find(
+						(CreatureState m) =>
+							m != null &&
+							m.Data != null &&
+							m.Data.Form != null &&
+							m.Data.Form.ID == entry.CreatureID
+					);
+
+				if (tutorialCreature != null)
+				{
+					yield return StartCoroutine(
+						PoolCreatureData(tutorialCreature.Data)
+					);
+				}
+			}
+		}
+
 		yield return null;
 	}
 
 	private IEnumerator PoolCreatureData(CreatureItem creature)
 	{
 		if (creature == null)
+		{
+			yield break;
+		}
+
+		if (Singleton<DWBattleLane>.Instance.CreaturePool.ContainsKey(creature))
 		{
 			yield break;
 		}
