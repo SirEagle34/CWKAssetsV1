@@ -126,12 +126,17 @@ public class AssetBundleProgressPopup :
 					? DelayBeforeBarAppearing
 					: 0f;
 
-			try
+			// Only lock input while the download popup is actually shown.
+			// BattleScene and other non-popup states must remain interactive.
+			if (showPopup)
 			{
-				UICamera.LockInput();
-			}
-			catch
-			{
+				try
+				{
+					UICamera.LockInput();
+				}
+				catch
+				{
+				}
 			}
 		}
 
