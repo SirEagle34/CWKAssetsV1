@@ -38,7 +38,8 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 	{
 		IntroBattle,
 		Q1,
-		Q2
+		Q2,
+		Battle
 	}
 
 	// ============================================================
@@ -3225,6 +3226,59 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 
 				break;
 			}
+		}
+	}
+
+
+	public void StartBattleCreatureBundlePreload(
+		List<InventorySlotItem> userCreatureSet,
+		List<InventorySlotItem> opponentCreatureSet)
+	{
+		if (!IsUsingAssetBundles())
+		{
+			return;
+		}
+
+		HashSet<string> uniqueBundles = new HashSet<string>();
+		List<CreatureData> creatures = new List<CreatureData>();
+
+		Action<List<InventorySlotItem>> collect = delegate(List<InventorySlotItem> set)
+		{
+			if (set == null)
+			{
+				return;
+			}
+
+			foreach (InventorySlotItem item in set)
+			{
+				if (item == null || item.Creature == null || item.Creature.Form == null)
+				{
+					continue;
+				}
+
+				CreatureData form = item.Creature.Form;
+				string bundleName = GetCreatureBundleName(form);
+
+				if (!string.IsNullOrEmpty(bundleName) && uniqueBundles.Add(bundleName))
+				{
+					creatures.Add(form);
+				}
+			}
+		};
+
+		collect(userCreatureSet);
+		collect(opponentCreatureSet);
+
+		StartResourceLoadProgress(creatures.Count);
+
+		Debug.Log(
+			"[SLOTResourceManager] Battle preload | Unique creature bundles=" +
+			creatures.Count
+		);
+
+		foreach (CreatureData creature in creatures)
+		{
+			QueueCreatureResourceLoad(creature);
 		}
 	}
 
