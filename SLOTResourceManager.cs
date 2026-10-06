@@ -1397,9 +1397,7 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		string normalizedBundle =
 			NormalizeBundleName(assetBundleName);
 
-		// An explicit bundle always wins. Creature, character,
-		// environment, gameboard and audio callers already know
-		// which dedicated bundle they need.
+		// Explicit bundle requests always win.
 		if (!string.IsNullOrEmpty(normalizedBundle))
 		{
 			return normalizedBundle;
@@ -1411,9 +1409,7 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		string lowerPath =
 			normalizedPath.ToLowerInvariant();
 
-		// If an old caller omitted the bundle for an asset that was
-		// moved to its own bundle, infer that bundle from the
-		// Resources hierarchy.
+		// Dedicated migrated bundles keep their existing routing.
 		string[] dedicatedRoots =
 		{
 			"resources/creatures/",
@@ -1449,13 +1445,109 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			break;
 		}
 
-		// Extra000001 is the complete Assets/Resources pack.
-		// It is the generic fallback for EVERY Resources/<any> path
-		// that does not belong to a dedicated creature/character/
-		// environment/gameboard bundle.
-		return NormalizeBundleName(
-			ExtraResourcesBundle
-		);
+		// ========================================================
+		// MAIN RESOURCES = BASE
+		// EXTRA000001 = FALLBACK / OVERRIDE
+		// ========================================================
+		//
+		// Do NOT blindly return Extra000001 here. MainResourcesBundle
+		// is the base bundle and must remain the first choice whenever
+		// it actually contains the requested resource.
+		//
+		// Extra000001 is selected only when the requested asset is not
+		// present in MainResourcesBundle, or when MainResourcesBundle
+		// is not loaded but Extra000001 already contains the asset.
+
+		string mainBundleName =
+			GetMainResourcesBundleName();
+
+		AssetBundle mainBundle =
+			Singleton<KFFAssetBundleManager>
+				.Instance
+			.GetAssetBundleByName(
+					mainBundleName
+			);
+
+		string extraBundleName =
+			NormalizeBundleName(
+				ExtraResourcesBundle
+			);
+
+		AssetBundle extraBundle =
+			Singleton<KFFAssetBundleManager>
+				.Instance
+			.GetAssetBundleByName(
+					extraBundleName
+			);
+
+		if (mainBundle != null &&
+			BundleContainsResource(
+				mainBundle,
+				normalizedPath))
+		{
+			return mainBundleName;
+		}
+
+		if (extraBundle != null &&
+			BundleContainsResource(
+				extraBundle,
+				normalizedPath))
+		{
+			return extraBundleName;
+		}
+
+		// Nothing is loaded yet. MainResources is the base bundle and
+		// therefore the correct bundle to download/check first.
+		return mainBundleName;
+	}
+
+	private bool BundleContainsResource(
+		AssetBundle assetBundle,
+		string resourcePath)
+	{
+		if (assetBundle == null ||
+			string.IsNullOrEmpty(resourcePath))
+		{
+			return false;
+		}
+
+		string normalizedPath =
+			resourcePath
+				.Replace("\\", "/")
+				.Trim('/')
+				.ToLowerInvariant();
+
+		string withoutExtension =
+			Path.ChangeExtension(
+				normalizedPath,
+				null
+			);
+
+		string[] assetNames =
+			assetBundle.GetAllAssetNames();
+
+		for (int i = 0; i < assetNames.Length; i++)
+		{
+			string candidate =
+				assetNames[i]
+					.Replace("\\", "/")
+					.Trim('/')
+					.ToLowerInvariant();
+
+			if (candidate == normalizedPath)
+			{
+				return true;
+			}
+
+			if (Path.ChangeExtension(
+				candidate,
+				null) == withoutExtension)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	// ============================================================
