@@ -2752,14 +2752,17 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		UnityEngine.Object objData =
 			null;
 
-		UICamera.LockInput();
+        bool done = false;
 
-		bool done = false;
+        Debug.Log(
+            "[SLOTResourceManager] ENV START | Prefab=" +
+            (quest != null ? quest.LevelPrefab : "NULL")
+        );
 
-		string bundleName =
-			NormalizeBundleName(
-				quest.LevelPrefab
-			);
+        string bundleName =
+            NormalizeBundleName(
+                quest.LevelPrefab
+            );
 
 		QueueResourceLoad(
 			"Resources/environment/" +
@@ -2783,11 +2786,16 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			yield return null;
 		}
 
-		OnResourceLoadDone();
+        OnResourceLoadDone();
 
-		UICamera.UnlockInput();
+        Debug.Log(
+            "[SLOTResourceManager] ENV DONE | Prefab=" +
+            (quest != null ? quest.LevelPrefab : "NULL") +
+            " | Result=" +
+            (objData != null ? objData.name : "NULL")
+        );
 
-		callback(objData);
+        callback(objData);
 	}
 
 	// ============================================================
@@ -2804,14 +2812,17 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		UnityEngine.Object objData =
 			null;
 
-		UICamera.LockInput();
+        bool done = false;
 
-		bool done = false;
+        Debug.Log(
+            "[SLOTResourceManager] BOARD START | Prefab=" +
+            (quest != null ? quest.BoardPrefab : "NULL")
+        );
 
-		string bundleName =
-			NormalizeBundleName(
-				quest.BoardPrefab
-			);
+        string bundleName =
+            NormalizeBundleName(
+                quest.BoardPrefab
+            );
 
 		QueueResourceLoad(
 			"Resources/gameboard/" +
@@ -2835,11 +2846,16 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			yield return null;
 		}
 
-		OnResourceLoadDone();
+        OnResourceLoadDone();
 
-		UICamera.UnlockInput();
+        Debug.Log(
+            "[SLOTResourceManager] BOARD DONE | Prefab=" +
+            (quest != null ? quest.BoardPrefab : "NULL") +
+            " | Result=" +
+            (objData != null ? objData.name : "NULL")
+        );
 
-		callback(objData);
+        callback(objData);
 	}
 
 	// ============================================================
