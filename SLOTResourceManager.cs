@@ -47,6 +47,10 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 
 	public const string MainResourcesBundle = "MainResourcesBundle";
 
+	// Complete migrated Assets/Resources bundle. Every resource path
+	// inside this bundle keeps the Resources/ prefix.
+	public const string ExtraResourcesBundle = "Extra000001";
+
 	// LOCAL ONLY.
 	// NEVER DOWNLOAD THIS BUNDLE.
 	public const string MainScenesBundle = "MainScenesBundle";
@@ -1192,8 +1196,8 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			string resourcePath =
 				path.Trim('/');
 
-			// Legacy Resources paths are not stored with the
-			// "Resources/" prefix inside MainResourcesBundle.
+			// Migrated Resources assets keep the "Resources/" prefix
+			// inside AssetBundles.
 			if (
 				resourcePath.StartsWith(
 					"Assets/Resources/",
@@ -1265,26 +1269,10 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 				string resourcePath =
 					path.Trim('/');
 
-				if (
-					resourcePath.StartsWith(
-						"Assets/Resources/",
-						StringComparison.OrdinalIgnoreCase))
-				{
-					resourcePath =
-						resourcePath.Substring(
-							"Assets/Resources/".Length
-						);
-				}
-				else if (
-					resourcePath.StartsWith(
-						"Resources/",
-						StringComparison.OrdinalIgnoreCase))
-				{
-					resourcePath =
-						resourcePath.Substring(
-							"Resources/".Length
-						);
-				}
+				resourcePath =
+					NormalizeResourcesAssetPath(
+						resourcePath
+					);
 
 				if (IsHiLoRezResource(path))
 				{
@@ -1439,41 +1427,20 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		}
 
 		string normalizedPath =
-			(assetPath ?? string.Empty)
-				.Replace("\\\\", "/")
-				.Trim('/');
-
-		if (normalizedPath.StartsWith(
-			"Assets/Resources/",
-			StringComparison.OrdinalIgnoreCase))
-		{
-			normalizedPath =
-				normalizedPath.Substring(
-					"Assets/Resources/".Length
-				);
-		}
-		else if (normalizedPath.StartsWith(
-			"Resources/",
-			StringComparison.OrdinalIgnoreCase))
-		{
-			normalizedPath =
-				normalizedPath.Substring(
-					"Resources/".Length
-				);
-		}
+			NormalizeResourcesAssetPath(assetPath);
 
 		string lowerPath =
 			normalizedPath.ToLowerInvariant();
 
 		// If an old caller omitted the bundle for an asset that was
-		// moved to its own bundle, infer that bundle from the legacy
-		// Resources path.
+		// moved to its own bundle, infer that bundle from the
+		// Resources hierarchy.
 		string[] dedicatedRoots =
 		{
-			"creatures/",
-			"characters/",
-			"environment/",
-			"gameboard/"
+			"resources/creatures/",
+			"resources/characters/",
+			"resources/environment/",
+			"resources/gameboard/"
 		};
 
 		for (int i = 0; i < dedicatedRoots.Length; i++)
@@ -1503,10 +1470,13 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			break;
 		}
 
-		// MainResourcesBundle contains the migrated Resources hierarchy:
-		// Atlases, Banners, UI, Textures, Materials, VFX, etc.
-		// Therefore every remaining legacy Resources path belongs here.
-		return GetMainResourcesBundleName();
+		// Extra000001 is the complete Assets/Resources pack.
+		// It is the generic fallback for EVERY Resources/<any> path
+		// that does not belong to a dedicated creature/character/
+		// environment/gameboard bundle.
+		return NormalizeBundleName(
+			ExtraResourcesBundle
+		);
 	}
 
 	// ============================================================
@@ -1960,55 +1930,18 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 				string finalAssetPath =
 					queuedLoad.AssetPath;
 
-				// Strip the legacy Resources directory. Bundle asset names
-				// use the path below Resources/... rather than the legacy prefix.
-				if (
-					finalAssetPath.StartsWith(
-						"Assets/Resources/",
-						StringComparison.OrdinalIgnoreCase))
-				{
-					finalAssetPath =
-						finalAssetPath.Substring(
-							"Assets/Resources/".Length
-						);
-				}
-				else if (
-					finalAssetPath.StartsWith(
-						"Resources/",
-						StringComparison.OrdinalIgnoreCase))
-				{
-					finalAssetPath =
-						finalAssetPath.Substring(
-							"Resources/".Length
-						);
-				}
-
-			// AssetBundle paths do not include the Resources category
-			// directory. Convert the old resource path to the actual
-			// path stored inside the bundle.
-				if (
-					finalAssetPath.StartsWith(
-						"Characters/",
-						StringComparison.OrdinalIgnoreCase) ||
-					finalAssetPath.StartsWith(
-						"Creatures/",
-						StringComparison.OrdinalIgnoreCase) ||
-					finalAssetPath.StartsWith(
-						"Environment/",
-						StringComparison.OrdinalIgnoreCase))
-				{
-					int slashIndex =
-						finalAssetPath.IndexOf('/');
-
-					if (slashIndex >= 0 &&
-						slashIndex + 1 < finalAssetPath.Length)
-					{
-						finalAssetPath =
-							finalAssetPath.Substring(
-								slashIndex + 1
-							);
-					}
-				}
+				// IMPORTANT:
+				// AssetBundleBuilderExtra assigns Assets/Resources directly.
+				// Unity therefore stores the asset name as:
+				//
+				// Resources/<any>
+				//
+				// NEVER strip Resources/ and NEVER strip the category
+				// directory (creatures/, characters/, etc.).
+				finalAssetPath =
+					NormalizeResourcesAssetPath(
+						finalAssetPath
+					);
 
 				if (
 					!finalAssetPath.EndsWith(
@@ -2218,6 +2151,15 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		string path,
 		bool useHighResLowRes = true)
 	{
+		return NormalizeResourcesAssetPath(path);
+	}
+
+	// Canonical AssetBundle resource path.
+	// ALL migrated Assets/Resources content uses this format:
+	// Resources/<any>
+	private static string NormalizeResourcesAssetPath(
+		string path)
+	{
 		if (string.IsNullOrEmpty(path))
 		{
 			return path;
@@ -2227,24 +2169,34 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			path.Replace(
 				"\\",
 				"/"
-			);
+			).Trim('/');
 
-		if (
-			path.StartsWith(
-				"Assets/Resources/",
-				StringComparison.OrdinalIgnoreCase))
+		if (path.StartsWith(
+			"Assets/Resources/",
+			StringComparison.OrdinalIgnoreCase))
+		{
+			return
+				"Resources/" +
+				path.Substring(
+					"Assets/Resources/".Length
+				);
+		}
+
+		if (path.Equals(
+			"Assets/Resources",
+			StringComparison.OrdinalIgnoreCase))
+		{
+			return "Resources";
+		}
+
+		if (path.StartsWith(
+			"Resources/",
+			StringComparison.OrdinalIgnoreCase))
 		{
 			return path;
 		}
 
-		if (!path.StartsWith("Assets/"))
-		{
-			return
-				"Assets/Resources/" +
-				path;
-		}
-
-		return path;
+		return "Resources/" + path;
 	}
 
 	public static UnityEngine.Object GetAsset(
