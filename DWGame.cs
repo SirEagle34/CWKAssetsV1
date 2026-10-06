@@ -1650,6 +1650,22 @@ else
 
         Debug.Log("[DWGame] BOARD LOAD RETURN");
 
+        bool preloadIntroBattle = inIntroBattle;
+        bool preloadQ1 = Singleton<TutorialController>.Instance.IsBlockActive("Q1");
+        bool preloadQ2 = Singleton<TutorialController>.Instance.IsBlockActive("Q2");
+
+        if (!preloadIntroBattle && !preloadQ1 && !preloadQ2)
+        {
+            Debug.Log("[DWGame] PRELOAD POINT = Battle/Q3+ | Starting current loadout preload BEFORE character/pool creation");
+            Singleton<SLOTResourceManager>.Instance.StartAssetBundlePreload(
+                SLOTResourceManager.PreloadBundlesPoint.Battle
+            );
+            Singleton<SLOTResourceManager>.Instance.StartBattleCreatureBundlePreload(
+                UserLoadout != null ? UserLoadout.CreatureSet : null,
+                OpLoadout != null ? OpLoadout.CreatureSet : null
+            );
+        }
+
         yield return StartCoroutine(CreateCharacters());
 		yield return StartCoroutine(PoolCreatureObjects());
         Debug.Log("[DWGame] MUSIC START");
@@ -1670,14 +1686,17 @@ else
 
         if (inIntroBattle)
         {
+            Debug.Log("[DWGame] PRELOAD POINT = IntroBattle");
             Singleton<SLOTResourceManager>.Instance.StartAssetBundlePreload(SLOTResourceManager.PreloadBundlesPoint.IntroBattle);
 		}
 		else if (Singleton<TutorialController>.Instance.IsBlockActive("Q1"))
 		{
+            Debug.Log("[DWGame] PRELOAD POINT = Q1");
 			Singleton<SLOTResourceManager>.Instance.StartAssetBundlePreload(SLOTResourceManager.PreloadBundlesPoint.Q1);
 		}
 		else if (Singleton<TutorialController>.Instance.IsBlockActive("Q2"))
 		{
+            Debug.Log("[DWGame] PRELOAD POINT = Q2");
 			Singleton<SLOTResourceManager>.Instance.StartAssetBundlePreload(SLOTResourceManager.PreloadBundlesPoint.Q2);
 		}
         Debug.Log("[DWGame] SET GAMESTATE INTRO");
