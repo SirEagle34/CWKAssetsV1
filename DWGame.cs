@@ -1517,15 +1517,27 @@ else
 		return gameObject;
 	}
 
-	private IEnumerator LoadLevel()
-	{
-		yield return null;
-		Setup();
+    private IEnumerator LoadLevel()
+    {
+        Debug.Log("[DWGame] LOADLEVEL START");
+
+        yield return null;
+        Setup();
+
+        Debug.Log("[DWGame] SETUP DONE");
 		yield return null;
 		PlayerInfoScript pInfo = Singleton<PlayerInfoScript>.Instance;
 		QuestData qData = pInfo.StateData.CurrentActiveQuest;
-		DetachedSingleton<CustomAIManager>.Instance.ParseAIData(qData.CustomAI);
-		int creatureCount = 0;
+        DetachedSingleton<CustomAIManager>.Instance.ParseAIData(qData.CustomAI);
+
+        Debug.Log(
+            "[DWGame] QUEST READY | LevelPrefab=" +
+            (qData != null ? qData.LevelPrefab : "NULL") +
+            " | BoardPrefab=" +
+            (qData != null ? qData.BoardPrefab : "NULL")
+        );
+
+        int creatureCount = 0;
 		foreach (InventorySlotItem creature2 in UserLoadout.CreatureSet)
 		{
 			if (creature2 != null)
@@ -1541,9 +1553,17 @@ else
 			}
 		}
 		int totalResourceCount = 2 * creatureCount + 4;
-		Singleton<SLOTResourceManager>.Instance.StartResourceLoadProgress(totalResourceCount);
-		bool inIntroBattle = Singleton<TutorialController>.Instance.IsBlockActive("IntroBattle");
-		yield return StartCoroutine(Singleton<SLOTResourceManager>.Instance.LoadEnvironmentResources(qData, delegate(Object loadedObjData)
+        Singleton<SLOTResourceManager>.Instance.StartResourceLoadProgress(totalResourceCount);
+
+        Debug.Log(
+            "[DWGame] RESOURCE PROGRESS START | Count=" +
+            totalResourceCount
+        );
+
+        bool inIntroBattle = Singleton<TutorialController>.Instance.IsBlockActive("IntroBattle");
+        Debug.Log("[DWGame] ENV LOAD START");
+
+        yield return StartCoroutine(Singleton<SLOTResourceManager>.Instance.LoadEnvironmentResources(qData, delegate(Object loadedObjData)
 		{
 			// AssetBundle migration:
 			// LoadEnvironmentResources already returns the loaded prefab.
@@ -1580,8 +1600,11 @@ else
 
 			Singleton<DWBattleLane>.Instance.EnvironmentObj =
 				gameObject2;
-		}));
-		yield return StartCoroutine(Singleton<SLOTResourceManager>.Instance.LoadGameBoardResources(qData, delegate(Object loadedObjData)
+        }));
+
+        Debug.Log("[DWGame] ENV LOAD RETURN");
+
+        yield return StartCoroutine(Singleton<SLOTResourceManager>.Instance.LoadGameBoardResources(qData, delegate(Object loadedObjData)
 		{
 			// AssetBundle migration:
 			// LoadGameBoardResources already returns the loaded prefab.
@@ -1623,17 +1646,31 @@ else
 			{
 				gameObject2.SetActive(false);
 			}
-		}));
-		yield return StartCoroutine(CreateCharacters());
+        }));
+
+        Debug.Log("[DWGame] BOARD LOAD RETURN");
+
+        yield return StartCoroutine(CreateCharacters());
 		yield return StartCoroutine(PoolCreatureObjects());
-		yield return StartCoroutine(Singleton<SLOTMusic>.Instance.PlayBattleMusic());
+        Debug.Log("[DWGame] MUSIC START");
+        yield return StartCoroutine(Singleton<SLOTMusic>.Instance.PlayBattleMusic());
+        Debug.Log("[DWGame] MUSIC DONE");
 		if (inIntroBattle)
 		{
 			yield return StartCoroutine(SetupIntroBattleBoard());
 		}
-		if (inIntroBattle)
-		{
-			Singleton<SLOTResourceManager>.Instance.StartAssetBundlePreload(SLOTResourceManager.PreloadBundlesPoint.IntroBattle);
+        Debug.Log(
+            "[DWGame] PRELOAD CHECK | IntroBattle=" +
+            inIntroBattle +
+            " | Q1=" +
+            Singleton<TutorialController>.Instance.IsBlockActive("Q1") +
+            " | Q2=" +
+            Singleton<TutorialController>.Instance.IsBlockActive("Q2")
+        );
+
+        if (inIntroBattle)
+        {
+            Singleton<SLOTResourceManager>.Instance.StartAssetBundlePreload(SLOTResourceManager.PreloadBundlesPoint.IntroBattle);
 		}
 		else if (Singleton<TutorialController>.Instance.IsBlockActive("Q1"))
 		{
@@ -1643,9 +1680,11 @@ else
 		{
 			Singleton<SLOTResourceManager>.Instance.StartAssetBundlePreload(SLOTResourceManager.PreloadBundlesPoint.Q2);
 		}
-		if (!inIntroBattle)
-		{
-			SetGameState(GameState.Intro);
+        Debug.Log("[DWGame] SET GAMESTATE INTRO");
+
+        if (!inIntroBattle)
+        {
+            SetGameState(GameState.Intro);
 			StartCoroutine(Singleton<DWBattleLane>.Instance.ShowBoardAnim());
 		}
 		else
