@@ -10,6 +10,29 @@ public class KFFAssetBundleManager : Singleton<KFFAssetBundleManager>
 	{
 		public string extension;
 		public AssetBundle assetBundle;
+		public string assetBundleName;
+	}
+
+	// Bundle priority:
+	// 0 = Extra000001 fallback pack
+	// 1 = MainResourcesBundle base pack
+	// 2 = all other bundles (explicit override/dedicated packs)
+	private int GetAssetBundlePriority(string assetBundleName)
+	{
+		assetBundleName =
+			NormalizeBundleName(assetBundleName);
+
+		if (assetBundleName == "extra000001")
+		{
+			return 0;
+		}
+
+		if (assetBundleName == "mainresourcesbundle")
+		{
+			return 1;
+		}
+
+		return 2;
 	}
 
 	private static Dictionary<string, AssetInfo> assetInfoDict =
@@ -349,18 +372,38 @@ public class KFFAssetBundleManager : Singleton<KFFAssetBundleManager>
 					normalizedAssetName;
 			}
 
-			AssetInfo info =
+			AssetInfo newInfo =
 				new AssetInfo();
 
-			info.extension =
+			newInfo.extension =
 				extension;
 
-			info.assetBundle =
+			newInfo.assetBundle =
 				assetBundle;
 
+			newInfo.assetBundleName =
+				assetBundleName;
+
+			AssetInfo existingInfo;
+
+			bool shouldReplace =
+				!assetInfoDict.TryGetValue(
+					pathWithoutExtension,
+					out existingInfo
+				) ||
+				GetAssetBundlePriority(
+					assetBundleName
+				) >
+				GetAssetBundlePriority(
+					existingInfo.assetBundleName
+				);
+
+		if (shouldReplace)
+		{
 			assetInfoDict[
 				pathWithoutExtension
-			] = info;
+			] = newInfo;
+		}
 
 			if (
 				Time.realtimeSinceStartup -
