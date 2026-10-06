@@ -1592,6 +1592,7 @@ else
 			Singleton<DWBattleLane>.Instance.BoardHologram.SetActive(false);
 		}
 	}
+	
 	public IEnumerator RestoreCreatureObjectsPool()
 	{
 		List<CreatureItem> toRepool = new List<CreatureItem>();
