@@ -715,6 +715,28 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 	{
 		"gameboard_treefort",
 		"inn_bg",
+        "badlands_bg",
+        "beach_bg",
+        "candykingdom_bg",
+        "cemetery_bg",
+        "coliseum_bg",
+        "darkforest_bg",
+        "dungeon_bg",
+        "firekingdom_bg",
+        "gameboard_badlands",
+        "gameboard_candykingdom",
+        "gameboard_cemetery",
+        "gameboard_firekingdom",
+        "gameboard_icekingdom",
+        "gameboard_lumpyspace",
+        "gameboard_marcelinescave",
+        "gameboard_oilrig",
+        "gameboard_treefort_hal",
+        "icekingdom_bg",
+        "inn_hal_bg",
+        "lumpyspace_bg",
+        "marcelinescave_bg",
+        "oilrig_bg"
 
 		// gerçek environment/gameboard bundle'ları buraya
 	};
