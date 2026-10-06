@@ -1800,12 +1800,21 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 							);
 					}
 
+					// IMPORTANT:
+					// ResolveResourceBundleName() has already selected the
+					// correct bundle. Do NOT ask the global resource registry
+					// for the bundle again here.
+					//
+					// The global registry can contain the same Resources path
+					// in both MainResourcesBundle and Extra000001. Using
+					// GetAssetBundleForResource() here would collapse that
+					// distinction and can make Extra000001 appear "null".
 					assetBundle =
 						Singleton<
 							KFFAssetBundleManager
 						>.Instance
-							.GetAssetBundleForResource(
-								queuedLoad.AssetPath
+							.GetAssetBundleByName(
+								queuedLoad.AssetBundle
 							);
 				}
 
