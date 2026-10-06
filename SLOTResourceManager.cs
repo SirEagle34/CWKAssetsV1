@@ -1194,30 +1194,9 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			mResourcesBundle != null)
 		{
 			string resourcePath =
-				path.Trim('/');
-
-			// Migrated Resources assets keep the "Resources/" prefix
-			// inside AssetBundles.
-			if (
-				resourcePath.StartsWith(
-					"Assets/Resources/",
-					StringComparison.OrdinalIgnoreCase))
-			{
-				resourcePath =
-					resourcePath.Substring(
-						"Assets/Resources/".Length
-					);
-			}
-			else if (
-				resourcePath.StartsWith(
-					"Resources/",
-					StringComparison.OrdinalIgnoreCase))
-			{
-				resourcePath =
-					resourcePath.Substring(
-						"Resources/".Length
-					);
-			}
+				NormalizeResourcesAssetPath(
+					path
+				);
 
 			if (IsHiLoRezResource(path))
 			{
