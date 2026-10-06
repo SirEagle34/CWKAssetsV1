@@ -2142,6 +2142,129 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 						bundleRequest.asset;
 				}
 
+				// =========================================================
+				// MAIN -> EXTRA FALLBACK
+				// =========================================================
+				// MainResourcesBundle is the base layer. If the requested
+				// generic Resources asset does not exist there, try the
+				// complete Extra000001 pack before returning null.
+				//
+				// This is intentionally done after the real LoadAssetAsync
+				// attempt. It means MainResources remains authoritative when
+				// it contains the asset, while Extra can supply assets that
+				// exist only in the migrated Resources pack.
+				if (
+					result2 == null &&
+					string.Equals(
+						queuedLoad.AssetBundle,
+						GetMainResourcesBundleName(),
+						StringComparison.OrdinalIgnoreCase) &&
+					!queuedLoad.AssetPath.StartsWith(
+						"Resources/creatures/",
+						StringComparison.OrdinalIgnoreCase) &&
+					!queuedLoad.AssetPath.StartsWith(
+						"Resources/characters/",
+						StringComparison.OrdinalIgnoreCase) &&
+					!queuedLoad.AssetPath.StartsWith(
+						"Resources/environment/",
+						StringComparison.OrdinalIgnoreCase) &&
+					!queuedLoad.AssetPath.StartsWith(
+						"Resources/gameboard/",
+						StringComparison.OrdinalIgnoreCase))
+				{
+					string extraBundleName =
+						NormalizeBundleName(
+							ExtraResourcesBundle
+						);
+
+					AssetBundle extraBundle =
+						Singleton<
+							KFFAssetBundleManager
+						>.Instance
+							.GetAssetBundleByName(
+								extraBundleName
+							);
+
+					if (extraBundle == null)
+					{
+						bool extraLoaded = false;
+
+						yield return
+							StartCoroutine(
+								Singleton<
+									KFFAssetBundleManager
+								>.Instance
+								.LoadAssetBundleCoroutine(
+									assetBundleBaseURL,
+									extraBundleName,
+									delegate(
+										bool success,
+										string errMsg,
+										AssetBundle loadedBundle)
+								{
+										extraLoaded =
+										success &&
+										loadedBundle != null;
+								}
+								)
+							);
+
+						if (extraLoaded)
+						{
+							extraBundle =
+								Singleton<
+									KFFAssetBundleManager
+								>.Instance
+								.GetAssetBundleByName(
+									extraBundleName
+								);
+						}
+					}
+
+					if (extraBundle != null)
+					{
+						string extraResolvedPath =
+							ResolveAssetBundlePath(
+								extraBundle,
+								finalAssetPath
+							);
+
+						Debug.Log(
+							"[SLOTResourceManager] Main miss -> " +
+							"trying Extra000001: " +
+							finalAssetPath +
+							" -> " +
+							extraResolvedPath
+						);
+
+						AssetBundleRequest extraRequest =
+							extraBundle.LoadAssetAsync(
+								extraResolvedPath
+							);
+
+						if (extraRequest != null)
+						{
+							yield return extraRequest;
+							result2 =
+								extraRequest.asset;
+						}
+
+						if (result2 != null)
+						{
+							queuedLoad.AssetBundle =
+								extraBundleName;
+							resolvedAssetPath =
+								extraResolvedPath;
+
+							Debug.Log(
+								"[SLOTResourceManager] " +
+								"Asset loaded from Extra000001: " +
+								resolvedAssetPath
+							);
+						}
+					}
+				}
+
 				if (result2 == null)
 				{
 					Debug.LogError(
