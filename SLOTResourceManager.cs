@@ -2406,6 +2406,7 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			NormalizeBundleName(creatureName);
 
 		string assetPath =
+			"Resources/creatures/" +
 			creatureName +
 			"/" +
 			creatureName +
@@ -2471,10 +2472,11 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			);
 
 		QueueResourceLoad(
-			"Characters/" +
+			"Resources/characters/" +
 			leader.Prefab +
 			"/" +
-			leader.Prefab,
+			leader.Prefab +
+			".prefab",
 			bundleName,
 			delegate(
 				UnityEngine.Object loadedResource)
@@ -2535,10 +2537,11 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			);
 
 		QueueResourceLoad(
-			"Environment/" +
+			"Resources/environment/" +
 			quest.LevelPrefab +
 			"/" +
-			quest.LevelPrefab,
+			quest.LevelPrefab +
+			".prefab",
 			bundleName,
 			delegate(
 				UnityEngine.Object loadedResource)
@@ -2586,10 +2589,11 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			);
 
 		QueueResourceLoad(
-			"GameBoard/" +
+			"Resources/gameboard/" +
 			quest.BoardPrefab +
 			"/" +
-			quest.BoardPrefab,
+			quest.BoardPrefab +
+			".prefab",
 			bundleName,
 			delegate(
 				UnityEngine.Object loadedResource)
