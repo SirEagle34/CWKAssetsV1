@@ -1545,19 +1545,80 @@ else
 		bool inIntroBattle = Singleton<TutorialController>.Instance.IsBlockActive("IntroBattle");
 		yield return StartCoroutine(Singleton<SLOTResourceManager>.Instance.LoadEnvironmentResources(qData, delegate(Object loadedObjData)
 		{
-			//GameObject gameObject2 = SLOTGame.InstantiateFX(loadedObjData) as GameObject;
-			GameObject resource = Resources.Load("Environment/" + qData.LevelPrefab + "/" + qData.LevelPrefab, typeof(GameObject)) as GameObject;
-			GameObject gameObject2 = Instantiate(resource);
-			gameObject2.transform.parent = Singleton<DWBattleLane>.Instance.transform;
-			Singleton<DWBattleLane>.Instance.EnvironmentObj = gameObject2;
+			// AssetBundle migration:
+			// LoadEnvironmentResources already returns the loaded prefab.
+			// Do NOT call Resources.Load here; that bypasses the AssetBundle
+			// and can return null, terminating LoadLevel before GameState.Intro.
+			GameObject gameObject2 = loadedObjData as GameObject;
+
+			if (gameObject2 == null)
+			{
+				Debug.LogError(
+					"[DWGame] Environment load failed. " +
+					"LevelPrefab=" +
+					(qData != null ? qData.LevelPrefab : "NULL")
+				);
+
+				return;
+			}
+
+			gameObject2 = Instantiate(gameObject2);
+
+			if (gameObject2 == null)
+			{
+				Debug.LogError(
+					"[DWGame] Environment Instantiate returned null. " +
+					"LevelPrefab=" +
+					(qData != null ? qData.LevelPrefab : "NULL")
+				);
+
+				return;
+			}
+
+			gameObject2.transform.parent =
+				Singleton<DWBattleLane>.Instance.transform;
+
+			Singleton<DWBattleLane>.Instance.EnvironmentObj =
+				gameObject2;
 		}));
 		yield return StartCoroutine(Singleton<SLOTResourceManager>.Instance.LoadGameBoardResources(qData, delegate(Object loadedObjData)
 		{
-			//GameObject gameObject = SLOTGame.InstantiateFX(loadedObjData) as GameObject;
-			GameObject resource = Resources.Load("GameBoard/" + qData.BoardPrefab + "/" + qData.BoardPrefab, typeof(GameObject)) as GameObject;
-			GameObject gameObject2 = Instantiate(resource);
-			gameObject2.transform.parent = Singleton<DWBattleLane>.Instance.transform;
-			Singleton<DWBattleLane>.Instance.BoardObj = gameObject2;
+			// AssetBundle migration:
+			// LoadGameBoardResources already returns the loaded prefab.
+			// Do NOT call Resources.Load here; that bypasses the AssetBundle
+			// and can return null, terminating LoadLevel before GameState.Intro.
+			GameObject gameObject2 = loadedObjData as GameObject;
+
+			if (gameObject2 == null)
+			{
+				Debug.LogError(
+					"[DWGame] GameBoard load failed. " +
+					"BoardPrefab=" +
+					(qData != null ? qData.BoardPrefab : "NULL")
+				);
+
+				return;
+			}
+
+			gameObject2 = Instantiate(gameObject2);
+
+			if (gameObject2 == null)
+			{
+				Debug.LogError(
+					"[DWGame] GameBoard Instantiate returned null. " +
+					"BoardPrefab=" +
+					(qData != null ? qData.BoardPrefab : "NULL")
+				);
+
+				return;
+			}
+
+			gameObject2.transform.parent =
+				Singleton<DWBattleLane>.Instance.transform;
+
+			Singleton<DWBattleLane>.Instance.BoardObj =
+				gameObject2;
+
 			if (!inIntroBattle)
 			{
 				gameObject2.SetActive(false);
