@@ -25,19 +25,14 @@ public class AssetBundleProgressPopup :
 	// OPTIONAL LABELS
 	// ============================================================
 
-	// Overall MB text
 	public UILabel DownloadSizeLabel;
 
-	// Current file name
 	public UILabel CurrentFileLabel;
 
-	// Download speed
 	public UILabel SpeedLabel;
 
-	// ETA
 	public UILabel RemainingTimeLabel;
 
-	// Current file MB
 	public UILabel FileSizeLabel;
 
 	// ============================================================
@@ -48,6 +43,10 @@ public class AssetBundleProgressPopup :
 
 	private bool mShowFileProgress;
 
+	// ============================================================
+	// AWAKE
+	// ============================================================
+
 	private void Awake()
 	{
 		if (LoadingLabel != null)
@@ -57,8 +56,35 @@ public class AssetBundleProgressPopup :
 		}
 	}
 
+	// ============================================================
+	// UPDATE
+	// ============================================================
+
 	private void Update()
 	{
+		// ========================================================
+		// BATTLE SCENE
+		// ========================================================
+		// AssetBundleProgressPopup must NEVER interfere with
+		// BattleScene input/UI.
+		// ========================================================
+
+		if (IsBattleScene())
+		{
+			ForceBattleSceneInputReset();
+
+			if (mTimeLoading != -1f)
+			{
+				StopDisplay();
+			}
+
+			return;
+		}
+
+		// ========================================================
+		// RESOURCE MANAGER
+		// ========================================================
+
 		SLOTResourceManager resourceManager =
 			Singleton<SLOTResourceManager>.Instance;
 
@@ -75,11 +101,16 @@ public class AssetBundleProgressPopup :
 			out fileProgress
 		);
 
+		// No active resource loading.
 		if (totalProgress < 0f)
 		{
 			StopDisplay();
 			return;
 		}
+
+		// ========================================================
+		// LOADING SCREEN CHECK
+		// ========================================================
 
 		bool showingLoadingScreen = false;
 
@@ -93,6 +124,10 @@ public class AssetBundleProgressPopup :
 		{
 			showingLoadingScreen = false;
 		}
+
+		// ========================================================
+		// ASSET BUNDLE DOWNLOAD SCENE CHECK
+		// ========================================================
 
 		bool assetBundleScene = false;
 
@@ -117,7 +152,12 @@ public class AssetBundleProgressPopup :
 			showingLoadingScreen ||
 			assetBundleScene;
 
-		float previousTime = mTimeLoading;
+		float previousTime =
+			mTimeLoading;
+
+		// ========================================================
+		// INITIALIZE DISPLAY
+		// ========================================================
 
 		if (mTimeLoading == -1f)
 		{
@@ -125,19 +165,6 @@ public class AssetBundleProgressPopup :
 				showPopup
 					? DelayBeforeBarAppearing
 					: 0f;
-
-			// Only lock input while the download popup is actually shown.
-			// BattleScene and other non-popup states must remain interactive.
-			if (showPopup)
-			{
-				try
-				{
-					UICamera.LockInput();
-				}
-				catch
-				{
-				}
-			}
 		}
 
 		mTimeLoading +=
@@ -226,12 +253,7 @@ public class AssetBundleProgressPopup :
 		// ========================================================
 		// SINGLE PROGRESS BAR
 		// ========================================================
-		//
-		// The startup progress is already a GLOBAL progress value.
-		// Do not show a second per-file progress bar. A second bar
-		// makes the UI look like the download restarted for every
-		// bundle.
-		//
+
 		if (FileProgressBar != null)
 		{
 			if (FileProgressBar.transform.parent != null)
@@ -241,7 +263,8 @@ public class AssetBundleProgressPopup :
 			}
 			else
 			{
-				FileProgressBar.gameObject.SetActive(false);
+				FileProgressBar.gameObject
+					.SetActive(false);
 			}
 		}
 
@@ -361,6 +384,82 @@ public class AssetBundleProgressPopup :
 	}
 
 	// ============================================================
+	// BATTLE SCENE CHECK
+	// ============================================================
+
+	private bool IsBattleScene()
+	{
+		try
+		{
+			return UnityEngine.SceneManagement.SceneManager
+				.GetActiveScene()
+				.name == "BattleScene";
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	// ============================================================
+	// FORCE BATTLE INPUT RESET
+	// ============================================================
+	//
+	// If another loading screen previously called LockInput(),
+	// one UnlockInput() may not be enough if the NGUI lock counter
+	// was incremented more than once.
+	//
+	// This is intentionally limited to BattleScene.
+	// ============================================================
+
+	private void ForceBattleSceneInputReset()
+	{
+		try
+		{
+			UICamera.UnlockInput();
+			UICamera.UnlockInput();
+			UICamera.UnlockInput();
+			UICamera.UnlockInput();
+			UICamera.UnlockInput();
+		}
+		catch
+		{
+		}
+
+		try
+		{
+			if (Panel != null &&
+				Panel.activeSelf)
+			{
+				Panel.SetActive(false);
+			}
+		}
+		catch
+		{
+		}
+
+		try
+		{
+			if (ProgressBarParent != null &&
+				ProgressBarParent.activeSelf)
+			{
+				ProgressBarParent.SetActive(false);
+			}
+		}
+		catch
+		{
+		}
+
+		try
+		{
+			HideBusyIcon();
+		}
+		catch
+		{
+		}
+	}
+
+	// ============================================================
 	// STOP DISPLAY
 	// ============================================================
 
@@ -373,15 +472,12 @@ public class AssetBundleProgressPopup :
 				Panel.SetActive(false);
 			}
 
-			HideBusyIcon();
+			if (ProgressBarParent != null)
+			{
+				ProgressBarParent.SetActive(false);
+			}
 
-			try
-			{
-				UICamera.UnlockInput();
-			}
-			catch
-			{
-			}
+			HideBusyIcon();
 		}
 
 		mTimeLoading = -1f;
@@ -465,6 +561,10 @@ public class AssetBundleProgressPopup :
 			" GB";
 	}
 
+	// ============================================================
+	// FORMAT SPEED
+	// ============================================================
+
 	private string FormatBytesPerSecond(
 		float bytesPerSecond)
 	{
@@ -489,6 +589,10 @@ public class AssetBundleProgressPopup :
 		return mb.ToString("0.00") +
 			" MB/s";
 	}
+
+	// ============================================================
+	// FORMAT TIME
+	// ============================================================
 
 	private string FormatTime(float seconds)
 	{
