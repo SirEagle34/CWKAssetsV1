@@ -44,6 +44,21 @@ public class KFFAssetBundleManager : Singleton<KFFAssetBundleManager>
 	private static Dictionary<string, AssetBundle> assetBundleDict =
 		new Dictionary<string, AssetBundle>();
 
+	// ============================================================
+	// SHADER WARMUP
+	// ============================================================
+	//
+	// Materials may reference shaders that are stored in another
+	// AssetBundle. Unity does not automatically load that dependency.
+	//
+	// This code only loads the real Shader assets already contained
+	// in loaded bundles. It NEVER assigns/replaces a material shader.
+	// KFF_Alpha-With-Fade2 is not used as a global replacement.
+	// ============================================================
+
+	private static HashSet<string> warmedShaderBundles =
+		new HashSet<string>();
+
 	private WWW activeWWW;
 
 	private int getExtensionsCount;
@@ -423,6 +438,101 @@ public class KFFAssetBundleManager : Singleton<KFFAssetBundleManager>
 	}
 
 	// ============================================================
+	// SHADER WARMUP
+	// ============================================================
+
+	private void WarmupShadersFromAssetBundle(
+		AssetBundle assetBundle,
+		string assetBundleName)
+	{
+		if (assetBundle == null)
+		{
+			return;
+		}
+
+		assetBundleName =
+			NormalizeBundleName(
+				assetBundleName
+			);
+
+		if (string.IsNullOrEmpty(assetBundleName) ||
+			warmedShaderBundles.Contains(assetBundleName))
+		{
+			return;
+		}
+
+		try
+		{
+			Shader[] shaders =
+				assetBundle.LoadAllAssets<Shader>();
+
+			warmedShaderBundles.Add(
+				assetBundleName
+			);
+
+			if (shaders != null &&
+				shaders.Length > 0)
+			{
+				Debug.Log(
+					"[KFFAssetBundleManager] " +
+					"Shader warmup: " +
+					assetBundleName +
+					" | Shaders=" +
+					shaders.Length
+				);
+			}
+		}
+		catch (Exception ex)
+		{
+			Debug.LogWarning(
+				"[KFFAssetBundleManager] " +
+				"Shader warmup failed: " +
+				assetBundleName +
+				"\n" + ex
+			);
+		}
+	}
+
+	public void WarmupLoadedShaders()
+	{
+		for (int i = 0;
+			i < loadedAssetBundles.Count;
+			i++)
+		{
+			AssetBundle bundle =
+				loadedAssetBundles[i];
+
+			if (bundle == null)
+			{
+				continue;
+			}
+
+			string bundleName = null;
+
+			foreach (
+				KeyValuePair<string, AssetBundle> pair
+				in assetBundleDict)
+			{
+				if (pair.Value == bundle)
+				{
+					bundleName = pair.Key;
+					break;
+				}
+			}
+
+			if (string.IsNullOrEmpty(bundleName))
+			{
+				bundleName = bundle.name;
+			}
+
+			WarmupShadersFromAssetBundle(
+				bundle,
+				bundleName
+			);
+		}
+	}
+
+	// ============================================================
 	// MAIN LOAD
 	// ============================================================
 
@@ -704,6 +814,11 @@ public class KFFAssetBundleManager : Singleton<KFFAssetBundleManager>
 			)
 		);
 
+		WarmupShadersFromAssetBundle(
+			www.assetBundle,
+			assetBundleName
+		);
+
 		Debug.Log(
 			"[KFFAssetBundleManager] " +
 			"AssetBundle READY: " +
@@ -886,6 +1001,8 @@ public class KFFAssetBundleManager : Singleton<KFFAssetBundleManager>
 		assetBundleDict.Clear();
 
 		assetInfoDict.Clear();
+
+		warmedShaderBundles.Clear();
 
 		activeWWW = null;
 
