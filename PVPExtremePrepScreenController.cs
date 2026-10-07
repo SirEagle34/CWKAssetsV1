@@ -7,7 +7,7 @@ public class PVPExtremePrepScreenController : Singleton<PVPExtremePrepScreenCont
 {
     private enum NextAction { NONE, WAITING, PROCEED, ERROR, RETRY }
 
-    public float CountdownTime;
+    public float CountdownTime = 20f;
 
     public UILabel HardCurrencyLabel;
     public UILabel SoftCurrencyLabel;
@@ -69,7 +69,8 @@ public class PVPExtremePrepScreenController : Singleton<PVPExtremePrepScreenCont
     [SerializeField] private GameObject BanTileLabelPrefab;
     [SerializeField] private Vector3 BanTileLabelLocalOffset = new Vector3(120.1f, -3f, 0f);
 
-    private Loadout currentLoadout; 
+    private Loadout currentLoadout;
+    private Loadout mExtremeMatchLoadout;
     private List<InventorySlotItem> extremeTempTeam = new List<InventorySlotItem>();
     private List<GameObject> mMySpawnedCreatures = new List<GameObject>();
     private GameObject mSpawnedBanCreature;
@@ -424,6 +425,7 @@ private List<string> pvpLeaderBanlist = new List<string>()
         hasShownBanPopupThisOpen = false;
 
         mActive = true;
+        mExtremeMatchLoadout = null;
         if (ReadyBlockingCollider != null) ReadyBlockingCollider.SetActive(false);
         if (SwordShieldAnimation != null) SwordShieldAnimation.SetActive(false);
         if (LevelSetNotificationLabel != null) LevelSetNotificationLabel.text = string.Empty;
@@ -1029,7 +1031,7 @@ private List<string> pvpLeaderBanlist = new List<string>()
             Singleton<PlayerInfoScript>.Instance.PvPData;
 
         pvpData.ExtremeMode = true;
-        player.StateData.CurrentLoadout = currentLoadout;
+        mExtremeMatchLoadout = currentLoadout;
 
         if (mMode == PvpMode.Friend)
         {
@@ -1097,8 +1099,6 @@ private List<string> pvpLeaderBanlist = new List<string>()
         if (DetachedSingleton<StaminaManager>.Instance
             .GetStamina(StaminaType.Pvp) < MiscParams.PvpStaminaMatchCost)
             return;
-
-        player.StateData.CurrentLoadout = currentLoadout;
 
         if (mMode == PvpMode.Friend)
         {
