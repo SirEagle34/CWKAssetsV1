@@ -1531,15 +1531,10 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 
 	public string GetMainModelBundleName()
 	{
-		if (!string.IsNullOrEmpty(
-			ActiveMainModelBundle))
-		{
-			return NormalizeBundleName(
-				ActiveMainModelBundle);
-		}
-
-		return NormalizeBundleName(
-			MainModelBundle);
+		return GetActiveBundleName(
+			ActiveMainModelBundle,
+			MainModelBundle
+		);
 	}
 
 	private bool BundleContainsResource(
