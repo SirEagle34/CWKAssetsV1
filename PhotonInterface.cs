@@ -315,27 +315,19 @@ public class PhotonInterface : LoadBalancingClient
 		case StatusCode.ExceptionOnReceive:
 		case StatusCode.DisconnectByServer:
 		case StatusCode.DisconnectByServerLogic:
-			if (pvpEventCallback != null)
-			{
-				pvpEventCallback(TBPvPManager.tbPvPEventCode.ErrorDisconnected, null);
-			}
+			SendPvPEvent(TBPvPManager.tbPvPEventCode.ErrorDisconnected, TBPvPExtremeManager.tbPvPEventCode.ErrorDisconnected, null);
 			break;
 		case StatusCode.ExceptionOnConnect:
-			if (pvpEventCallback != null)
-			{
-				pvpEventCallback(TBPvPManager.tbPvPEventCode.ErrorDisconnected, null);
-			}
+			SendPvPEvent(TBPvPManager.tbPvPEventCode.ErrorDisconnected, TBPvPExtremeManager.tbPvPEventCode.ErrorDisconnected, null);
 			break;
 		case StatusCode.Disconnect:
 			SavedGames.Clear();
-			if (pvpEventCallback != null)
-			{
-				pvpEventCallback(TBPvPManager.tbPvPEventCode.Disconnected, null);
-			}
+			SendPvPEvent(TBPvPManager.tbPvPEventCode.Disconnected, TBPvPExtremeManager.tbPvPEventCode.Disconnected, null);
 			break;
 		}
 	}
 
+	public void WebRpcGetData
 	public void WebRpcGetData(string user_id, RpcGetDataCallback callback)
 	{
 		Dictionary<string, object> dictionary = new Dictionary<string, object>();
