@@ -12,6 +12,10 @@ public static class AssetModelBundleBuilder
 
     private const string BundleName =
         "MainModelBundles";
+    
+    // Legacy singular name used by an older builder version.
+    private const string LegacyBundleName =
+        "mainmodelbundle";
 
     private const string OutputRoot =
         "AssetBundles";
@@ -586,6 +590,20 @@ public static class AssetModelBundleBuilder
             BundleName,
             StringComparison.OrdinalIgnoreCase))
         {
+            return true;
+        }        // MIGRATE LEGACY MODEL BUNDLE NAME
+        if (string.Equals(
+            existingBundle,
+            LegacyBundleName,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            importer.assetBundleName = BundleName;
+
+            Debug.Log(
+                "[AssetModelBundleBuilder] " +
+                "MIGRATED legacy model bundle assignment.\n" +
+                "Asset: " + assetPath);
+
             return true;
         }
 
