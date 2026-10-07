@@ -251,25 +251,18 @@ public class PhotonInterface : LoadBalancingClient
 		case 253:
 			return;
 		case byte.MaxValue:
-			if (CurrentRoom.Players.Count == 2 && CurrentRoom.IsOpen)
+			if (CurrentRoom != null && CurrentRoom.Players.Count == 2 && CurrentRoom.IsOpen)
 			{
-				CurrentRoom.IsOpen = false;
-				CurrentRoom.IsVisible = false;
-				SavePlayersInProps();
-				if (pvpEventCallback != null)
-				{
-					pvpEventCallback(TBPvPManager.tbPvPEventCode.NewPlayerJoined, Opponent.NickName);
-				}
+				CurrentRoom.IsOpen = false; CurrentRoom.IsVisible = false; SavePlayersInProps();
+				SendPvPEvent(TBPvPManager.tbPvPEventCode.NewPlayerJoined, TBPvPExtremeManager.tbPvPEventCode.NewPlayerJoined, Opponent != null ? (object)Opponent.NickName : null);
 			}
 			return;
 		case 254:
-			if (!GameWasAbandoned && pvpEventCallback != null)
-			{
-				pvpEventCallback(TBPvPManager.tbPvPEventCode.PlayerLeft, null);
-			}
+			if (CurrentRoom != null && !GameWasAbandoned)
+				SendPvPEvent(TBPvPManager.tbPvPEventCode.PlayerLeft, TBPvPExtremeManager.tbPvPEventCode.PlayerLeft, null);
 			return;
 		}
-		foreach (KeyValuePair<byte, object> parameter in photonEvent.Parameters)
+		foreach (KeyValuePair<byte, object> parameter		foreach (KeyValuePair<byte, object> parameter in photonEvent.Parameters)
 		{
 			if (parameter.Key != 245)
 				continue;
