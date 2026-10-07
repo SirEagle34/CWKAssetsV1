@@ -205,40 +205,21 @@ public class PhotonInterface : LoadBalancingClient
 			{
 				LoadTBGameFromProperties(false);
 			}
-			if (pvpEventCallback == null)
-			{
-				break;
-			}
 			if (operationResponse.OperationCode == 226)
 			{
-				if (operationResponse.ReturnCode != 0)
-				{
-					pvpEventCallback(TBPvPManager.tbPvPEventCode.NotFound, null);
-				}
-				else if (Opponent != null)
-				{
-					RoomName = CurrentRoom.Name;
-					pvpEventCallback(TBPvPManager.tbPvPEventCode.JoinedToExist, Opponent.NickName);
-				}
-				else
-				{
-					pvpEventCallback(TBPvPManager.tbPvPEventCode.JoinedToExist, null);
-				}
-				hosting = false;
-				PlayerNr = 2;
+				if (operationResponse.ReturnCode != 0) SendPvPEvent(TBPvPManager.tbPvPEventCode.NotFound, TBPvPExtremeManager.tbPvPEventCode.NotFound, null);
+				else if (Opponent != null) { RoomName = CurrentRoom.Name; SendPvPEvent(TBPvPManager.tbPvPEventCode.JoinedToExist, TBPvPExtremeManager.tbPvPEventCode.JoinedToExist, Opponent.NickName); }
+				else SendPvPEvent(TBPvPManager.tbPvPEventCode.JoinedToExist, TBPvPExtremeManager.tbPvPEventCode.JoinedToExist, null);
+				hosting = false; PlayerNr = 2;
 			}
 			if (operationResponse.OperationCode == 227)
 			{
-				pvpEventCallback(TBPvPManager.tbPvPEventCode.CreatedNewRoom, null);
-				hosting = true;
-				PlayerNr = 1;
-				if (CurrentRoom != null)
-				{
-					RoomName = CurrentRoom.Name;
-				}
+				SendPvPEvent(TBPvPManager.tbPvPEventCode.CreatedNewRoom, TBPvPExtremeManager.tbPvPEventCode.CreatedNewRoom, null);
+				hosting = true; PlayerNr = 1;
+				if (CurrentRoom != null) RoomName = CurrentRoom.Name;
 			}
 			break;
-		case 225:
+		case 225:		case 225:
 			if (AutoCreateRoom && operationResponse.ReturnCode == 32760)
 			{
 				if (SearchRange2nd == 0)
