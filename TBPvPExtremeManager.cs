@@ -126,6 +126,7 @@ public class TBPvPExtremeManager : Singleton<TBPvPExtremeManager>
 		GameClientInstance = new PhotonInterface();
 
 		GameClientInstance.photonExtremeManager = this;
+		GameClientInstance.PvPMode = PhotonInterface.PhotonPvPMode.Extreme;
 
 		GameClientInstance.AppId =
 			"6bc707ec-39ed-494a-bd6b-7e2d1b269e6f";
@@ -319,10 +320,10 @@ public class TBPvPExtremeManager : Singleton<TBPvPExtremeManager>
 
                 Visible = true;
 
-                if (GameClientInstance.pvpEventCallback != null)
+                if (GameClientInstance.pvpExtremeEventCallback != null)
                 {
-                    GameClientInstance.pvpEventCallback(
-                        TBPvPManager.tbPvPEventCode.Connected,
+                    GameClientInstance.pvpExtremeEventCallback(
+                        tbPvPEventCode.Connected,
                         null
                     );
                 }
