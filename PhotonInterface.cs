@@ -321,8 +321,28 @@ public class PhotonInterface : LoadBalancingClient
 			SendPvPEvent(TBPvPManager.tbPvPEventCode.ErrorDisconnected, TBPvPExtremeManager.tbPvPEventCode.ErrorDisconnected, null);
 			break;
 		case StatusCode.Disconnect:
-			SavedGames.Clear();
-			SendPvPEvent(TBPvPManager.tbPvPEventCode.Disconnected, TBPvPExtremeManager.tbPvPEventCode.Disconnected, null);
+			// Photon normally disconnects from the Master Server when
+			// switching to the Game Server after JoinRandom/Create.
+			// That is NOT a real PvP disconnect. base.OnStatusChanged()
+			// has already advanced the state to ConnectingToGameServer
+			// for this handoff, so only notify gameplay when Photon is
+			// actually fully disconnected.
+			if (State == ClientState.Disconnected)
+			{
+				SavedGames.Clear();
+				SendPvPEvent(
+					TBPvPManager.tbPvPEventCode.Disconnected,
+					TBPvPExtremeManager.tbPvPEventCode.Disconnected,
+					null
+				);
+			}
+			else
+			{
+				Debug.Log(
+					"[Photon] Ignored transient disconnect during server handoff. State=" +
+					State + ", Server=" + Server
+				);
+			}
 			break;
 		}
 	}
