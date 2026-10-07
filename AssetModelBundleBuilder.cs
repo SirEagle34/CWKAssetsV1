@@ -479,6 +479,16 @@ public static class AssetModelBundleBuilder
             return false;
         }
 
+        // Scene files are not model sources. More importantly, Unity
+        // does not allow LoadAllAssetsAtPath/ReadObjectThreaded on
+        // scene objects during this scan.
+        if (assetPath.EndsWith(
+            ".unity",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         UnityEngine.Object[] assets;
 
         try
