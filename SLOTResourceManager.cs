@@ -2029,6 +2029,16 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 				// =================================================
 				// LOAD ASSET FROM BUNDLE
 				// =================================================
+				//
+				// Shader dependencies must be resident before Unity
+				// deserializes a Material or a Prefab containing one.
+				// Only real Shader assets from already-loaded bundles
+				// are warmed. No shader is replaced or reassigned.
+				//
+				Singleton<KFFAssetBundleManager>
+					.Instance
+					.WarmupLoadedShaders();
+
 
 				string finalAssetPath =
 					queuedLoad.AssetPath;
