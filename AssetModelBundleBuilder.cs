@@ -325,15 +325,13 @@ public static class AssetModelBundleBuilder
         }
 
         // --------------------------------------------------------
-        // DELETE MANIFEST FILES
+        // DELETE ONLY OUR MANIFEST
         // --------------------------------------------------------
         //
-        // Keep the same behavior as the current builder.
-        // Only manifest files are removed here.
-        // The actual other bundle files remain untouched.
+        // NEVER delete manifests belonging to other bundles.
         // --------------------------------------------------------
 
-        DeleteManifestFiles(
+        DeleteOwnManifestFile(
             outputPath);
 
         // --------------------------------------------------------
@@ -783,7 +781,7 @@ public static class AssetModelBundleBuilder
     // MANIFEST CLEANUP
     // ============================================================
 
-    private static void DeleteManifestFiles(
+    private static void DeleteOwnManifestFile(
         string outputPath)
     {
         if (!Directory.Exists(
@@ -792,27 +790,34 @@ public static class AssetModelBundleBuilder
             return;
         }
 
-        string[] files =
-            Directory.GetFiles(
+        string manifestFile =
+            Path.Combine(
                 outputPath,
-                "*.manifest",
-                SearchOption.AllDirectories);
+                BundleName.ToLowerInvariant() +
+                ".manifest");
 
-        foreach (string file in files)
+        if (!File.Exists(manifestFile))
         {
-            try
-            {
-                File.Delete(file);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning(
-                    "[AssetModelBundleBuilder] " +
-                    "Could not delete manifest:\n" +
-                    file +
-                    "\n" +
-                    ex.Message);
-            }
+            return;
+        }
+
+        try
+        {
+            File.Delete(manifestFile);
+
+            Debug.Log(
+                "[AssetModelBundleBuilder] " +
+                "Deleted old MainModelBundles manifest: " +
+                manifestFile);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning(
+                "[AssetModelBundleBuilder] " +
+                "Could not delete MainModelBundles manifest:\n" +
+                manifestFile +
+                "\n" +
+                ex.Message);
         }
     }
 
