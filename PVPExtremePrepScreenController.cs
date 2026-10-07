@@ -934,41 +934,8 @@ private List<string> pvpLeaderBanlist = new List<string>()
 
     public void OnClickPlayUpdated()
     {
-        mSearching = false;
-        Loadout currentLoadout;
-
-        if (mMode == PvpMode.Extreme)
-        {
-            currentLoadout = GenerateExtremeAutoLoadout();
-        }
-        else
-        {
-            currentLoadout = Singleton<PlayerInfoScript>.Instance.GetCurrentLoadout();
-        }
-        if (!MiscParams.PvpEnable) { Singleton<SimplePopupController>.Instance.ShowMessage(KFFLocalization.Get("!!GAME_ERROR_CONTACTING"), KFFLocalization.Get("!!PVP_UNDER_MAINTENANCE"), true); return; }
-        if (currentLoadout == null || !currentLoadout.IsUsable())
-        {
-            Singleton<SimplePopupController>.Instance.ShowMessage(
-                string.Empty,
-                KFFLocalization.Get("!!NEED_CREATURE")
-            );
-            return;
-        }
-        if (currentLoadout.GetTeamCost() > Singleton<PlayerInfoScript>.Instance.RankData.TeamCost) { Singleton<SimplePopupController>.Instance.ShowMessage(string.Empty, KFFLocalization.Get("!!EXCEEDS_WEIGHT")); Singleton<SLOTAudioManager>.Instance.PlayErrorSound(); return; }
-        if (DetachedSingleton<StaminaManager>.Instance.GetStamina(StaminaType.Pvp) < MiscParams.PvpStaminaMatchCost) { Singleton<SimplePopupController>.Instance.ShowPurchasePrompt(KFFLocalization.Get("!!NO_PVP_STAMINA_BUY"), KFFLocalization.Get("!!NO_PVP_STAMINA_NOBUY"), MiscParams.StaminaRefillCost, RefillStaminaAndTryAgain); Singleton<SLOTAudioManager>.Instance.PlayErrorSound(); return; }
-
-        Singleton<PlayerInfoScript>.Instance.StateData.CurrentLoadout = currentLoadout;
-        if (mMode == PvpMode.Friend)
-        {
-            Debug.LogError("Invalid mode in ExtremePrepScreen");
-            return;
-        }
-        else
-        {
-            mSearching = true;
-            SafePlay(ShowConnectingTween);
-            Singleton<MultiplayerMessageHandler>.Instance.StartMatchmaking();
-        }
+        // Legacy entry point: always use the real Extreme flow.
+        OnClickPlay();
     }
 
     public void OnClickPlay()
