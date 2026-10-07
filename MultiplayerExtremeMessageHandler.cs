@@ -33,7 +33,8 @@ public class MultiplayerExtremeMessageHandler : Singleton<MultiplayerExtremeMess
 		MM_GENERAL_HOST,
 		MM_GENERAL_CLIENT,
 		MM_ALLY_HOST,
-		MM_ALLY_CLIENT
+		MM_ALLY_CLIENT,
+		MM_EXTREME
 	}
 
 	private enum JoinStatusEnum
@@ -213,6 +214,7 @@ public class MultiplayerExtremeMessageHandler : Singleton<MultiplayerExtremeMess
 	{
 		Reset();
 
+		mMatchMode = MatchMode.MM_EXTREME;
 		mRestartMatchmakingTimeout = 30f;
 		mJoinStatus = JoinStatusEnum.NotJoined;
 
@@ -895,7 +897,7 @@ public class MultiplayerExtremeMessageHandler : Singleton<MultiplayerExtremeMess
 		mFriendJoinedGame = false;
 		mRestartMatchmakingTimeout = 30f;
 		mJoinStatus = JoinStatusEnum.NotJoined;
-		mMatchMode = MatchMode.MM_ALLY_HOST;
+		mMatchMode = MatchMode.MM_EXTREME;
 		bool ranked = Singleton<PlayerInfoScript>.Instance.PvPData.RankedMode;
 		int levelRange = MiscParams.MultiplayerUnrankedSearchRange;
 		int levelRange2nd = MiscParams.MultiplayerUnrankedSearchRange2nd;
@@ -946,7 +948,7 @@ public class MultiplayerExtremeMessageHandler : Singleton<MultiplayerExtremeMess
 			yield return new WaitForSeconds(JoinFriendGameDelay);
 			mFriendJoinedGame = false;
 			mRetryJoiningFriendGame = false;
-			mMatchMode = MatchMode.MM_ALLY_CLIENT;
+			mMatchMode = MatchMode.MM_EXTREME;
 			bool ranked = Singleton<PlayerInfoScript>.Instance.PvPData.RankedMode;
 			int levelRange = MiscParams.MultiplayerUnrankedSearchRange;
 			int levelRange2nd = MiscParams.MultiplayerUnrankedSearchRange2nd;
