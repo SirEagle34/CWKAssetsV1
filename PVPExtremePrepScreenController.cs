@@ -1029,7 +1029,7 @@ private List<string> pvpLeaderBanlist = new List<string>()
             Singleton<PlayerInfoScript>.Instance.PvPData;
 
         pvpData.ExtremeMode = true;
-        pvpData.CurrentMatchLoadout = currentLoadout;
+        player.StateData.CurrentLoadout = currentLoadout;
 
         if (mMode == PvpMode.Friend)
         {
@@ -1069,7 +1069,7 @@ private List<string> pvpLeaderBanlist = new List<string>()
             ? GenerateExtremeAutoLoadout()
             : player.GetCurrentLoadout();
 
-        pvpData.CurrentMatchLoadout = loadout;
+        player.StateData.CurrentLoadout = loadout;
 
         Debug.Log(
             "[OnClickPlay] " +
@@ -1111,7 +1111,7 @@ private List<string> pvpLeaderBanlist = new List<string>()
 
             // Her zaman bu maç için oluşturulan CurrentMatchLoadout gönder
             Singleton<MultiplayerMessageHandler>.Instance.SendMatchStartData(
-                pvpData.CurrentMatchLoadout
+                player.StateData.CurrentLoadout
             );
         }
         else
@@ -1137,9 +1137,9 @@ private List<string> pvpLeaderBanlist = new List<string>()
         bool isExtreme = (mMode == PvpMode.Extreme);
         pvpData.ExtremeMode = isExtreme;
 
-        if (pvpData.CurrentMatchLoadout == null)
+        if (player.StateData.CurrentLoadout == null)
         {
-            pvpData.CurrentMatchLoadout = isExtreme
+            player.StateData.CurrentLoadout = isExtreme
                 ? GenerateExtremeAutoLoadout()
                 : player.GetCurrentLoadout();
         }
@@ -1149,14 +1149,14 @@ private List<string> pvpLeaderBanlist = new List<string>()
             "mMode=" + mMode +
             ", ExtremeMode=" + pvpData.ExtremeMode +
             ", LoadoutCount=" +
-            (pvpData.CurrentMatchLoadout != null &&
-            pvpData.CurrentMatchLoadout.CreatureSet != null
-                ? pvpData.CurrentMatchLoadout.CreatureSet.Count.ToString()
+            (player.StateData.CurrentLoadout != null &&
+            player.StateData.CurrentLoadout.CreatureSet != null
+                ? player.StateData.CurrentLoadout.CreatureSet.Count.ToString()
                 : "NULL")
         );
 
         Singleton<MultiplayerMessageHandler>.Instance
-            .SendMatchStartData(pvpData.CurrentMatchLoadout);
+            .SendMatchStartData(player.StateData.CurrentLoadout);
     }
 
     private IEnumerator WaitForOpponentLoadout()
@@ -1198,15 +1198,15 @@ private List<string> pvpLeaderBanlist = new List<string>()
         mWaitingForOpponentStartData = true;
         mSearching = false;
 
-        if (pvpData.CurrentMatchLoadout == null)
+        if (player.StateData.CurrentLoadout == null)
         {
-            pvpData.CurrentMatchLoadout =
+            player.StateData.CurrentLoadout =
                 GenerateExtremeAutoLoadout();
         }
 
         Singleton<MultiplayerExtremeMessageHandler>.Instance
             .SendMatchStartData(
-                pvpData.CurrentMatchLoadout
+                player.StateData.CurrentLoadout
             );
     }
 
