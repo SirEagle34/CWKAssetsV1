@@ -56,6 +56,8 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 	// NEVER DOWNLOAD THIS BUNDLE.
 	public const string MainScenesBundle = "MainScenesBundle";
 
+	public const string MainModelBundle = "MainModelBundles";
+
 	public const string GeneralUIBundle = "GeneralBundle";
 	public const string FtueUIBundle = "FTUEBundle";
 	public const string FtueAudioBundle = "FTUEAudioBundle";
@@ -72,6 +74,9 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 	// NEVER downloaded.
 	public string ActiveMainScenesBundle =
 		MainScenesBundle;
+
+	public string ActiveMainModelBundle =
+    	MainModelBundle;
 
 	public string ActiveGeneralUIBundle =
 		GeneralUIBundle;
@@ -1522,6 +1527,19 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 		// Nothing is loaded yet. MainResources is the base bundle and
 		// therefore the correct bundle to download/check first.
 		return mainBundleName;
+	}
+
+	public string GetMainModelBundleName()
+	{
+		if (!string.IsNullOrEmpty(
+			ActiveMainModelBundle))
+		{
+			return NormalizeBundleName(
+				ActiveMainModelBundle);
+		}
+
+		return NormalizeBundleName(
+			MainModelBundle);
 	}
 
 	private bool BundleContainsResource(
@@ -3387,6 +3405,8 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 			bundleName ==
 				"mainscenesbundle" ||
 			bundleName ==
+				"mainmodelbundles" ||
+			bundleName ==
 				"ftueaudiobundle" ||
 			bundleName ==
 				"mainaudiobundle")
@@ -4057,6 +4077,481 @@ public class SLOTResourceManager : Singleton<SLOTResourceManager>
 
 			if (!target.Contains(bundle))
 				target.Add(bundle);
+		}
+	}
+
+	// ============================================================
+	// MAIN MODEL ASSETS
+	// ============================================================
+	//
+	// MainModelBundles contains:
+	//
+	// Mesh
+	// AnimationClip
+	// RuntimeAnimatorController
+	//
+	// This loader intentionally does NOT use
+	// ResolveResourceBundleName().
+	//
+	// MainModelBundles is an independent model bundle.
+	//
+	// ============================================================
+
+	public IEnumerator LoadMainModelAsset(
+		string assetPath,
+		Type assetType,
+		string subAssetName,
+		Action<UnityEngine.Object> callback)
+	{
+		UnityEngine.Object result =
+			null;
+
+		if (string.IsNullOrEmpty(
+			assetPath))
+		{
+			Debug.LogError(
+				"[SLOTResourceManager] " +
+				"MainModel asset path is empty.");
+
+			if (callback != null)
+			{
+				callback(null);
+			}
+
+			yield break;
+		}
+
+		if (assetType == null)
+		{
+			Debug.LogError(
+				"[SLOTResourceManager] " +
+				"MainModel asset type is null.");
+
+			if (callback != null)
+			{
+				callback(null);
+			}
+
+			yield break;
+		}
+
+		string bundleName =
+			GetMainModelBundleName();
+
+		if (string.IsNullOrEmpty(
+			bundleName))
+		{
+			Debug.LogError(
+				"[SLOTResourceManager] " +
+				"MainModel bundle name is empty.");
+
+			if (callback != null)
+			{
+				callback(null);
+			}
+
+			yield break;
+		}
+
+		// --------------------------------------------------------
+		// RAM CACHE
+		// --------------------------------------------------------
+
+		AssetBundle assetBundle =
+			Singleton<KFFAssetBundleManager>
+				.Instance
+				.GetAssetBundleByName(
+					bundleName);
+
+		// --------------------------------------------------------
+		// DOWNLOAD
+		// --------------------------------------------------------
+
+		if (assetBundle == null)
+		{
+			int retryCount = 0;
+
+			while (
+				assetBundle == null &&
+				retryCount < MAX_RETRY_COUNT)
+			{
+				retryCount++;
+
+				bool success =
+					false;
+
+				string error =
+					null;
+
+				AssetBundle loadedBundle =
+					null;
+
+				Debug.Log(
+					"[SLOTResourceManager] " +
+					"Loading MainModelBundles " +
+					retryCount +
+					"/" +
+					MAX_RETRY_COUNT);
+
+				yield return StartCoroutine(
+					Singleton<KFFAssetBundleManager>
+						.Instance
+						.LoadAssetBundleCoroutine(
+							assetBundleBaseURL,
+							bundleName,
+							delegate(
+								bool resultSuccess,
+								string errorMessage,
+								AssetBundle bundle)
+							{
+								success =
+									resultSuccess;
+
+								error =
+									errorMessage;
+
+								loadedBundle =
+									bundle;
+							}
+						)
+				);
+
+				if (success &&
+					loadedBundle != null)
+				{
+					assetBundle =
+						loadedBundle;
+
+					break;
+				}
+
+				Debug.LogError(
+					"[SLOTResourceManager] " +
+					"MainModelBundles load failed.\n" +
+					"Attempt: " +
+					retryCount +
+					"/" +
+					MAX_RETRY_COUNT +
+					"\nError: " +
+					error);
+
+				if (retryCount >=
+					MAX_RETRY_COUNT)
+				{
+					break;
+				}
+			}
+		}
+
+		if (assetBundle == null)
+		{
+			Debug.LogError(
+				"[SLOTResourceManager] " +
+				"MainModelBundles unavailable.");
+
+			if (callback != null)
+			{
+				callback(null);
+			}
+
+			yield break;
+		}
+
+		// --------------------------------------------------------
+		// RESOLVE FULL ASSET PATH
+		// --------------------------------------------------------
+
+		string resolvedAssetPath =
+			Singleton<KFFAssetBundleManager>
+				.Instance
+				.ResolveAssetPathInBundle(
+					assetBundle,
+					assetPath);
+
+		if (string.IsNullOrEmpty(
+			resolvedAssetPath))
+		{
+			Debug.LogError(
+				"[SLOTResourceManager] " +
+				"MainModel asset path could not be resolved.\n" +
+				"Bundle: " +
+				bundleName +
+				"\nRequested: " +
+				assetPath);
+
+			if (callback != null)
+			{
+				callback(null);
+			}
+
+			yield break;
+		}
+
+		Debug.Log(
+			"[SLOTResourceManager] " +
+			"MainModel resolve:\n" +
+			"Requested: " +
+			assetPath +
+			"\nResolved: " +
+			resolvedAssetPath +
+			"\nType: " +
+			assetType.Name +
+			"\nSubAsset: " +
+			(string.IsNullOrEmpty(
+				subAssetName)
+				? "<none>"
+				: subAssetName));
+
+		// --------------------------------------------------------
+		// LOAD MAIN + SUB ASSETS
+		// --------------------------------------------------------
+
+		AssetBundleRequest request =
+			assetBundle.LoadAssetWithSubAssetsAsync(
+				resolvedAssetPath,
+				assetType);
+
+		if (request == null)
+		{
+			Debug.LogError(
+				"[SLOTResourceManager] " +
+				"LoadAssetWithSubAssetsAsync returned null.");
+
+			if (callback != null)
+			{
+				callback(null);
+			}
+
+			yield break;
+		}
+
+		yield return request;
+
+		UnityEngine.Object[] assets =
+			request.allAssets;
+
+		if (assets == null ||
+			assets.Length == 0)
+		{
+			Debug.LogError(
+				"[SLOTResourceManager] " +
+				"No MainModel assets found.\n" +
+				"Path: " +
+				resolvedAssetPath +
+				"\nType: " +
+				assetType.Name);
+
+			if (callback != null)
+			{
+				callback(null);
+			}
+
+			yield break;
+		}
+
+		// --------------------------------------------------------
+		// EXACT SUB-ASSET NAME
+		// --------------------------------------------------------
+
+		if (!string.IsNullOrEmpty(
+			subAssetName))
+		{
+			for (int i = 0;
+				i < assets.Length;
+				i++)
+			{
+				UnityEngine.Object asset =
+					assets[i];
+
+				if (asset == null)
+				{
+					continue;
+				}
+
+				if (string.Equals(
+					asset.name,
+					subAssetName,
+					StringComparison.Ordinal))
+				{
+					result =
+						asset;
+
+					break;
+				}
+			}
+
+			// ----------------------------------------------------
+			// CASE INSENSITIVE
+			// ----------------------------------------------------
+
+			if (result == null)
+			{
+				for (int i = 0;
+					i < assets.Length;
+					i++)
+				{
+					UnityEngine.Object asset =
+						assets[i];
+
+					if (asset == null)
+					{
+						continue;
+					}
+
+					if (string.Equals(
+						asset.name,
+						subAssetName,
+						StringComparison.OrdinalIgnoreCase))
+					{
+						result =
+							asset;
+
+						break;
+					}
+				}
+			}
+		}
+		else
+		{
+			// ----------------------------------------------------
+			// NO SUB-ASSET NAME
+			//
+			// Only automatically select when there is exactly one
+			// object of the requested type.
+			//
+			// This prevents arbitrary selection from an FBX with
+			// multiple meshes or animations.
+			// ----------------------------------------------------
+
+			if (assets.Length == 1)
+			{
+				result =
+					assets[0];
+			}
+		}
+
+		// --------------------------------------------------------
+		// TYPE VALIDATION
+		// --------------------------------------------------------
+
+		if (result != null &&
+			!assetType.IsInstanceOfType(
+				result))
+		{
+			Debug.LogError(
+				"[SLOTResourceManager] " +
+				"MainModel type mismatch.\n" +
+				"Expected: " +
+				assetType.FullName +
+				"\nActual: " +
+				result.GetType().FullName);
+
+			result =
+				null;
+		}
+
+		if (result == null)
+		{
+			Debug.LogError(
+				"[SLOTResourceManager] " +
+				"MainModel asset not found.\n" +
+				"Bundle: " +
+				bundleName +
+				"\nPath: " +
+				resolvedAssetPath +
+				"\nType: " +
+				assetType.Name +
+				"\nSubAsset: " +
+				(string.IsNullOrEmpty(
+					subAssetName)
+					? "<none>"
+					: subAssetName));
+		}
+
+		if (callback != null)
+		{
+			callback(result);
+		}
+	}
+
+	public IEnumerator LoadMainModelMesh(
+		string assetPath,
+		string meshName,
+		Action<Mesh> callback)
+	{
+		Mesh result =
+			null;
+
+		yield return StartCoroutine(
+			LoadMainModelAsset(
+				assetPath,
+				typeof(Mesh),
+				meshName,
+				delegate(UnityEngine.Object obj)
+				{
+					result =
+						obj as Mesh;
+				}
+			)
+		);
+
+		if (callback != null)
+		{
+			callback(result);
+		}
+	}
+
+	public IEnumerator LoadMainModelAnimationClip(
+		string assetPath,
+		string animationClipName,
+		Action<AnimationClip> callback)
+	{
+		AnimationClip result =
+			null;
+
+		yield return StartCoroutine(
+			LoadMainModelAsset(
+				assetPath,
+				typeof(AnimationClip),
+				animationClipName,
+				delegate(UnityEngine.Object obj)
+				{
+					result =
+						obj as AnimationClip;
+				}
+			)
+		);
+
+		if (callback != null)
+		{
+			callback(result);
+		}
+	}
+
+	public IEnumerator LoadMainModelAnimatorController(
+		string assetPath,
+		string controllerName,
+		Action<RuntimeAnimatorController> callback)
+	{
+		RuntimeAnimatorController result =
+			null;
+
+		yield return StartCoroutine(
+			LoadMainModelAsset(
+				assetPath,
+				typeof(RuntimeAnimatorController),
+				controllerName,
+				delegate(UnityEngine.Object obj)
+				{
+					result =
+						obj as RuntimeAnimatorController;
+				}
+			)
+		);
+
+		if (callback != null)
+		{
+			callback(result);
 		}
 	}
 }

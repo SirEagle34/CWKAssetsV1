@@ -50,7 +50,7 @@ public static class AssetModelBundleBuilder
 
     [MenuItem(
         "Tools/AssetBundles/Model/Clear MainModelBundles")]
-    public static void ClearModelBundleNames()
+    public static void ClearMainModelBundles()
     {
         ClearBundleAssignments();
     }
@@ -78,7 +78,10 @@ public static class AssetModelBundleBuilder
 
         Debug.Log(
             "[AssetModelBundleBuilder] Selection: " +
-            "Mesh / AnimationClip / AnimatorController");
+            "Mesh / AnimationClip / RuntimeAnimatorController");
+
+        Debug.Log(
+            "[AssetModelBundleBuilder] Extension filter: NONE");
 
         Debug.Log(
             "[AssetModelBundleBuilder] Resources: EXCLUDED");
@@ -87,7 +90,11 @@ public static class AssetModelBundleBuilder
             "=================================================");
 
         // --------------------------------------------------------
-        // CLEAN ONLY OUR OWN BUNDLE ASSIGNMENTS
+        // IMPORTANT
+        //
+        // ONLY remove assignments that belong to MainModelBundles.
+        //
+        // Never touch creature / character / environment / etc.
         // --------------------------------------------------------
 
         ClearBundleAssignments();
@@ -99,55 +106,165 @@ public static class AssetModelBundleBuilder
         int assigned =
             AssignModelAssets();
 
-        if (assigned == 0)
+        if (assigned <= 0)
         {
             Debug.LogWarning(
                 "[AssetModelBundleBuilder] " +
                 "No Mesh / AnimationClip / " +
-                "AnimatorController assets found.");
+                "RuntimeAnimatorController assets found.");
 
             return;
         }
 
         AssetDatabase.RemoveUnusedAssetBundleNames();
+
         AssetDatabase.SaveAssets();
+
         AssetDatabase.Refresh();
 
         // --------------------------------------------------------
+        // GET ONLY OUR ASSETS
+        // --------------------------------------------------------
+
+        string[] modelAssets =
+            AssetDatabase.GetAssetPathsFromAssetBundle(
+                BundleName);
+
+        if (modelAssets == null ||
+            modelAssets.Length == 0)
+        {
+            Debug.LogError(
+                "[AssetModelBundleBuilder] " +
+                "MainModelBundles has no assigned assets.");
+
+            return;
+        }
+
+        List<string> validAssets =
+            new List<string>();
+
+        HashSet<string> uniqueAssets =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (string assetPath in modelAssets)
+        {
+            if (string.IsNullOrEmpty(assetPath))
+            {
+                continue;
+            }
+
+            string normalizedPath =
+                assetPath.Replace(
+                    "\\",
+                    "/");
+
+            if (!uniqueAssets.Add(
+                normalizedPath))
+            {
+                continue;
+            }
+
+            validAssets.Add(
+                normalizedPath);
+        }
+
+        if (validAssets.Count == 0)
+        {
+            Debug.LogError(
+                "[AssetModelBundleBuilder] " +
+                "No valid model assets remain.");
+
+            return;
+        }
+
+        // --------------------------------------------------------
         // OUTPUT
+        // --------------------------------------------------------
+        //
+        // DO NOT DELETE THE WHOLE OUTPUT DIRECTORY.
+        //
+        // There may be:
+        //
+        // creatures
+        // characters
+        // environment
+        // gameboard
+        // mainresourcesbundle
+        // etc.
+        //
+        // MainModelBundles must NEVER delete those files.
         // --------------------------------------------------------
 
         string outputPath =
             GetOutputPath(target);
 
-        if (Directory.Exists(outputPath))
+        if (!Directory.Exists(
+            outputPath))
         {
-            try
-            {
-                Directory.Delete(
-                    outputPath,
-                    true);
-
-                Debug.Log(
-                    "[AssetModelBundleBuilder] " +
-                    "Old output deleted: " +
-                    outputPath);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError(
-                    "[AssetModelBundleBuilder] " +
-                    "Could not delete old output:\n" +
-                    outputPath +
-                    "\n" +
-                    ex.Message);
-
-                return;
-            }
+            Directory.CreateDirectory(
+                outputPath);
         }
 
-        Directory.CreateDirectory(
+        // --------------------------------------------------------
+        // DELETE ONLY OUR OWN OUTPUT
+        // --------------------------------------------------------
+
+        DeleteOwnOutputFiles(
             outputPath);
+
+        // --------------------------------------------------------
+        // BUILD MAP
+        // --------------------------------------------------------
+        //
+        // IMPORTANT:
+        //
+        // BuildAssetBundles(outputPath, options, target)
+        //
+        // builds all Editor-assigned AssetBundles.
+        //
+        // Instead we explicitly provide ONE build definition.
+        // Therefore this build can only generate:
+        //
+        // mainmodelbundles
+        //
+        // and cannot rebuild/overwrite the other bundle files.
+        // --------------------------------------------------------
+
+        AssetBundleBuild modelBuild =
+            new AssetBundleBuild();
+
+        modelBuild.assetBundleName =
+            BundleName.ToLowerInvariant();
+
+        modelBuild.assetBundleVariant =
+            null;
+
+        modelBuild.assetNames =
+            validAssets.ToArray();
+
+        AssetBundleBuild[] buildMap =
+            new AssetBundleBuild[]
+            {
+                modelBuild
+            };
+
+        Debug.Log(
+            "[AssetModelBundleBuilder] " +
+            "Build map created.");
+
+        Debug.Log(
+            "[AssetModelBundleBuilder] " +
+            "Model assets: " +
+            validAssets.Count);
+
+        foreach (string assetPath in validAssets)
+        {
+            Debug.Log(
+                "[AssetModelBundleBuilder] " +
+                "BUILD ASSET -> " +
+                assetPath);
+        }
 
         // --------------------------------------------------------
         // BUILD
@@ -157,11 +274,26 @@ public static class AssetModelBundleBuilder
             BuildAssetBundleOptions
                 .ChunkBasedCompression;
 
-        AssetBundleManifest manifest =
-            BuildPipeline.BuildAssetBundles(
-                outputPath,
-                options,
-                target);
+        AssetBundleManifest manifest;
+
+        try
+        {
+            manifest =
+                BuildPipeline.BuildAssetBundles(
+                    outputPath,
+                    buildMap,
+                    options,
+                    target);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError(
+                "[AssetModelBundleBuilder] " +
+                "BUILD EXCEPTION:\n" +
+                ex);
+
+            return;
+        }
 
         if (manifest == null)
         {
@@ -173,7 +305,32 @@ public static class AssetModelBundleBuilder
         }
 
         // --------------------------------------------------------
-        // CLEAN MANIFESTS
+        // VERIFY OUR BUNDLE
+        // --------------------------------------------------------
+
+        string bundleFile =
+            Path.Combine(
+                outputPath,
+                BundleName.ToLowerInvariant());
+
+        if (!File.Exists(
+            bundleFile))
+        {
+            Debug.LogError(
+                "[AssetModelBundleBuilder] " +
+                "Expected bundle was not generated:\n" +
+                bundleFile);
+
+            return;
+        }
+
+        // --------------------------------------------------------
+        // DELETE MANIFEST FILES
+        // --------------------------------------------------------
+        //
+        // Keep the same behavior as the current builder.
+        // Only manifest files are removed here.
+        // The actual other bundle files remain untouched.
         // --------------------------------------------------------
 
         DeleteManifestFiles(
@@ -198,7 +355,7 @@ public static class AssetModelBundleBuilder
 
         Debug.Log(
             "[AssetModelBundleBuilder] Output: " +
-            outputPath);
+            bundleFile);
 
         Debug.Log(
             "=================================================");
@@ -216,36 +373,15 @@ public static class AssetModelBundleBuilder
             new HashSet<string>(
                 StringComparer.OrdinalIgnoreCase);
 
-        // --------------------------------------------------------
-        // SEARCH ALL ASSETS
-        // --------------------------------------------------------
-        //
-        // IMPORTANT:
-        //
-        // There is NO extension filter here.
-        //
-        // .fbx
-        // .asset
-        // .anim
-        // .controller
-        // custom importer assets
-        // etc.
-        //
-        // are all accepted if they contain the required
-        // Unity asset types.
-        //
-        // --------------------------------------------------------
-
         string[] guids =
             AssetDatabase.FindAssets(
                 "",
                 new[] { "Assets" });
 
         Debug.Log(
-            "[AssetModelBundleBuilder] " +
-            "Scanning " +
+            "[AssetModelBundleBuilder] Scanning " +
             guids.Length +
-            " assets...");
+            " assets.");
 
         foreach (string guid in guids)
         {
@@ -254,104 +390,84 @@ public static class AssetModelBundleBuilder
                     guid);
 
             if (string.IsNullOrEmpty(
-                    assetPath))
+                assetPath))
             {
                 continue;
             }
 
+            assetPath =
+                NormalizePath(
+                    assetPath);
+
             if (AssetDatabase.IsValidFolder(
-                    assetPath))
+                assetPath))
             {
                 continue;
             }
 
             if (ShouldIgnore(
-                    assetPath))
+                assetPath))
             {
                 continue;
             }
 
-            if (processed.Contains(
-                    assetPath))
+            if (!processed.Add(
+                assetPath))
             {
                 continue;
             }
-
-            // ----------------------------------------------------
-            // CONTENT BASED SELECTION
-            // ----------------------------------------------------
 
             if (!ContainsModelAsset(
-                    assetPath))
+                assetPath))
             {
                 continue;
             }
 
             // ----------------------------------------------------
-            // SAFE ASSIGNMENT
+            // NEVER OVERWRITE ANOTHER BUNDLE
             // ----------------------------------------------------
 
             if (!TryAssign(
-                    assetPath))
+                assetPath))
             {
                 continue;
             }
-
-            processed.Add(
-                assetPath);
 
             assigned++;
 
             Debug.Log(
-                "[AssetModelBundleBuilder] ASSIGNED -> " +
+                "[AssetModelBundleBuilder] ASSIGNED\n" +
+                "Bundle: " +
                 BundleName +
-                " : " +
+                "\nAsset: " +
                 assetPath);
         }
 
         Debug.Log(
-            "[AssetModelBundleBuilder] " +
-            "Total assigned: " +
+            "[AssetModelBundleBuilder] Total assigned: " +
             assigned);
 
         return assigned;
     }
 
     // ============================================================
-    // CONTENT BASED MODEL CHECK
+    // CONTENT CHECK
     // ============================================================
 
     private static bool ContainsModelAsset(
         string assetPath)
     {
         if (string.IsNullOrEmpty(
-                assetPath))
+            assetPath))
         {
             return false;
         }
 
         if (ShouldIgnore(
-                assetPath))
+            assetPath))
         {
             return false;
         }
-
-        // --------------------------------------------------------
-        // IMPORTANT:
-        //
-        // LoadAllAssetsAtPath is intentional.
-        //
-        // FBX and other imported files can contain:
-        //
-        // Main asset
-        // Mesh
-        // AnimationClip
-        // Avatar
-        // etc.
-        //
-        // We inspect ALL sub-assets instead of checking
-        // the file extension.
-        // --------------------------------------------------------
 
         UnityEngine.Object[] assets;
 
@@ -365,7 +481,7 @@ public static class AssetModelBundleBuilder
         {
             Debug.LogWarning(
                 "[AssetModelBundleBuilder] " +
-                "Could not inspect asset:\n" +
+                "Could not inspect:\n" +
                 assetPath +
                 "\n" +
                 ex.Message);
@@ -379,9 +495,13 @@ public static class AssetModelBundleBuilder
             return false;
         }
 
-        foreach (UnityEngine.Object asset
-                 in assets)
+        for (int i = 0;
+            i < assets.Length;
+            i++)
         {
+            UnityEngine.Object asset =
+                assets[i];
+
             if (asset == null)
             {
                 continue;
@@ -397,7 +517,7 @@ public static class AssetModelBundleBuilder
             }
 
             // ----------------------------------------------------
-            // ANIMATION CLIP
+            // ANIMATION
             // ----------------------------------------------------
 
             if (asset is AnimationClip)
@@ -419,7 +539,7 @@ public static class AssetModelBundleBuilder
     }
 
     // ============================================================
-    // SAFE BUNDLE ASSIGNMENT
+    // SAFE ASSIGNMENT
     // ============================================================
 
     private static bool TryAssign(
@@ -438,61 +558,33 @@ public static class AssetModelBundleBuilder
             importer.assetBundleName;
 
         // --------------------------------------------------------
-        // ALREADY OUR BUNDLE
+        // ALREADY OURS
         // --------------------------------------------------------
 
         if (string.Equals(
-                existingBundle,
-                BundleName,
-                StringComparison.OrdinalIgnoreCase))
+            existingBundle,
+            BundleName,
+            StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
         // --------------------------------------------------------
-        // ANOTHER BUNDLE OWNS THIS ASSET
-        // --------------------------------------------------------
-        //
-        // NEVER overwrite it.
-        //
-        // This prevents:
-        //
-        // MainResourcesBundle
-        // creature bundle
-        // character bundle
-        // shader bundle
-        // etc.
-        //
-        // from being silently replaced.
+        // OWNED BY ANOTHER BUNDLE
         // --------------------------------------------------------
 
         if (!string.IsNullOrEmpty(
-                existingBundle))
+            existingBundle))
         {
             Debug.LogWarning(
-                "=================================================");
-
-            Debug.LogWarning(
                 "[AssetModelBundleBuilder] " +
-                "ASSET ALREADY OWNED");
-
-            Debug.LogWarning(
+                "SKIPPED - asset already belongs to another bundle.\n" +
                 "Asset: " +
-                assetPath);
-
-            Debug.LogWarning(
-                "Existing bundle: " +
-                existingBundle);
-
-            Debug.LogWarning(
-                "Requested bundle: " +
+                assetPath +
+                "\nExisting: " +
+                existingBundle +
+                "\nRequested: " +
                 BundleName);
-
-            Debug.LogWarning(
-                "ACTION: SKIPPED - no overwrite");
-
-            Debug.LogWarning(
-                "=================================================");
 
             return false;
         }
@@ -508,44 +600,36 @@ public static class AssetModelBundleBuilder
     }
 
     // ============================================================
-    // IGNORE RULES
+    // IGNORE
     // ============================================================
 
     private static bool ShouldIgnore(
         string assetPath)
     {
         if (string.IsNullOrEmpty(
-                assetPath))
+            assetPath))
         {
             return true;
         }
 
         assetPath =
-            assetPath.Replace(
-                "\\",
-                "/");
+            NormalizePath(
+                assetPath);
 
         // --------------------------------------------------------
         // RESOURCES
         // --------------------------------------------------------
-        //
-        // ABSOLUTELY NEVER TOUCH:
-        //
-        // Assets/Resources/...
-        //
-        // MainModelBundles is intentionally separate.
-        // --------------------------------------------------------
 
         if (assetPath.Equals(
-                "Assets/Resources",
-                StringComparison.OrdinalIgnoreCase))
+            "Assets/Resources",
+            StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
         if (assetPath.StartsWith(
-                "Assets/Resources/",
-                StringComparison.OrdinalIgnoreCase))
+            "Assets/Resources/",
+            StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -555,22 +639,22 @@ public static class AssetModelBundleBuilder
         // --------------------------------------------------------
 
         if (assetPath.EndsWith(
-                ".cs",
-                StringComparison.OrdinalIgnoreCase))
+            ".cs",
+            StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
         if (assetPath.EndsWith(
-                ".js",
-                StringComparison.OrdinalIgnoreCase))
+            ".js",
+            StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
         if (assetPath.EndsWith(
-                ".boo",
-                StringComparison.OrdinalIgnoreCase))
+            ".boo",
+            StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -580,26 +664,26 @@ public static class AssetModelBundleBuilder
         // --------------------------------------------------------
 
         if (assetPath.Contains(
-                "/Editor/",
-                StringComparison.OrdinalIgnoreCase))
+            "/Editor/",
+            StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
         if (assetPath.EndsWith(
-                "/Editor",
-                StringComparison.OrdinalIgnoreCase))
+            "/Editor",
+            StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
         // --------------------------------------------------------
-        // HIDDEN / META
+        // META
         // --------------------------------------------------------
 
         if (assetPath.EndsWith(
-                ".meta",
-                StringComparison.OrdinalIgnoreCase))
+            ".meta",
+            StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -608,7 +692,7 @@ public static class AssetModelBundleBuilder
     }
 
     // ============================================================
-    // CLEAR ONLY MAIN MODEL BUNDLE
+    // CLEAR
     // ============================================================
 
     private static void ClearBundleAssignments()
@@ -617,39 +701,29 @@ public static class AssetModelBundleBuilder
             AssetDatabase.GetAssetPathsFromAssetBundle(
                 BundleName);
 
-        if (assetPaths == null ||
-            assetPaths.Length == 0)
-        {
-            AssetDatabase.RemoveUnusedAssetBundleNames();
-
-            AssetDatabase.SaveAssets();
-
-            return;
-        }
-
         int cleared = 0;
 
-        foreach (string assetPath
-                 in assetPaths)
+        if (assetPaths != null)
         {
-            AssetImporter importer =
-                AssetImporter.GetAtPath(
-                    assetPath);
-
-            if (importer == null)
+            foreach (string assetPath in assetPaths)
             {
-                continue;
-            }
+                AssetImporter importer =
+                    AssetImporter.GetAtPath(
+                        assetPath);
 
-            // ----------------------------------------------------
-            // ONLY CLEAR OUR OWN BUNDLE
-            // ----------------------------------------------------
+                if (importer == null)
+                {
+                    continue;
+                }
 
-            if (string.Equals(
+                if (!string.Equals(
                     importer.assetBundleName,
                     BundleName,
                     StringComparison.OrdinalIgnoreCase))
-            {
+                {
+                    continue;
+                }
+
                 importer.assetBundleName =
                     null;
 
@@ -662,15 +736,13 @@ public static class AssetModelBundleBuilder
         AssetDatabase.SaveAssets();
 
         Debug.Log(
-            "[AssetModelBundleBuilder] " +
-            "Cleared " +
+            "[AssetModelBundleBuilder] Cleared " +
             cleared +
-            " assets from " +
-            BundleName);
+            " existing MainModelBundles assignments.");
     }
 
     // ============================================================
-    // OUTPUT PATH
+    // OUTPUT
     // ============================================================
 
     private static string GetOutputPath(
@@ -708,41 +780,35 @@ public static class AssetModelBundleBuilder
     }
 
     // ============================================================
-    // DELETE MANIFEST FILES
+    // MANIFEST CLEANUP
     // ============================================================
 
     private static void DeleteManifestFiles(
         string outputPath)
     {
         if (!Directory.Exists(
-                outputPath))
+            outputPath))
         {
             return;
         }
 
-        string[] manifestFiles =
+        string[] files =
             Directory.GetFiles(
                 outputPath,
                 "*.manifest",
                 SearchOption.AllDirectories);
 
-        foreach (string file
-                 in manifestFiles)
+        foreach (string file in files)
         {
             try
             {
                 File.Delete(file);
-
-                Debug.Log(
-                    "[AssetModelBundleBuilder] " +
-                    "Deleted manifest: " +
-                    file);
             }
             catch (Exception ex)
             {
-                Debug.LogError(
+                Debug.LogWarning(
                     "[AssetModelBundleBuilder] " +
-                    "Failed to delete manifest:\n" +
+                    "Could not delete manifest:\n" +
                     file +
                     "\n" +
                     ex.Message);
@@ -751,14 +817,14 @@ public static class AssetModelBundleBuilder
     }
 
     // ============================================================
-    // LOG BUILT FILES
+    // LOG
     // ============================================================
 
     private static void LogBuiltBundles(
         string outputPath)
     {
         if (!Directory.Exists(
-                outputPath))
+            outputPath))
         {
             return;
         }
@@ -767,25 +833,108 @@ public static class AssetModelBundleBuilder
             Directory.GetFiles(
                 outputPath,
                 "*",
-                SearchOption.AllDirectories);
+                SearchOption.TopDirectoryOnly);
 
-        Debug.Log(
-            "[AssetModelBundleBuilder] " +
-            "Built files:");
-
-        foreach (string file
-                 in files)
+        foreach (string file in files)
         {
-            string relative =
-                file.Substring(
-                    outputPath.Length)
-                .TrimStart(
-                    Path.DirectorySeparatorChar,
-                    Path.AltDirectorySeparatorChar);
+            string name =
+                Path.GetFileName(
+                    file);
+
+            if (name.EndsWith(
+                ".manifest",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
 
             Debug.Log(
-                "    -> " +
-                relative);
+                "[AssetModelBundleBuilder] OUTPUT: " +
+                name);
+        }
+    }
+
+    // ============================================================
+    // PATH
+    // ============================================================
+
+    private static string NormalizePath(
+        string path)
+    {
+        if (string.IsNullOrEmpty(
+            path))
+        {
+            return string.Empty;
+        }
+
+        return path
+            .Replace("\\", "/")
+            .Trim();
+    }
+
+    private static void DeleteOwnOutputFiles(
+        string outputPath)
+    {
+        if (!Directory.Exists(
+            outputPath))
+        {
+            return;
+        }
+
+        string bundleFile =
+            Path.Combine(
+                outputPath,
+                BundleName.ToLowerInvariant());
+
+        string bundleManifest =
+            bundleFile +
+            ".manifest";
+
+        // --------------------------------------------------------
+        // ONLY DELETE MainModelBundles
+        // --------------------------------------------------------
+
+        if (File.Exists(bundleFile))
+        {
+            try
+            {
+                File.Delete(
+                    bundleFile);
+
+                Debug.Log(
+                    "[AssetModelBundleBuilder] " +
+                    "Deleted old MainModelBundles: " +
+                    bundleFile);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError(
+                    "[AssetModelBundleBuilder] " +
+                    "Could not delete old MainModelBundles:\n" +
+                    bundleFile +
+                    "\n" +
+                    ex.Message);
+
+                throw;
+            }
+        }
+
+        if (File.Exists(bundleManifest))
+        {
+            try
+            {
+                File.Delete(
+                    bundleManifest);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(
+                    "[AssetModelBundleBuilder] " +
+                    "Could not delete old bundle manifest:\n" +
+                    bundleManifest +
+                    "\n" +
+                    ex.Message);
+            }
         }
     }
 }

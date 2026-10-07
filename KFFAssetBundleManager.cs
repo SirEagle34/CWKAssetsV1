@@ -910,4 +910,226 @@ public class KFFAssetBundleManager : Singleton<KFFAssetBundleManager>
 
 		IsBusy = false;
 	}
+
+	// ============================================================
+	// SAFE ASSET PATH RESOLUTION
+	// ============================================================
+	//
+	// IMPORTANT:
+	//
+	// Never resolve a model asset by filename only.
+	//
+	// BAD:
+	//
+	// Body.fbx
+	//
+	// GOOD:
+	//
+	// Assets/Models/Warrior/Body.fbx
+	//
+	// This method only accepts:
+	//
+	// 1. exact path
+	// 2. exact path without extension
+	// 3. UNIQUE suffix match
+	//
+	// If a suffix matches multiple assets, it returns null.
+	//
+	// ============================================================
+
+	public string ResolveAssetPathInBundle(
+		AssetBundle assetBundle,
+		string requestedPath)
+	{
+		if (assetBundle == null)
+		{
+			return null;
+		}
+
+		if (string.IsNullOrEmpty(
+			requestedPath))
+		{
+			return null;
+		}
+
+		string normalizedRequested =
+			NormalizeResourcePath(
+				requestedPath);
+
+		if (string.IsNullOrEmpty(
+			normalizedRequested))
+		{
+			return null;
+		}
+
+		string[] assetNames =
+			assetBundle.GetAllAssetNames();
+
+		if (assetNames == null ||
+			assetNames.Length == 0)
+		{
+			return null;
+		}
+
+		// --------------------------------------------------------
+		// 1. EXACT PATH
+		// --------------------------------------------------------
+
+		for (int i = 0;
+			i < assetNames.Length;
+			i++)
+		{
+			string candidate =
+				NormalizeResourcePath(
+					assetNames[i]);
+
+			if (candidate ==
+				normalizedRequested)
+			{
+				return assetNames[i];
+			}
+		}
+
+		// --------------------------------------------------------
+		// 2. PATH WITHOUT EXTENSION
+		// --------------------------------------------------------
+
+		string requestedWithoutExtension =
+			RemoveExtension(
+				normalizedRequested);
+
+		for (int i = 0;
+			i < assetNames.Length;
+			i++)
+		{
+			string candidate =
+				NormalizeResourcePath(
+					assetNames[i]);
+
+			string candidateWithoutExtension =
+				RemoveExtension(
+					candidate);
+
+			if (candidateWithoutExtension ==
+				requestedWithoutExtension)
+			{
+				return assetNames[i];
+			}
+		}
+
+		// --------------------------------------------------------
+		// 3. UNIQUE SUFFIX
+		// --------------------------------------------------------
+		//
+		// Example:
+		//
+		// Requested:
+		//
+		// Warrior/Body.fbx
+		//
+		// Candidate:
+		//
+		// Assets/Models/Warrior/Body.fbx
+		//
+		// This is okay ONLY if there is exactly one match.
+		//
+		// --------------------------------------------------------
+
+		string suffix =
+			"/" +
+			normalizedRequested;
+
+		string suffixMatch =
+			null;
+
+		int suffixMatchCount = 0;
+
+		for (int i = 0;
+			i < assetNames.Length;
+			i++)
+		{
+			string candidate =
+				NormalizeResourcePath(
+					assetNames[i]);
+
+			if (!candidate.EndsWith(
+				suffix,
+				StringComparison.OrdinalIgnoreCase))
+			{
+				continue;
+			}
+
+			suffixMatch =
+				assetNames[i];
+
+			suffixMatchCount++;
+
+			if (suffixMatchCount > 1)
+			{
+				Debug.LogError(
+					"[KFFAssetBundleManager] " +
+					"AMBIGUOUS ASSET PATH.\n" +
+					"Bundle: " +
+					assetBundle.name +
+					"\nRequested: " +
+					requestedPath);
+
+				for (int j = 0;
+					j < assetNames.Length;
+					j++)
+				{
+					string candidate2 =
+						NormalizeResourcePath(
+							assetNames[j]);
+
+					if (candidate2.EndsWith(
+						suffix,
+						StringComparison.OrdinalIgnoreCase))
+					{
+						Debug.LogError(
+							"    COLLISION -> " +
+							assetNames[j]);
+					}
+				}
+
+				return null;
+			}
+		}
+
+		if (suffixMatchCount == 1)
+		{
+			return suffixMatch;
+		}
+
+		// --------------------------------------------------------
+		// NO MATCH
+		// --------------------------------------------------------
+
+		return null;
+	}
+
+	private string RemoveExtension(
+		string path)
+	{
+		if (string.IsNullOrEmpty(
+			path))
+		{
+			return path;
+		}
+
+		string extension =
+			Path.GetExtension(
+				path);
+
+		if (string.IsNullOrEmpty(
+			extension))
+		{
+			return path;
+		}
+
+		return path.Substring(
+			0,
+			path.Length -
+			extension.Length);
+	}
 }
