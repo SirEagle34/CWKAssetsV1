@@ -219,7 +219,7 @@ public class PhotonInterface : LoadBalancingClient
 				if (CurrentRoom != null) RoomName = CurrentRoom.Name;
 			}
 			break;
-		case 225:		case 225:
+		case 225:
 			if (AutoCreateRoom && operationResponse.ReturnCode == 32760)
 			{
 				if (SearchRange2nd == 0)
@@ -262,7 +262,7 @@ public class PhotonInterface : LoadBalancingClient
 				SendPvPEvent(TBPvPManager.tbPvPEventCode.PlayerLeft, TBPvPExtremeManager.tbPvPEventCode.PlayerLeft, null);
 			return;
 		}
-		foreach (KeyValuePair<byte, object> parameter		foreach (KeyValuePair<byte, object> parameter in photonEvent.Parameters)
+		foreach (KeyValuePair<byte, object> parameter in photonEvent.Parameters)
 		{
 			if (parameter.Key != 245)
 				continue;
@@ -327,7 +327,6 @@ public class PhotonInterface : LoadBalancingClient
 		}
 	}
 
-	public void WebRpcGetData
 	public void WebRpcGetData(string user_id, RpcGetDataCallback callback)
 	{
 		Dictionary<string, object> dictionary = new Dictionary<string, object>();
