@@ -119,26 +119,11 @@ public static class AssetModelBundleBuilder
         AssetDatabase.RemoveUnusedAssetBundleNames();
 
         AssetDatabase.SaveAssets();
-
         AssetDatabase.Refresh();
 
-        // --------------------------------------------------------
-        // GET ONLY OUR ASSETS
-        // --------------------------------------------------------
-
-        string[] modelAssets =
-            AssetDatabase.GetAssetPathsFromAssetBundle(
-                BundleName);
-
-        if (modelAssets == null ||
-            modelAssets.Length == 0)
-        {
-            Debug.LogError(
-                "[AssetModelBundleBuilder] " +
-                "MainModelBundles has no assigned assets.");
-
-            return;
-        }
+        // Build directly from the assets assigned by this builder.
+        // Do not depend on Unity's GetAssetPathsFromAssetBundle()
+        // cache being immediately refreshed.
 
         List<string> validAssets =
             new List<string>();
@@ -147,39 +132,66 @@ public static class AssetModelBundleBuilder
             new HashSet<string>(
                 StringComparer.OrdinalIgnoreCase);
 
-        foreach (string assetPath in modelAssets)
+        string[] assignedGuids =
+            AssetDatabase.FindAssets(
+                "",
+                new[] { "Assets" });
+
+        foreach (string guid in assignedGuids)
         {
+            string assetPath =
+                AssetDatabase.GUIDToAssetPath(guid);
+
             if (string.IsNullOrEmpty(assetPath))
             {
                 continue;
             }
 
-            string normalizedPath =
-                assetPath.Replace(
-                    "\\",
-                    "/");
+            assetPath =
+                NormalizePath(assetPath);
 
-            if (!uniqueAssets.Add(
-                normalizedPath))
+            if (AssetDatabase.IsValidFolder(assetPath) ||
+                ShouldIgnore(assetPath))
             {
                 continue;
             }
 
-            validAssets.Add(
-                normalizedPath);
+            AssetImporter importer =
+                AssetImporter.GetAtPath(assetPath);
+
+            if (importer == null ||
+                !string.Equals(
+                    importer.assetBundleName,
+                    BundleName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!ContainsModelAsset(assetPath))
+            {
+                continue;
+            }
+
+            if (uniqueAssets.Add(assetPath))
+            {
+                validAssets.Add(assetPath);
+            }
         }
 
         if (validAssets.Count == 0)
         {
             Debug.LogError(
                 "[AssetModelBundleBuilder] " +
-                "No valid model assets remain.");
+                "MainModelBundles has no valid model assets after assignment.");
 
             return;
         }
 
         // --------------------------------------------------------
         // OUTPUT
+        // --------------------------------------------------------
+
         // --------------------------------------------------------
         //
         // DO NOT DELETE THE WHOLE OUTPUT DIRECTORY.
