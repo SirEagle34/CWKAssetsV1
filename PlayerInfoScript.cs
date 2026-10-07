@@ -3124,11 +3124,11 @@ public class PlayerInfoScript : Singleton<PlayerInfoScript>
 		if (won)
 		{
 			++SaveData.MultiplayerWinStreak;
-
-			int pointsToAdd = PvPData.ExtremeMode ? 2 : 2;
-
+		
+			int pointsToAdd = PvPData.ExtremeMode ? 2 : 3;
+		
 			SaveData.PointsInMultiplayerLevel += pointsToAdd;
-
+		
 			while ((int)SaveData.PointsInMultiplayerLevel > rank.PointsToAdvance)
 			{
 				if (SaveData.MultiplayerLevel == 1)
@@ -3136,25 +3136,25 @@ public class PlayerInfoScript : Singleton<PlayerInfoScript>
 					SaveData.PointsInMultiplayerLevel = rank.PointsToAdvance;
 					break;
 				}
-
+		
 				SaveData.PointsInMultiplayerLevel -= rank.PointsToAdvance + 1;
 				SaveData.MultiplayerLevel--;
-
+		
 				rank = PvpRankDataManager.Instance.GetRank(SaveData.MultiplayerLevel);
 			}
-
+		
 			pvpMatchResultDetails.WinRewards = GrantPvpWinRewards();
 		}
 		else
 		{
 			SaveData.MultiplayerWinStreak = 0;
-
+		
 			if (!rank.NoPointLoss)
 			{
-				int pointsToRemove = PvPData.ExtremeMode ? 1 : 1;
-
+				int pointsToRemove = PvPData.ExtremeMode ? 1 : 2;
+		
 				SaveData.PointsInMultiplayerLevel -= pointsToRemove;
-
+		
 				while ((int)SaveData.PointsInMultiplayerLevel < 0)
 				{
 					if (SaveData.MultiplayerLevel >= PvpRankDataManager.Instance.GetMaxRank())
@@ -3162,9 +3162,11 @@ public class PlayerInfoScript : Singleton<PlayerInfoScript>
 						SaveData.PointsInMultiplayerLevel = 0;
 						break;
 					}
-
+		
 					SaveData.MultiplayerLevel++;
+		
 					rank = PvpRankDataManager.Instance.GetRank(SaveData.MultiplayerLevel);
+		
 					SaveData.PointsInMultiplayerLevel += rank.PointsAfterRankDown() + 1;
 				}
 			}
