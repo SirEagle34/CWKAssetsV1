@@ -996,7 +996,11 @@ public class KFFAssetBundleManager : Singleton<KFFAssetBundleManager>
 
 		string requestedWithoutExtension =
 			RemoveExtension(
-				normalizedRequested);
+				normalizedRequested
+			);
+
+		string extensionlessMatch = null;
+		int extensionlessMatchCount = 0;
 
 		for (int i = 0;
 			i < assetNames.Length;
@@ -1004,17 +1008,41 @@ public class KFFAssetBundleManager : Singleton<KFFAssetBundleManager>
 		{
 			string candidate =
 				NormalizeResourcePath(
-					assetNames[i]);
+					assetNames[i]
+				);
 
 			string candidateWithoutExtension =
 				RemoveExtension(
-					candidate);
+					candidate
+				);
 
 			if (candidateWithoutExtension ==
 				requestedWithoutExtension)
 			{
-				return assetNames[i];
+				extensionlessMatch =
+					assetNames[i];
+
+				extensionlessMatchCount++;
+
+				if (extensionlessMatchCount > 1)
+				{
+					Debug.LogError(
+						"[KFFAssetBundleManager] " +
+						"AMBIGUOUS ASSET PATH " +
+						"(extension collision).\\n" +
+						"Bundle: " +
+						assetBundle.name +
+						"\\nRequested: " +
+						requestedPath);
+
+					return null;
+				}
 			}
+		}
+
+		if (extensionlessMatchCount == 1)
+		{
+			return extensionlessMatch;
 		}
 
 		// --------------------------------------------------------
