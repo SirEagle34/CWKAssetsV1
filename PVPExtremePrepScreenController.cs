@@ -1023,108 +1023,17 @@ private List<string> pvpLeaderBanlist = new List<string>()
 
     public void OnClickPlayOld2()
     {
-        mSearching = false;
-
-        var player = Singleton<PlayerInfoScript>.Instance;
-        var pvpData = player.PvPData;
-
-        // mMode bu ekranın gerçek seçilmiş PvP modudur.
-        bool isExtreme = (mMode == PvpMode.Extreme);
-
-        // Local state'i her maç başında kesin olarak güncelle.
-        pvpData.ExtremeMode = isExtreme;
-
-        Loadout loadout = isExtreme
-            ? GenerateExtremeAutoLoadout()
-            : player.GetCurrentLoadout();
-
-        player.StateData.CurrentLoadout = loadout;
-
-        Debug.Log(
-            "[OnClickPlay] " +
-            "mMode=" + mMode +
-            ", ExtremeMode=" + pvpData.ExtremeMode +
-            ", LoadoutCount=" +
-            (loadout != null && loadout.CreatureSet != null
-                ? loadout.CreatureSet.Count.ToString()
-                : "NULL")
-        );
-
-        Debug.Log("Loadout null? " + (loadout == null));
-        Debug.Log("IsUsable? " + loadout?.IsUsable());
-        Debug.Log("Cost: " + loadout?.GetTeamCost());
-
-        if (!MiscParams.PvpEnable)
-            return;
-
-        if (loadout == null || !loadout.IsUsable())
-            return;
-
-        if (loadout.GetTeamCost() > player.RankData.TeamCost)
-            return;
-
-        if (DetachedSingleton<StaminaManager>.Instance
-            .GetStamina(StaminaType.Pvp) < MiscParams.PvpStaminaMatchCost)
-            return;
-
-        if (mMode == PvpMode.Friend)
-        {
-            SafePlay(ReadyTween);
-
-            if (ReadyBlockingCollider != null)
-                ReadyBlockingCollider.SetActive(true);
-
-            mWaitingForOpponentStartData = true;
-
-            // Her zaman bu maç için oluşturulan CurrentMatchLoadout gönder
-            Singleton<MultiplayerMessageHandler>.Instance.SendMatchStartData(
-                player.StateData.CurrentLoadout
-            );
-        }
-        else
-        {
-            mSearching = true;
-
-            SafePlay(ShowConnectingTween);
-
-            Singleton<MultiplayerMessageHandler>.Instance.StartMatchmaking();
-        }
+        // Legacy entry point kept for existing UI bindings.
+        OnClickPlay();
     }
+
 
     public void OnConnectionComplete22(bool amIPrimary)
     {
-        var player = Singleton<PlayerInfoScript>.Instance;
-        var pvpData = player.PvPData;
-
-        pvpData.AmIPrimary = amIPrimary;
-        mWaitingForOpponentStartData = true;
-        mSearching = false;
-
-        // Maç modunu burada da kesinleştir.
-        bool isExtreme = (mMode == PvpMode.Extreme);
-        pvpData.ExtremeMode = isExtreme;
-
-        if (player.StateData.CurrentLoadout == null)
-        {
-            player.StateData.CurrentLoadout = isExtreme
-                ? GenerateExtremeAutoLoadout()
-                : player.GetCurrentLoadout();
-        }
-
-        Debug.Log(
-            "[OnConnectionComplete] " +
-            "mMode=" + mMode +
-            ", ExtremeMode=" + pvpData.ExtremeMode +
-            ", LoadoutCount=" +
-            (player.StateData.CurrentLoadout != null &&
-            player.StateData.CurrentLoadout.CreatureSet != null
-                ? player.StateData.CurrentLoadout.CreatureSet.Count.ToString()
-                : "NULL")
-        );
-
-        Singleton<MultiplayerMessageHandler>.Instance
-            .SendMatchStartData(player.StateData.CurrentLoadout);
+        // Legacy callback: route to the dedicated Extreme connection flow.
+        OnConnectionComplete(amIPrimary);
     }
+
 
     private IEnumerator WaitForOpponentLoadout()
     {
@@ -1165,17 +1074,28 @@ private List<string> pvpLeaderBanlist = new List<string>()
         mWaitingForOpponentStartData = true;
         mSearching = false;
 
-        if (player.StateData.CurrentLoadout == null)
+        if (mExtremeMatchLoadout == null)
         {
-            player.StateData.CurrentLoadout =
-                GenerateExtremeAutoLoadout();
+            mExtremeMatchLoadout = GenerateExtremeAutoLoadout();
+        }
+
+        if (mExtremeMatchLoadout == null ||
+            mExtremeMatchLoadout.CreatureSet == null ||
+            mExtremeMatchLoadout.CreatureSet.Count != 7)
+        {
+            Debug.LogError(
+                "[EXTREME] Local Extreme loadout invalid. Count=" +
+                (mExtremeMatchLoadout == null || mExtremeMatchLoadout.CreatureSet == null
+                    ? 0
+                    : mExtremeMatchLoadout.CreatureSet.Count)
+            );
+            return;
         }
 
         Singleton<MultiplayerExtremeMessageHandler>.Instance
-            .SendMatchStartData(
-                player.StateData.CurrentLoadout
-            );
+            .SendMatchStartData(mExtremeMatchLoadout);
     }
+
 
     public void OnClickCancelConnect() { SafePlay(HideConnectingTween); mWaitingForOpponentStartData = false; mOpponentStartDataReceived = false; mSearching = false; Singleton<MultiplayerExtremeMessageHandler>.Instance.CancelMatchmaking(); }
 
