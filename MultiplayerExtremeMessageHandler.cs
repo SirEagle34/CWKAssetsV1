@@ -705,10 +705,10 @@ public class MultiplayerExtremeMessageHandler : Singleton<MultiplayerExtremeMess
 	{
 		if (mJoinStatus == JoinStatusEnum.NotJoined && !mCancelingMatchmaking && !mRestartingMatchmaking)
 		{
-            if (Singleton<PlayerInfoScript>.Instance.StateData.MultiplayerMode) Singleton<PVPPrepScreenController>.Instance.matchFound = true;
+            if (Singleton<PlayerInfoScript>.Instance.StateData.MultiplayerMode) Singleton<PVPExtremePrepScreenController>.Instance.matchFound = true;
             mRestartMatchmakingTimeout = 30f;
 			mJoinStatus = (amIPrimary ? JoinStatusEnum.JoinedAsHost : JoinStatusEnum.JoinedAsClient);
-			Singleton<PVPPrepScreenController>.Instance.OnConnectionComplete(amIPrimary);
+			Singleton<PVPExtremePrepScreenController>.Instance.OnConnectionComplete(amIPrimary);
 		}
 	}
 
@@ -720,7 +720,7 @@ public class MultiplayerExtremeMessageHandler : Singleton<MultiplayerExtremeMess
 		mEnteringFriendMatch.PlayerID = playerID;
 		mWaitingForMatchRequestResponseFrom = playerID;
 		Dictionary<string, object> dictionary = new Dictionary<string, object>();
-		dictionary.Add("AppVersion", Singleton<TBPvPManager>.Instance.GetCompatibilityVersion(false));
+		dictionary.Add("AppVersion", Singleton<TBPvPExtremeManager>.Instance.GetCompatibilityVersion(false));
 		SendChatBasedMessage(MessageTypeEnum.MatchRequest, playerName, playerID, dictionary);
 		mAllyMatchWatch = true;
 		mAllyMatchTimeout = false;
@@ -790,7 +790,7 @@ public class MultiplayerExtremeMessageHandler : Singleton<MultiplayerExtremeMess
 			ReceivedMatchRequest receivedMatchRequest = new ReceivedMatchRequest();
 			receivedMatchRequest.PlayerID = playerID;
 			receivedMatchRequest.PlayerName = Convert.ToString(jsonDict["SenderName"]);
-			string compatibilityVersion = Singleton<TBPvPManager>.Instance.GetCompatibilityVersion(false);
+			string compatibilityVersion = Singleton<TBPvPExtremeManager>.Instance.GetCompatibilityVersion(false);
 			string text = Convert.ToString(jsonDict["AppVersion"]);
 			if (Singleton<PlayerInfoScript>.Instance.SaveData.IgnoredPlayers.ContainsKey(playerID))
 			{
