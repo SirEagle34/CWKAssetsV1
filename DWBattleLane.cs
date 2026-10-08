@@ -177,30 +177,33 @@ public class DWBattleLane : Singleton<DWBattleLane>
 	{
 		if (creature == null || creature.Form == null)
 		{
-			Debug.LogError("BuildCreature failed: invalid creature");
+			Debug.LogError("[BuildCreature] Invalid creature.");
 			return null;
 		}
-		CreatureData data = CreatureDataManager.Instance.GetData(creature.Form.ID);
-		if (data == null)
+
+		string prefabPath = "Creatures/" + creature.Form.Prefab + "/" + creature.Form.Prefab;
+
+		Debug.Log("[BuildCreature] Loading: " + creature.Form.ID + " -> " + prefabPath);
+
+		GameObject prefab = SLOTResourceManager.Load<GameObject>(prefabPath);
+		if (prefab == null)
 		{
-			Debug.LogError("Missing blueprint: " + creature.Form.ID);
+			Debug.LogError("[BuildCreature] Prefab not found: " + creature.Form.ID + " | Path: " + prefabPath);
 			return null;
 		}
-		if (string.IsNullOrEmpty(data.Prefab))
+
+		GameObject instance = UnityEngine.Object.Instantiate(prefab);
+		if (instance == null)
 		{
-			Debug.LogError("Blueprint prefab path empty: " + creature.Form.ID);
+			Debug.LogError("[BuildCreature] Instantiate failed: " + creature.Form.ID);
 			return null;
 		}
-		GameObject gameObject = SLOTResourceManager.Load<GameObject>(data.Prefab);
-		if (gameObject == null)
-		{
-			Debug.LogError("Prefab not found in Resources: " + data.Prefab);
-			return null;
-		}
-		GameObject gameObject2 = UnityEngine.Object.Instantiate(gameObject);
-		Singleton<DWBattleLane>.Instance.CreaturePool[creature] = gameObject2;
-		gameObject2.SetActive(value: false);
-		return gameObject2;
+
+		instance.SetActive(false);
+		CreaturePool[creature] = instance;
+
+		Debug.Log("[BuildCreature] CreaturePool ADDED: " + creature.Form.ID);
+		return instance;
 	}
 
 	public bool LootObjectsToCollect()
