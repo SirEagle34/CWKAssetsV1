@@ -96,6 +96,8 @@ public class PlayerSaveData
 
 	public List<LeaderItem> Leaders = new List<LeaderItem>();
 
+	public List<LeaderFloopSave> LeaderFloops = new List<LeaderFloopSave>();
+
 	public List<Loadout> Loadouts = new List<Loadout>();
 
 	public uint StaminaFullAtTime;
@@ -1842,4 +1844,38 @@ public class PlayerSaveData
 		Debug.Log("[CardCrafting] Consumed creatures: " + creatureId + " | Amount: " + num);
 		return num == amount;
 	}
+
+	public LeaderFloopSave EnsureLeaderFloops(LeaderData leader)
+	{
+		if (leader == null)
+			return null;
+
+		LeaderFloopSave save =
+			LeaderFloops.Find(
+				x => x != null && x.LeaderID == leader.ID
+			);
+
+		if (save != null)
+			return save;
+
+		save = new LeaderFloopSave(leader.ID);
+
+		int count = Mathf.Min(
+			LeaderFloopSave.EQUIPPED_COUNT,
+			leader.ActionCards.Count
+		);
+
+		for (int i = 0; i < count; i++)
+		{
+			CardData card = leader.ActionCards[i];
+
+			if (card != null)
+				save.Equipped[i] = card.ID;
+		}
+
+		LeaderFloops.Add(save);
+
+		return save;
+	}
+
 }
