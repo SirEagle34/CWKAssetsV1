@@ -5622,6 +5622,62 @@ def _google_json_body():
 def _google_ticket_hash(ticket):
     return hashlib.sha256(ticket.encode("utf-8")).hexdigest()
 
+def _ensure_google_account_tables():
+    """
+    Create the Google OAuth tables in the existing Flask-SQLAlchemy database.
+    This is intentionally idempotent and does not create or switch databases.
+    """
+    statements = (
+        """
+        CREATE TABLE IF NOT EXISTS google_account_links (
+            google_sub TEXT NOT NULL PRIMARY KEY,
+            player_username VARCHAR(80) NOT NULL UNIQUE,
+            email VARCHAR(320) NOT NULL DEFAULT '',
+            linked_at INTEGER NOT NULL
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS ix_google_account_links_player
+            ON google_account_links (player_username)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS google_account_tickets (
+            ticket_hash VARCHAR(64) NOT NULL PRIMARY KEY,
+            mode VARCHAR(16) NOT NULL,
+            player_username VARCHAR(80),
+            oauth_state VARCHAR(128) NOT NULL UNIQUE,
+            status VARCHAR(24) NOT NULL DEFAULT 'pending',
+            result_username VARCHAR(80),
+            email VARCHAR(320),
+            google_sub TEXT,
+            error VARCHAR(240),
+            can_create INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL,
+            consumed INTEGER NOT NULL DEFAULT 0
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS ix_google_account_tickets_expiry
+            ON google_account_tickets (expires_at)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS ix_google_account_tickets_state
+            ON google_account_tickets (oauth_state)
+        """,
+    )
+
+    try:
+        with db.engine.begin() as connection:
+            for statement in statements:
+                connection.execute(_google_sql_text(statement))
+        app.logger.info("Google account tables are ready in the configured database.")
+        return True
+    except Exception:
+        app.logger.exception("Could not create Google account tables in the configured database.")
+        return False
+
+
 def _google_db_ready():
     try:
         with db.engine.connect() as connection:
@@ -5629,7 +5685,7 @@ def _google_db_ready():
             connection.execute(_google_sql_text("SELECT 1 FROM google_account_tickets LIMIT 1"))
         return True
     except Exception:
-        app.logger.exception("Google account tables are missing; apply migrations/20261009_google_accounts.sql")
+        app.logger.exception("Google account tables are unavailable in the configured database.")
         return False
 
 def _google_player_header():
@@ -7007,6 +7063,7 @@ with app.app_context():
         db.create_all()
         MigrateAdminSecurity()
         MigrateBanExpiration()
+        _ensure_google_account_tables()
 
 
 if __name__ == '__main__':
