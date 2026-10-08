@@ -626,6 +626,7 @@ public class PlayerInfoScript : Singleton<PlayerInfoScript>
 		}
 		stringBuilder.Append("\"Unlocks\":" + SerializeUnlocks() + ",");
 		stringBuilder.Append("\"Leaders\":" + SerializeLeaders() + ",");
+		stringBuilder.Append("\"LeaderFloops\":" + SerializeLeaderFloops() + ",");
 		stringBuilder.Append("\"Inventory\":" + SerializeInventory() + ",");
 		stringBuilder.Append("\"Mails\":" + SerializeAdminMessages() + ",");
 		stringBuilder.Append("\"Collection\":" + SerializeCreatureCollection() + ",");
@@ -857,6 +858,10 @@ public class PlayerInfoScript : Singleton<PlayerInfoScript>
 			if (dictionary.ContainsKey("Leaders"))
 			{
 				DeserializeLeaders((object[])dictionary["Leaders"]);
+			}
+			if (dictionary.ContainsKey("LeaderFloops"))
+			{
+				DeserializeLeaderFloops((object[])dictionary["LeaderFloops"]);
 			}
 			if (dictionary.ContainsKey("Collection"))
 			{
@@ -1093,6 +1098,7 @@ public class PlayerInfoScript : Singleton<PlayerInfoScript>
 			{
 				LeaderItem item = new LeaderItem(item2.ID);
 				SaveData.Leaders.Add(item);
+				SaveData.EnsureLeaderFloops(item2);
 			}
 		}
 		if (SaveData.Leaders.Count == 0)
@@ -2355,6 +2361,133 @@ public class PlayerInfoScript : Singleton<PlayerInfoScript>
 		return SaveData.Leaders.Find((LeaderItem item) => item.Form.ID == leaderId);
 	}
 
+	public string SerializeLeaderFloops()
+	{
+		StringBuilder stringBuilder = new StringBuilder();
+
+		stringBuilder.Append("[");
+
+		for (int i = 0; i < SaveData.LeaderFloops.Count; i++)
+		{
+			LeaderFloopSave save = SaveData.LeaderFloops[i];
+
+			if (save == null)
+				continue;
+
+			if (stringBuilder[stringBuilder.Length - 1] != '[')
+				stringBuilder.Append(',');
+
+			stringBuilder.Append("{");
+
+			stringBuilder.Append(
+				MakeJS("LeaderID", save.LeaderID) + ","
+			);
+
+			stringBuilder.Append("\"Equipped\":[");
+
+			for (int j = 0; j < LeaderFloopSave.EQUIPPED_COUNT; j++)
+			{
+				if (j > 0)
+					stringBuilder.Append(',');
+
+				if (string.IsNullOrEmpty(save.Equipped[j]))
+					stringBuilder.Append("null");
+				else
+					stringBuilder.Append(
+						"\"" + save.Equipped[j] + "\""
+					);
+			}
+
+			stringBuilder.Append("],");
+
+			stringBuilder.Append("\"Reserve\":[");
+
+			for (int j = 0; j < LeaderFloopSave.RESERVE_COUNT; j++)
+			{
+				if (j > 0)
+					stringBuilder.Append(',');
+
+				if (string.IsNullOrEmpty(save.Reserve[j]))
+					stringBuilder.Append("null");
+				else
+					stringBuilder.Append(
+						"\"" + save.Reserve[j] + "\""
+					);
+			}
+
+			stringBuilder.Append("]");
+
+			stringBuilder.Append("}");
+		}
+
+		stringBuilder.Append("]");
+
+		return stringBuilder.ToString();
+	}
+
+	public void DeserializeLeaderFloops(object[] array)
+	{
+		SaveData.LeaderFloops.Clear();
+
+		if (array == null)
+			return;
+
+		foreach (object obj in array)
+		{
+			Dictionary<string, object> dict =
+				obj as Dictionary<string, object>;
+
+			if (dict == null)
+				continue;
+
+			LeaderFloopSave save = new LeaderFloopSave();
+
+			save.LeaderID =
+				TFUtils.LoadString(dict, "LeaderID", string.Empty);
+
+			if (dict.ContainsKey("Equipped"))
+			{
+				object[] equipped =
+					dict["Equipped"] as object[];
+
+				if (equipped != null)
+				{
+					for (int i = 0;
+						i < equipped.Length &&
+						i < LeaderFloopSave.EQUIPPED_COUNT;
+						i++)
+					{
+						if (equipped[i] != null)
+							save.Equipped[i] =
+								Convert.ToString(equipped[i]);
+					}
+				}
+			}
+
+			if (dict.ContainsKey("Reserve"))
+			{
+				object[] reserve =
+					dict["Reserve"] as object[];
+
+				if (reserve != null)
+				{
+					for (int i = 0;
+						i < reserve.Length &&
+						i < LeaderFloopSave.RESERVE_COUNT;
+						i++)
+					{
+						if (reserve[i] != null)
+							save.Reserve[i] =
+								Convert.ToString(reserve[i]);
+					}
+				}
+			}
+
+			if (!string.IsNullOrEmpty(save.LeaderID))
+				SaveData.LeaderFloops.Add(save);
+		}
+	}
+
 	public LeaderItem GetLeaderItem(LeaderData leaderData)
 	{
 		return SaveData.Leaders.Find((LeaderItem item) => item.Form == leaderData);
@@ -2515,6 +2648,35 @@ public class PlayerInfoScript : Singleton<PlayerInfoScript>
 	public bool CanUseHelper()
 	{
 		return IsFeatureUnlocked("TBuilding_Social");
+	}
+
+	public LeaderFloopSave GetLeaderFloops(LeaderData leader)
+	{
+		return SaveData.EnsureLeaderFloops(leader);
+	}
+
+	public CardData GetEquippedLeaderFloop(
+		LeaderData leader,
+		int slot
+	)
+	{
+		if (leader == null)
+			return null;
+
+		if (slot < 0 || slot >= LeaderFloopSave.EQUIPPED_COUNT)
+			return null;
+
+		LeaderFloopSave save = SaveData.EnsureLeaderFloops(leader);
+
+		if (save == null)
+			return null;
+
+		string cardID = save.Equipped[slot];
+
+		if (string.IsNullOrEmpty(cardID))
+			return null;
+
+		return CardDataManager.Instance.GetData(cardID);
 	}
 
 	public bool IsQuestUnlocking(QuestData quest)
