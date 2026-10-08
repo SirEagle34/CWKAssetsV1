@@ -4291,10 +4291,18 @@ def SaveGiftCodes(data):
 
 
 def NormalizeGiftCode(code):
+    """
+    Match the Unity client normalization exactly:
+    whitespace, '-' and '_' are ignored and the code is upper-cased.
+    """
     if code is None:
         return ""
 
-    return str(code).strip().upper()
+    return re.sub(
+        r"[\s\-_]",
+        "",
+        str(code)
+    ).upper()
 
 
 def FindGiftCode(data, code):
@@ -5093,25 +5101,30 @@ def AdminGiftCodeDelete(code):
     methods=["POST"]
 )
 def MultiplayerRedeemCode():
+    """
+    Server-side redeem endpoint used by the Unity client.
+
+    IMPORTANT:
+    The client applies the returned rewards locally through ApplyServerRedeem().
+    Therefore this endpoint MUST NOT modify Player.game/inventory itself.
+    It only validates/claims the code and returns the protocol expected by
+    the client:
+        reason
+        fields
+        rewards
+        deliver = "now"
+    """
 
     try:
-
-        payload = request.get_json(
-            silent=True
-        )
+        payload = request.get_json(silent=True)
 
         if not isinstance(payload, dict):
-
             client_data = parse_qs(
-                request.get_data().decode(
-                    "utf-8"
-                )
+                request.get_data().decode("utf-8")
             )
 
             payload = {
-                key: value[0]
-                if len(value) == 1
-                else value
+                key: value[0] if len(value) == 1 else value
                 for key, value in client_data.items()
             }
 
@@ -5122,56 +5135,59 @@ def MultiplayerRedeemCode():
             )
         )
 
-        player_id = payload.get(
-            "player_id"
-        )
+        player_id = payload.get("player_id")
 
         if not player_id:
-            player_id = request.headers.get(
-                "Player-Id"
-            )
+            player_id = request.headers.get("Player-Id")
 
         if not redeem_code:
             return jsonify({
                 "success": False,
+                "reason": "INVALID",
                 "error": "REDEEM_CODE_REQUIRED"
             }), 400
 
         if not player_id:
             return jsonify({
                 "success": False,
+                "reason": "ERROR",
                 "error": "PLAYER_ID_REQUIRED"
             }), 400
 
-        if InvalidUsername(
-            str(player_id)
-        ):
+        player_id = str(player_id)
+
+        if InvalidUsername(player_id):
             return jsonify({
                 "success": False,
+                "reason": "ERROR",
                 "error": "INVALID_USERNAME"
             }), 400
 
         if IsUserBanned(
-            str(player_id),
+            player_id,
             IPFromRequest(request)
         ):
             return jsonify({
                 "success": False,
+                "reason": "ERROR",
                 "error": "USER_BANNED"
             }), 400
 
         player = Player.query.filter_by(
-            username=str(player_id)
+            username=player_id
         ).first()
 
         if player is None:
             return jsonify({
                 "success": False,
+                "reason": "ERROR",
                 "error": "PLAYER_NOT_FOUND"
             }), 404
 
+        # The JSON gift-code store is protected by one process-wide lock.
+        # This prevents two simultaneous requests from claiming the same
+        # code/player pair in the same Flask process.
         with GIFT_CODES_LOCK:
-
             data = LoadGiftCodes()
 
             gift = FindGiftCode(
@@ -5182,89 +5198,249 @@ def MultiplayerRedeemCode():
             if gift is None:
                 return jsonify({
                     "success": False,
+                    "reason": "INVALID",
                     "error": "INVALID_REDEEM_CODE"
                 }), 400
 
-            if not GiftCodeIsActive(gift):
+            if not bool(gift.get("enabled", True)):
                 return jsonify({
                     "success": False,
-                    "error": "REDEEM_CODE_INACTIVE"
+                    "reason": "ERROR",
+                    "error": "REDEEM_CODE_DISABLED"
                 }), 400
 
-            used_by = gift.get(
-                "used_by",
-                []
-            )
+            now = datetime.now(timezone.utc)
 
-            if not isinstance(
-                used_by,
-                list
-            ):
+            start_date = gift.get("start_date")
+            end_date = gift.get("end_date")
+
+            if start_date:
+                try:
+                    start = datetime.fromisoformat(
+                        str(start_date).replace("Z", "+00:00")
+                    )
+
+                    if start.tzinfo is None:
+                        start = start.replace(
+                            tzinfo=timezone.utc
+                        )
+
+                    if now < start:
+                        return jsonify({
+                            "success": False,
+                            "reason": "NOT_STARTED",
+                            "error": "REDEEM_CODE_NOT_STARTED"
+                        }), 400
+
+                except ValueError:
+                    return jsonify({
+                        "success": False,
+                        "reason": "ERROR",
+                        "error": "INVALID_START_DATE"
+                    }), 400
+
+            if end_date:
+                try:
+                    end = datetime.fromisoformat(
+                        str(end_date).replace("Z", "+00:00")
+                    )
+
+                    if end.tzinfo is None:
+                        end = end.replace(
+                            tzinfo=timezone.utc
+                        )
+
+                    if now > end:
+                        return jsonify({
+                            "success": False,
+                            "reason": "EXPIRED",
+                            "error": "REDEEM_CODE_EXPIRED"
+                        }), 400
+
+                except ValueError:
+                    return jsonify({
+                        "success": False,
+                        "reason": "ERROR",
+                        "error": "INVALID_END_DATE"
+                    }), 400
+
+            used_by = gift.get("used_by", [])
+
+            if not isinstance(used_by, list):
                 used_by = []
 
-            if str(player.username) in used_by:
+            player_id_string = str(player.username)
+
+            if player_id_string in used_by:
                 return jsonify({
                     "success": False,
+                    "reason": "ALREADY_CLAIMED",
                     "error": "ALREADY_REDEEMED"
                 }), 400
 
             max_uses = int(
-                gift.get(
-                    "max_uses",
-                    0
-                ) or 0
+                gift.get("max_uses", 0) or 0
             )
 
-            if (
-                max_uses > 0
-                and len(used_by) >= max_uses
-            ):
+            if max_uses > 0 and len(used_by) >= max_uses:
                 return jsonify({
                     "success": False,
+                    "reason": "LIMIT_REACHED",
                     "error": "REDEEM_CODE_LIMIT_REACHED"
                 }), 400
 
-            result = GrantGiftCodeReward(
-                player,
-                gift
+            rewards_config = gift.get("rewards", {})
+
+            if not isinstance(rewards_config, dict):
+                return jsonify({
+                    "success": False,
+                    "reason": "ERROR",
+                    "error": "INVALID_REWARDS"
+                }), 400
+
+            try:
+                coins = max(
+                    0,
+                    int(rewards_config.get(
+                        "soft_currency",
+                        0
+                    ) or 0)
+                )
+
+                gems = max(
+                    0,
+                    int(rewards_config.get(
+                        "free_hard_currency",
+                        0
+                    ) or 0)
+                )
+
+                paid_hard_currency = int(
+                    rewards_config.get(
+                        "paid_hard_currency",
+                        0
+                    ) or 0
+                )
+
+            except (TypeError, ValueError):
+                return jsonify({
+                    "success": False,
+                    "reason": "ERROR",
+                    "error": "INVALID_CURRENCY_REWARD"
+                }), 400
+
+            # The supplied Unity ApplyServerRedeem() protocol supports
+            # gems, coins, creatures and cards. It does NOT apply
+            # PaidHardCurrency. Never silently discard that reward.
+            if paid_hard_currency != 0:
+                return jsonify({
+                    "success": False,
+                    "reason": "ERROR",
+                    "error": "UNSUPPORTED_PAID_HARD_CURRENCY"
+                }), 400
+
+            creature_rewards = rewards_config.get(
+                "creatures",
+                []
             )
 
-            if not result.get("success"):
-
-                db.session.rollback()
-
-                return jsonify(result), 400
-
-            used_by.append(
-                str(player.username)
+            card_rewards = rewards_config.get(
+                "action_cards",
+                []
             )
 
+            if not isinstance(creature_rewards, list):
+                return jsonify({
+                    "success": False,
+                    "reason": "ERROR",
+                    "error": "INVALID_CREATURE_REWARDS"
+                }), 400
+
+            if not isinstance(card_rewards, list):
+                return jsonify({
+                    "success": False,
+                    "reason": "ERROR",
+                    "error": "INVALID_ACTION_CARD_REWARDS"
+                }), 400
+
+            # The current Unity client expects arrays of STRING IDs.
+            # Amount is represented by repeating the same ID.
+            creatures = []
+            for reward in creature_rewards:
+                if isinstance(reward, dict):
+                    item_id = str(
+                        reward.get("id", "")
+                    ).strip()
+                    amount = int(
+                        reward.get("amount", 1) or 1
+                    )
+                else:
+                    item_id = str(reward).strip()
+                    amount = 1
+
+                if not item_id:
+                    return jsonify({
+                        "success": False,
+                        "reason": "ERROR",
+                        "error": "CREATURE_ID_REQUIRED"
+                    }), 400
+
+                if amount < 1 or amount > 999:
+                    return jsonify({
+                        "success": False,
+                        "reason": "ERROR",
+                        "error": "INVALID_CREATURE_AMOUNT"
+                    }), 400
+
+                creatures.extend([item_id] * amount)
+
+            cards = []
+            for reward in card_rewards:
+                if isinstance(reward, dict):
+                    item_id = str(
+                        reward.get("id", "")
+                    ).strip()
+                    amount = int(
+                        reward.get("amount", 1) or 1
+                    )
+                else:
+                    item_id = str(reward).strip()
+                    amount = 1
+
+                if not item_id:
+                    return jsonify({
+                        "success": False,
+                        "reason": "ERROR",
+                        "error": "ACTION_CARD_ID_REQUIRED"
+                    }), 400
+
+                if amount < 1 or amount > 999:
+                    return jsonify({
+                        "success": False,
+                        "reason": "ERROR",
+                        "error": "INVALID_ACTION_CARD_AMOUNT"
+                    }), 400
+
+                cards.extend([item_id] * amount)
+
+            # Claim is committed to the JSON store before the response is
+            # returned. The client will then add the returned rewards to
+            # its local PlayerSaveData exactly once.
+            used_by.append(player_id_string)
             gift["used_by"] = used_by
 
             SaveGiftCodes(data)
 
-            try:
-                db.session.commit()
-
-            except Exception as e:
-
-                db.session.rollback()
-
-                return jsonify({
-                    "success": False,
-                    "error": "REDEEM_SAVE_FAILED",
-                    "message": str(e)
-                }), 500
-
         Log(
             "redeemcode",
-            str(player.username)
+            player_id_string
             + " redeemed "
             + redeem_code
         )
 
         return jsonify({
             "success": True,
+            "reason": "OK",
             "redeemcode": redeem_code,
             "subject": gift.get(
                 "subject",
@@ -5274,14 +5450,17 @@ def MultiplayerRedeemCode():
                 "message",
                 ""
             ),
-            "reward": result.get(
-                "reward",
-                {}
-            )
+            "fields": {},
+            "rewards": {
+                "gems": gems,
+                "coins": coins,
+                "creatures": creatures,
+                "cards": cards
+            },
+            "deliver": "now"
         }), 200
 
     except Exception as e:
-
         db.session.rollback()
 
         Log(
@@ -5291,6 +5470,7 @@ def MultiplayerRedeemCode():
 
         return jsonify({
             "success": False,
+            "reason": "ERROR",
             "error": "SERVER_ERROR"
         }), 500
 
