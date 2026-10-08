@@ -5950,60 +5950,140 @@ def GoogleAccountPoll():
 @app.route("/account/google/create", methods=["POST"])
 def GoogleAccountCreate():
     if not _google_db_ready():
-        return jsonify({"error": "Google account service is not configured."}), 503
+        return jsonify({
+            "error": "Google account service is not configured."
+        }), 503
+
     ticket = str(_google_json_body().get("ticket", "")).strip()
+
     if not ticket:
-        return jsonify({"error": "A valid Google sign-in ticket is required."}), 400
+        return jsonify({
+            "error": "A valid Google sign-in ticket is required."
+        }), 400
+
     now = int(time.time())
     connection = db.session.connection()
     row = _google_ticket_row(connection, ticket)
-    if not row or row["consumed"] or int(row["expires_at"]) < now:
-        return jsonify({"error": "This Google sign-in request expired. Start again."}), 400
+
+    if (
+        not row
+        or row["consumed"]
+        or int(row["expires_at"]) < now
+    ):
+        return jsonify({
+            "error": "This Google sign-in request expired. Start again."
+        }), 400
+
     if row["status"] != "needs_create" or not row["google_sub"]:
-        return jsonify({"error": "Google identity has not been verified for account creation."}), 400
+        return jsonify({
+            "error": "Google identity has not been verified for account creation."
+        }), 400
+
     existing_link = connection.execute(
-        _google_sql_text("SELECT player_username FROM google_account_links WHERE google_sub = :sub"),
+        _google_sql_text("""
+            SELECT player_username
+            FROM google_account_links
+            WHERE google_sub = :sub
+        """),
         {"sub": row["google_sub"]}
     ).first()
+
     if existing_link:
+        existing_username = existing_link[0]
+
         connection.execute(
             _google_sql_text("""
-                UPDATE google_account_tickets SET status='ok', result_username=:username,
-                    can_create=0, consumed=1 WHERE ticket_hash=:ticket_hash
+                UPDATE google_account_tickets
+                SET status = 'ok',
+                    result_username = :username,
+                    can_create = 0,
+                    consumed = 1
+                WHERE ticket_hash = :ticket_hash
             """),
-            {"username": existing_link[0], "ticket_hash": row["ticket_hash"]}
+            {
+                "username": existing_username,
+                "ticket_hash": row["ticket_hash"]
+            }
         )
-        return jsonify({"username": existing_link[0]})
-    # Generate a non-guessable, valid legacy username. No user-supplied username is trusted.
+
+        db.session.commit()
+
+        return jsonify({
+            "username": existing_username
+        })
+
+    # Generate a unique username for the new player account.
     username = None
+
     for _ in range(8):
         candidate = "google_" + secrets.token_hex(8)
-        if not InvalidUsername(candidate) and Player.query.filter_by(username=candidate).first() is None:
+
+        if (
+            not InvalidUsername(candidate)
+            and Player.query.filter_by(username=candidate).first() is None
+        ):
             username = candidate
             break
+
     if username is None:
-        return jsonify({"error": "Could not allocate a game account. Please try again."}), 500
+        return jsonify({
+            "error": "Could not allocate a game account. Please try again."
+        }), 500
+
     player = Player(username=username)
     db.session.add(player)
     db.session.flush()
+
     connection.execute(
         _google_sql_text("""
-            INSERT INTO google_account_links (google_sub, player_username, email, linked_at)
-            VALUES (:sub, :username, :email, :linked_at)
+            INSERT INTO google_account_links (
+                google_sub,
+                player_username,
+                email,
+                linked_at
+            )
+            VALUES (
+                :sub,
+                :username,
+                :email,
+                :linked_at
+            )
         """),
-        {"sub": row["google_sub"], "username": username, "email": row["email"] or "", "linked_at": now}
+        {
+            "sub": row["google_sub"],
+            "username": username,
+            "email": row["email"] or "",
+            "linked_at": now
+        }
     )
+
     connection.execute(
         _google_sql_text("""
-            UPDATE google_account_tickets SET status='ok', result_username=:username,
-                error=NULL, can_create=0, consumed=1
-            WHERE ticket_hash=:ticket_hash
+            UPDATE google_account_tickets
+            SET status = 'ok',
+                result_username = :username,
+                error = NULL,
+                can_create = 0,
+                consumed = 1
+            WHERE ticket_hash = :ticket_hash
         """),
-        {"username": username, "ticket_hash": row["ticket_hash"]}
+        {
+            "username": username,
+            "ticket_hash": row["ticket_hash"]
+        }
     )
+
     db.session.commit()
-    PlayerLog(IPFromRequest(request), username, "Created new player through verified Google sign-in")
-    return jsonify({"username": username})
+
+    PlayerLog(
+        IPFromRequest(request),
+        username,
+        "Created new player through verified Google sign-in"
+    )
+
+    return jsonify({
+        "username": username
+    })
 
 @app.route("/account/google/status", methods=["POST"])
 def GoogleAccountStatus():
