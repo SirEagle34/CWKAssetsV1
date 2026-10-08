@@ -5955,7 +5955,7 @@ def GoogleAccountCreate():
     if not ticket:
         return jsonify({"error": "A valid Google sign-in ticket is required."}), 400
     now = int(time.time())
-    with db.engine.begin() as connection:
+    connection = db.session.connection()
         row = _google_ticket_row(connection, ticket)
         if not row or row["consumed"] or int(row["expires_at"]) < now:
             return jsonify({"error": "This Google sign-in request expired. Start again."}), 400
