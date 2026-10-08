@@ -917,15 +917,15 @@ private List<string> pvpLeaderBanlist = new List<string>()
 
         if (pvPData.OpponentPortraitData.ID == "Facebook")
         {
-            OpponentBadge.PopulateOtherPlayerData(pvPData.OpponentName, pvPData.OpponentPortrait, pvPData.OpponentLevel, pvPData.OpponentBestLevel, Singleton<CountryFlagManager>.Instance.TextureForCountryCode(Singleton<OnlinePvPManager>.Instance.GetOpponentCountryCode()));
+            OpponentBadge.PopulateOtherPlayerData(pvPData.OpponentName, pvPData.OpponentPortrait, pvPData.OpponentLevel, pvPData.OpponentBestLevel, Singleton<CountryFlagManager>.Instance.TextureForCountryCode(Singleton<OnlineExtremePvPManager>.Instance.GetOpponentCountryCode()));
         }
         else if (pvPData.OpponentPortraitData.ID == "Default")
         {
-            OpponentBadge.PopulateOtherPlayerData(pvPData.OpponentName, pvPData.OpponentLoadout.Leader.SelectedSkin.PortraitTexture, pvPData.OpponentLevel, pvPData.OpponentBestLevel, Singleton<CountryFlagManager>.Instance.TextureForCountryCode(Singleton<OnlinePvPManager>.Instance.GetOpponentCountryCode()));
+            OpponentBadge.PopulateOtherPlayerData(pvPData.OpponentName, pvPData.OpponentLoadout.Leader.SelectedSkin.PortraitTexture, pvPData.OpponentLevel, pvPData.OpponentBestLevel, Singleton<CountryFlagManager>.Instance.TextureForCountryCode(Singleton<OnlineExtremePvPManager>.Instance.GetOpponentCountryCode()));
         }
         else
         {
-            OpponentBadge.PopulateOtherPlayerData(pvPData.OpponentName, pvPData.OpponentPortraitData.Texture, pvPData.OpponentLevel, pvPData.OpponentBestLevel, Singleton<CountryFlagManager>.Instance.TextureForCountryCode(Singleton<OnlinePvPManager>.Instance.GetOpponentCountryCode()));
+            OpponentBadge.PopulateOtherPlayerData(pvPData.OpponentName, pvPData.OpponentPortraitData.Texture, pvPData.OpponentLevel, pvPData.OpponentBestLevel, Singleton<CountryFlagManager>.Instance.TextureForCountryCode(Singleton<OnlineExtremePvPManager>.Instance.GetOpponentCountryCode()));
         }
     }
 
@@ -1157,7 +1157,7 @@ private List<string> pvpLeaderBanlist = new List<string>()
             if (OpponentFoundTween == null || !OpponentFoundTween.AnyTweenPlaying()) mMatchStartCountdown -= Time.deltaTime;
             if (mMatchStartCountdown < 0f)
             {
-                BattleHistoryLocalSavesManager.Instance.CachedOpponentFlag = Singleton<OnlinePvPManager>.Instance.GetOpponentCountryCode();
+                BattleHistoryLocalSavesManager.Instance.CachedOpponentFlag = Singleton<OnlineExtremePvPManager>.Instance.GetOpponentCountryCode();
                 mMatchStartCountdown = -1f;
                 LoadBattleScene();
             }
@@ -1224,14 +1224,14 @@ private List<string> pvpLeaderBanlist = new List<string>()
         // 🔥 Friend bu screen'e hiç ait değil
         if (mMode == PvpMode.Friend)
         {
-            Singleton<MultiplayerMessageHandler>.Instance.SendLeaveGame("leave");
+            Singleton<MultiplayerExtremeMessageHandler>.Instance.SendLeaveGame("leave");
             return;
         }
 
         mActive = false;
         ClearBanVisuals();
 
-        Singleton<MultiplayerMessageHandler>.Instance.SendLeaveGame("leave");
+        Singleton<MultiplayerExtremeMessageHandler>.Instance.SendLeaveGame("leave");
         Singleton<FrontEndPIPController>.Instance.HideModelPortrait();
         SafePlay(HideTween);
 
