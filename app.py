@@ -5587,6 +5587,460 @@ def Time():
     }
     return jsonify(data)
 
+
+# ============================================================
+# Google account linking / sign-in
+#
+# Requires the explicit SQL migration:
+#   migrations/20261009_google_accounts.sql
+#
+# Environment:
+#   GOOGLE_CLIENT_ID
+#   GOOGLE_CLIENT_SECRET
+#   GOOGLE_REDIRECT_URI  (must exactly match the Google OAuth client)
+# ============================================================
+
+from urllib.request import Request as _GoogleRequest, urlopen as _google_urlopen
+from urllib.error import URLError as _GoogleURLError, HTTPError as _GoogleHTTPError
+from urllib.parse import urlencode as _google_urlencode
+from sqlalchemy import text as _google_sql_text
+
+_GOOGLE_TICKET_TTL = 300
+_GOOGLE_ALLOWED_MODES = {"link", "relink", "signin", "restore"}
+
+def _google_config():
+    return (
+        os.environ.get("GOOGLE_CLIENT_ID", "").strip(),
+        os.environ.get("GOOGLE_CLIENT_SECRET", "").strip(),
+        os.environ.get("GOOGLE_REDIRECT_URI", "").strip(),
+    )
+
+def _google_json_body():
+    payload = request.get_json(silent=True)
+    return payload if isinstance(payload, dict) else {}
+
+def _google_ticket_hash(ticket):
+    return hashlib.sha256(ticket.encode("utf-8")).hexdigest()
+
+def _google_db_ready():
+    try:
+        with db.engine.connect() as connection:
+            connection.execute(_google_sql_text("SELECT 1 FROM google_account_links LIMIT 1"))
+            connection.execute(_google_sql_text("SELECT 1 FROM google_account_tickets LIMIT 1"))
+        return True
+    except Exception:
+        app.logger.exception("Google account tables are missing; apply migrations/20261009_google_accounts.sql")
+        return False
+
+def _google_player_header():
+    username = (request.headers.get("Player-Id") or "").strip()
+    if not username or len(username) > 80:
+        return None
+    return username
+
+def _google_ticket_row(connection, ticket):
+    return connection.execute(
+        _google_sql_text("""
+            SELECT ticket_hash, mode, player_username, oauth_state, status,
+                   result_username, email, google_sub, error, can_create,
+                   expires_at, consumed
+            FROM google_account_tickets
+            WHERE ticket_hash = :ticket_hash
+        """),
+        {"ticket_hash": _google_ticket_hash(ticket)}
+    ).mappings().first()
+
+def _google_set_ticket_error(ticket_hash, message):
+    with db.engine.begin() as connection:
+        connection.execute(
+            _google_sql_text("""
+                UPDATE google_account_tickets
+                SET status = 'error', error = :error, can_create = 0
+                WHERE ticket_hash = :ticket_hash AND consumed = 0
+            """),
+            {"error": message[:240], "ticket_hash": ticket_hash}
+        )
+
+def _google_exchange_code(code):
+    client_id, client_secret, redirect_uri = _google_config()
+    if not client_id or not client_secret or not redirect_uri:
+        raise RuntimeError("Google OAuth server configuration is incomplete.")
+    form = _google_urlencode({
+        "code": code,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
+    }).encode("utf-8")
+    token_request = _GoogleRequest(
+        "https://oauth2.googleapis.com/token",
+        data=form,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with _google_urlopen(token_request, timeout=12) as response:
+        token_payload = json.loads(response.read().decode("utf-8"))
+    id_token = token_payload.get("id_token")
+    if not id_token:
+        raise RuntimeError("Google did not return an ID token.")
+
+    # Google validates the signature and token claims on this endpoint.
+    verify_url = "https://oauth2.googleapis.com/tokeninfo?" + _google_urlencode({"id_token": id_token})
+    verify_request = _GoogleRequest(verify_url, headers={"Accept": "application/json"})
+    with _google_urlopen(verify_request, timeout=12) as response:
+        identity = json.loads(response.read().decode("utf-8"))
+
+    if identity.get("aud") != client_id:
+        raise RuntimeError("Google token audience did not match this game.")
+    if identity.get("iss") not in ("accounts.google.com", "https://accounts.google.com"):
+        raise RuntimeError("Google token issuer was invalid.")
+    if not identity.get("sub"):
+        raise RuntimeError("Google identity did not include a stable subject.")
+    if str(identity.get("email_verified", "")).lower() != "true":
+        raise RuntimeError("The Google email address is not verified.")
+    return {
+        "sub": str(identity["sub"]),
+        "email": str(identity.get("email", ""))[:320],
+    }
+
+def _google_finish_identity(ticket_hash, google_sub, email):
+    now = int(time.time())
+    with db.engine.begin() as connection:
+        row = connection.execute(
+            _google_sql_text("""
+                SELECT mode, player_username, expires_at, consumed
+                FROM google_account_tickets
+                WHERE ticket_hash = :ticket_hash
+            """),
+            {"ticket_hash": ticket_hash}
+        ).mappings().first()
+        if not row or row["consumed"] or int(row["expires_at"]) < now:
+            return False, "This Google sign-in request expired. Please try again."
+
+        mode = row["mode"]
+        player_username = row["player_username"]
+
+        linked = connection.execute(
+            _google_sql_text("""
+                SELECT player_username FROM google_account_links
+                WHERE google_sub = :google_sub
+            """),
+            {"google_sub": google_sub}
+        ).mappings().first()
+
+        if mode in ("link", "relink"):
+            if not player_username:
+                return False, "The game account was not identified."
+            if linked and linked["player_username"] != player_username:
+                return False, "This Google account is already linked to another game account."
+            if not connection.execute(
+                _google_sql_text("SELECT username FROM player WHERE username = :username"),
+                {"username": player_username}
+            ).first():
+                return False, "The game account no longer exists."
+
+            if mode == "relink":
+                connection.execute(
+                    _google_sql_text("DELETE FROM google_account_links WHERE player_username = :username"),
+                    {"username": player_username}
+                )
+            connection.execute(
+                _google_sql_text("""
+                    INSERT INTO google_account_links (google_sub, player_username, email, linked_at)
+                    VALUES (:google_sub, :username, :email, :linked_at)
+                    ON CONFLICT(google_sub) DO UPDATE SET
+                        player_username = excluded.player_username,
+                        email = excluded.email,
+                        linked_at = excluded.linked_at
+                """),
+                {"google_sub": google_sub, "username": player_username, "email": email, "linked_at": now}
+            )
+            connection.execute(
+                _google_sql_text("""
+                    UPDATE google_account_tickets
+                    SET status = 'ok', result_username = :username, email = :email,
+                        google_sub = :google_sub, error = NULL, can_create = 0
+                    WHERE ticket_hash = :ticket_hash
+                """),
+                {"username": player_username, "email": email, "google_sub": google_sub, "ticket_hash": ticket_hash}
+            )
+            return True, None
+
+        if linked:
+            username = linked["player_username"]
+            connection.execute(
+                _google_sql_text("""
+                    UPDATE google_account_tickets
+                    SET status = 'ok', result_username = :username, email = :email,
+                        google_sub = :google_sub, error = NULL, can_create = 0
+                    WHERE ticket_hash = :ticket_hash
+                """),
+                {"username": username, "email": email, "google_sub": google_sub, "ticket_hash": ticket_hash}
+            )
+            return True, None
+
+        connection.execute(
+            _google_sql_text("""
+                UPDATE google_account_tickets
+                SET status = 'needs_create', email = :email, google_sub = :google_sub,
+                    error = 'No game account is linked to this Google account.',
+                    can_create = 1
+                WHERE ticket_hash = :ticket_hash
+            """),
+            {"email": email, "google_sub": google_sub, "ticket_hash": ticket_hash}
+        )
+        return True, None
+
+def _google_error_page(message, status=400):
+    safe = (message or "Google sign-in could not be completed.")
+    safe = safe.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return make_response(
+        "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Card Wars Kingdom</title></head><body style='font-family:system-ui;padding:2rem'>"
+        "<h2>Card Wars Kingdom</h2><p>" + safe +
+        "</p><p>You can return to the game.</p></body></html>",
+        status,
+        {"Content-Type": "text/html; charset=utf-8"},
+    )
+
+@app.route("/account/google/begin", methods=["POST"])
+def GoogleAccountBegin():
+    if not _google_db_ready():
+        return jsonify({"error": "Google account service is not configured. Apply the database migration first."}), 503
+    body = _google_json_body()
+    mode = str(body.get("mode", "")).lower().strip()
+    if mode not in _GOOGLE_ALLOWED_MODES:
+        return jsonify({"error": "Unsupported Google account operation."}), 400
+    if mode in ("link", "relink"):
+        username = _google_player_header()
+        if not username:
+            return jsonify({"error": "Player-Id header is required."}), 401
+        if Player.query.filter_by(username=username).first() is None:
+            return jsonify({"error": "Game account was not found."}), 404
+        if IsUserBanned(username, IPFromRequest(request)):
+            return jsonify({"error": "This game account is banned."}), 403
+    else:
+        username = None
+
+    client_id, client_secret, redirect_uri = _google_config()
+    if not client_id or not client_secret or not redirect_uri:
+        return jsonify({"error": "Google OAuth server configuration is incomplete."}), 503
+
+    ticket = secrets.token_urlsafe(32)
+    ticket_hash = _google_ticket_hash(ticket)
+    now = int(time.time())
+    with db.engine.begin() as connection:
+        connection.execute(
+            _google_sql_text("""
+                INSERT INTO google_account_tickets
+                    (ticket_hash, mode, player_username, oauth_state, status,
+                     created_at, expires_at, consumed, can_create)
+                VALUES (:ticket_hash, :mode, :username, :oauth_state, 'pending',
+                        :created_at, :expires_at, 0, 0)
+            """),
+            {
+                "ticket_hash": ticket_hash,
+                "mode": mode,
+                "username": username,
+                "oauth_state": secrets.token_urlsafe(32),
+                "created_at": now,
+                "expires_at": now + _GOOGLE_TICKET_TTL,
+            }
+        )
+        # Return the state only through the browser URL generation, never to the Unity client.
+        row = connection.execute(
+            _google_sql_text("SELECT oauth_state FROM google_account_tickets WHERE ticket_hash = :ticket_hash"),
+            {"ticket_hash": ticket_hash}
+        ).first()
+        oauth_state = row[0]
+
+    return jsonify({"ticket": ticket, "status": "pending"})
+
+@app.route("/account/google/start", methods=["GET"])
+def GoogleAccountStart():
+    ticket = (request.args.get("ticket") or "").strip()
+    if not ticket or not _google_db_ready():
+        return _google_error_page("This Google sign-in request is invalid or expired.")
+    now = int(time.time())
+    with db.engine.connect() as connection:
+        row = _google_ticket_row(connection, ticket)
+    if not row or row["consumed"] or int(row["expires_at"]) < now or row["status"] != "pending":
+        return _google_error_page("This Google sign-in request expired. Return to the game and try again.")
+    client_id, _, redirect_uri = _google_config()
+    if not client_id or not redirect_uri:
+        return _google_error_page("Google OAuth server configuration is incomplete.", 503)
+    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + _google_urlencode({
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email",
+        "state": row["oauth_state"],
+        "prompt": "select_account",
+    })
+    return redirect(auth_url, code=302)
+
+@app.route("/account/google/callback", methods=["GET"])
+def GoogleAccountCallback():
+    if request.args.get("error"):
+        return _google_error_page("Google sign-in was cancelled or denied.")
+    code = (request.args.get("code") or "").strip()
+    state = (request.args.get("state") or "").strip()
+    if not code or not state or not _google_db_ready():
+        return _google_error_page("Google returned an invalid sign-in response.")
+    with db.engine.connect() as connection:
+        row = connection.execute(
+            _google_sql_text("""
+                SELECT ticket_hash, expires_at, consumed
+                FROM google_account_tickets
+                WHERE oauth_state = :state
+            """),
+            {"state": state}
+        ).mappings().first()
+    if not row or row["consumed"] or int(row["expires_at"]) < int(time.time()):
+        return _google_error_page("This Google sign-in request expired. Return to the game and try again.")
+    try:
+        identity = _google_exchange_code(code)
+        ok, error = _google_finish_identity(row["ticket_hash"], identity["sub"], identity["email"])
+        if not ok:
+            _google_set_ticket_error(row["ticket_hash"], error or "Google sign-in failed.")
+            return _google_error_page(error or "Google sign-in failed.")
+    except (_GoogleHTTPError, _GoogleURLError, TimeoutError, ValueError, RuntimeError) as exc:
+        app.logger.warning("Google OAuth callback failed: %s", type(exc).__name__)
+        _google_set_ticket_error(row["ticket_hash"], "Google verification failed. Please try again.")
+        return _google_error_page("Google verification failed. Return to the game and try again.")
+    return _google_error_page("Google verification completed. Return to Card Wars Kingdom.", 200)
+
+@app.route("/account/google/poll", methods=["GET"])
+def GoogleAccountPoll():
+    ticket = (request.args.get("ticket") or "").strip()
+    if not ticket or not _google_db_ready():
+        return jsonify({"status": "error", "error": "Invalid or expired request.", "can_create": False}), 400
+    now = int(time.time())
+    with db.engine.begin() as connection:
+        row = _google_ticket_row(connection, ticket)
+        if not row:
+            return jsonify({"status": "error", "error": "Invalid or expired request.", "can_create": False}), 404
+        if int(row["expires_at"]) < now and not row["consumed"]:
+            connection.execute(
+                _google_sql_text("""
+                    UPDATE google_account_tickets
+                    SET status = 'error', error = 'This request expired.', can_create = 0
+                    WHERE ticket_hash = :ticket_hash AND status = 'pending'
+                """),
+                {"ticket_hash": row["ticket_hash"]}
+            )
+            row = _google_ticket_row(connection, ticket)
+    if row["status"] == "ok":
+        return jsonify({
+            "status": "ok",
+            "username": row["result_username"],
+            "email": row["email"] or "",
+            "already": False,
+        })
+    if row["status"] == "needs_create":
+        return jsonify({
+            "status": "error",
+            "error": row["error"] or "No game account is linked to this Google account.",
+            "can_create": True,
+        })
+    if row["status"] == "error":
+        return jsonify({"status": "error", "error": row["error"] or "Google sign-in failed.", "can_create": False})
+    return jsonify({"status": "pending"})
+
+@app.route("/account/google/create", methods=["POST"])
+def GoogleAccountCreate():
+    if not _google_db_ready():
+        return jsonify({"error": "Google account service is not configured."}), 503
+    ticket = str(_google_json_body().get("ticket", "")).strip()
+    if not ticket:
+        return jsonify({"error": "A valid Google sign-in ticket is required."}), 400
+    now = int(time.time())
+    with db.engine.begin() as connection:
+        row = _google_ticket_row(connection, ticket)
+        if not row or row["consumed"] or int(row["expires_at"]) < now:
+            return jsonify({"error": "This Google sign-in request expired. Start again."}), 400
+        if row["status"] != "needs_create" or not row["google_sub"]:
+            return jsonify({"error": "Google identity has not been verified for account creation."}), 400
+        existing_link = connection.execute(
+            _google_sql_text("SELECT player_username FROM google_account_links WHERE google_sub = :sub"),
+            {"sub": row["google_sub"]}
+        ).first()
+        if existing_link:
+            connection.execute(
+                _google_sql_text("""
+                    UPDATE google_account_tickets SET status='ok', result_username=:username,
+                        can_create=0, consumed=1 WHERE ticket_hash=:ticket_hash
+                """),
+                {"username": existing_link[0], "ticket_hash": row["ticket_hash"]}
+            )
+            return jsonify({"username": existing_link[0]})
+        # Generate a non-guessable, valid legacy username. No user-supplied username is trusted.
+        username = None
+        for _ in range(8):
+            candidate = "google_" + secrets.token_hex(8)
+            if not InvalidUsername(candidate) and Player.query.filter_by(username=candidate).first() is None:
+                username = candidate
+                break
+        if username is None:
+            return jsonify({"error": "Could not allocate a game account. Please try again."}), 500
+        player = Player(username=username)
+        db.session.add(player)
+        db.session.flush()
+        connection.execute(
+            _google_sql_text("""
+                INSERT INTO google_account_links (google_sub, player_username, email, linked_at)
+                VALUES (:sub, :username, :email, :linked_at)
+            """),
+            {"sub": row["google_sub"], "username": username, "email": row["email"] or "", "linked_at": now}
+        )
+        connection.execute(
+            _google_sql_text("""
+                UPDATE google_account_tickets SET status='ok', result_username=:username,
+                    error=NULL, can_create=0, consumed=1
+                WHERE ticket_hash=:ticket_hash
+            """),
+            {"username": username, "ticket_hash": row["ticket_hash"]}
+        )
+        db.session.commit()
+    PlayerLog(IPFromRequest(request), username, "Created new player through verified Google sign-in")
+    return jsonify({"username": username})
+
+@app.route("/account/google/status", methods=["POST"])
+def GoogleAccountStatus():
+    if not _google_db_ready():
+        return jsonify({"linked": False, "email": "", "reward": False, "relink": False, "error": "Google account service is not configured."}), 503
+    username = _google_player_header()
+    if not username:
+        return jsonify({"linked": False, "email": "", "reward": False, "relink": False}), 401
+    with db.engine.connect() as connection:
+        row = connection.execute(
+            _google_sql_text("""
+                SELECT email FROM google_account_links WHERE player_username = :username
+            """),
+            {"username": username}
+        ).first()
+    return jsonify({
+        "linked": row is not None,
+        "email": (row[0] or "") if row else "",
+        "reward": False,
+        "relink": row is not None,
+    })
+
+@app.route("/account/google/unlink", methods=["POST"])
+def GoogleAccountUnlink():
+    if not _google_db_ready():
+        return jsonify({"error": "Google account service is not configured."}), 503
+    username = _google_player_header()
+    if not username:
+        return jsonify({"error": "Player-Id header is required."}), 401
+    with db.engine.begin() as connection:
+        result = connection.execute(
+            _google_sql_text("DELETE FROM google_account_links WHERE player_username = :username"),
+            {"username": username}
+        )
+    return jsonify({"ok": True, "unlinked": result.rowcount > 0})
+
+
 @app.route("/account/preAuth/")
 def AccountPreAuth():
 	data = {
