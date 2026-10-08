@@ -593,10 +593,15 @@ public class DWGame : Singleton<DWGame>
 		}
 		dWBattleLaneObject.LaneCollider.size = size;
 		GameObject value = null;
-		Singleton<DWBattleLane>.Instance.CreaturePool.TryGetValue(creature, out value);
+		if (!Singleton<DWBattleLane>.Instance.CreaturePool.TryGetValue(creature, out value) || value == null)
+		{
+			Debug.LogWarning("[CreaturePool] MISSING: " + creature.Form?.ID + " -> BuildCreature()");
+			value = Singleton<DWBattleLane>.Instance.BuildCreature(creature);
+		}
+
 		if (value == null)
 		{
-			Debug.LogError("CreaturePool missing prefab for: " + creature.Form?.ID);
+			Debug.LogError("[CreaturePool] FAILED: " + creature.Form?.ID);
 			return;
 		}
 		value.transform.parent = dWBattleLaneObject.transform;
