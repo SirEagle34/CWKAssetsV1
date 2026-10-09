@@ -5104,13 +5104,9 @@ def MultiplayerRedeemCode():
     """
     Server-side redeem endpoint used by the Unity client.
 
-    Rewards are granted to Player.game on the server. The response
-    contains a summary for the Unity UI; deliver="server" prevents the client
-    from adding creature/card inventory entries a second time.
-        reason
-        fields
-        rewards
-        deliver = "now"
+    All configured rewards are granted to the player's saved game on the
+    server. The response contains a UI summary, while deliver="server"
+    prevents duplicate creature/card inventory grants on the client.
     """
 
     try:
