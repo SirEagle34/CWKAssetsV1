@@ -4577,21 +4577,9 @@ def GrantGiftCodeReward(player, gift):
                 "error": "INVALID_CREATURE_STAR_RATING"
             }
 
-        for _ in range(amount):
-
-            inventory.append({
-                "_T": "CR",
-                "ID": creature_id,
-                "UniqueID": int(next_uid),
-                "Xp": 0,
-                "Favorite": 0,
-                "Passive": 1,
-                "PassiveFeeds": 0,
-                "StarRating": star_rating
-            })
-
-            next_uid += 1
-
+        # Inventory items are added by the Unity client from the
+        # response (deliver="now"). Do not also append them here,
+        # otherwise the same reward can be granted twice.
         granted["creatures"].append({
             "id": creature_id,
             "amount": amount,
@@ -4641,19 +4629,9 @@ def GrantGiftCodeReward(player, gift):
                 "error": "INVALID_ACTION_CARD_AMOUNT"
             }
 
-        # ExCard inventory entries use the same
-        # UniqueID system as creature entries.
-        for _ in range(amount):
-
-            inventory.append({
-                "_T": "EX",
-                "ID": card_id,
-                "UniqueID": int(next_uid),
-                "Favorite": 0
-            })
-
-            next_uid += 1
-
+        # Inventory items are added by the Unity client from the
+        # response (deliver="now"). Do not also append them here,
+        # otherwise the same reward can be granted twice.
         granted["action_cards"].append({
             "id": card_id,
             "amount": amount
@@ -5444,14 +5422,20 @@ def MultiplayerRedeemCode():
                 "message",
                 ""
             ),
-            "fields": {},
+            "fields": {
+                # ApplyServerClaim expects absolute gem balances and an
+                # incremental coin amount ("gs").
+                "level1": int(json.loads(player.game).get("PaidHardCurrency", 0) or 0),
+                "level2": int(json.loads(player.game).get("FreeHardCurrency", 0) or 0),
+                "gs": coins
+            },
             "rewards": {
                 "gems": gems,
                 "coins": coins,
                 "creatures": creatures,
                 "cards": cards
             },
-            "deliver": "server"
+            "deliver": "now"
         }), 200
 
     except Exception as e:
