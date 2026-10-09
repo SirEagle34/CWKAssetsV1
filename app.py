@@ -5104,11 +5104,9 @@ def MultiplayerRedeemCode():
     """
     Server-side redeem endpoint used by the Unity client.
 
-    IMPORTANT:
-    The client applies the returned rewards locally through ApplyServerRedeem().
-    Therefore this endpoint MUST NOT modify Player.game/inventory itself.
-    It only validates/claims the code and returns the protocol expected by
-    the client:
+    Rewards are granted to Player.game on the server. The response
+    contains a summary for the Unity UI; deliver="server" prevents the client
+    from adding creature/card inventory entries a second time.
         reason
         fields
         rewards
@@ -5329,15 +5327,6 @@ def MultiplayerRedeemCode():
                     "error": "INVALID_CURRENCY_REWARD"
                 }), 400
 
-            # The supplied Unity ApplyServerRedeem() protocol supports
-            # gems, coins, creatures and cards. It does NOT apply
-            # PaidHardCurrency. Never silently discard that reward.
-            if paid_hard_currency != 0:
-                return jsonify({
-                    "success": False,
-                    "reason": "ERROR",
-                    "error": "UNSUPPORTED_PAID_HARD_CURRENCY"
-                }), 400
 
             creature_rewards = rewards_config.get(
                 "creatures",
@@ -5423,12 +5412,21 @@ def MultiplayerRedeemCode():
 
                 cards.extend([item_id] * amount)
 
-            # Claim is committed to the JSON store before the response is
-            # returned. The client will then add the returned rewards to
-            # its local PlayerSaveData exactly once.
+            # Apply every reward to the server-side saved game. The Unity
+            # client only displays the returned reward summary; setting
+            # deliver to "server" below prevents duplicate creature/card grants.
+            grant_result = GrantGiftCodeReward(player, gift)
+            if not grant_result.get("success"):
+                return jsonify({
+                    "success": False,
+                    "reason": "ERROR",
+                    "error": grant_result.get("error", "REWARD_GRANT_FAILED")
+                }), 400
+
+            db.session.commit()
+
             used_by.append(player_id_string)
             gift["used_by"] = used_by
-
             SaveGiftCodes(data)
 
         Log(
@@ -5457,7 +5455,7 @@ def MultiplayerRedeemCode():
                 "creatures": creatures,
                 "cards": cards
             },
-            "deliver": "now"
+            "deliver": "server"
         }), 200
 
     except Exception as e:
