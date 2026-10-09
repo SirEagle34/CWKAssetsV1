@@ -2722,6 +2722,82 @@ def Manifest():
 	with open("data/persist/manifest.json", "r") as f:
 		return f.read()
 
+@app.route("/persist/static/<string:digest>", methods=["GET"])
+def PersistStaticContentByDigest(digest):
+    """
+    Serve content-patcher files by their MD5 digest.
+
+    SQContentPatcher requests:
+        /persist/static/<manifest-entry.d>
+
+    The manifest maps each digest (d) to a logical content path (n).
+    Only files explicitly listed in the manifest are eligible to be served.
+    """
+    # Accept only a 32-character MD5 hex digest; avoids path-based requests.
+    if not re.fullmatch(r"[a-fA-F0-9]{32}", digest):
+        return make_response("Not found", 404)
+
+    manifest_path = os.path.join(app.root_path, "data", "persist", "manifest.json")
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as stream:
+            manifest = json.load(stream)
+    except (OSError, json.JSONDecodeError):
+        app.logger.exception("Unable to read content manifest")
+        return make_response("Content manifest unavailable", 500)
+
+    contents = manifest.get("contents", [])
+    if not isinstance(contents, list):
+        return make_response("Invalid content manifest", 500)
+
+    entry = next(
+        (
+            item for item in contents
+            if isinstance(item, dict)
+            and str(item.get("d", "")).lower() == digest.lower()
+            and isinstance(item.get("n"), str)
+        ),
+        None
+    )
+    if entry is None:
+        return make_response("Content digest not found in manifest", 404)
+
+    # Manifest names are logical paths relative to data/persist.
+    persist_root = os.path.realpath(os.path.join(app.root_path, "data", "persist"))
+    relative_name = entry["n"].replace("\\", "/").lstrip("/")
+    candidate = os.path.realpath(os.path.join(persist_root, relative_name))
+
+    # Prevent manifest paths from escaping data/persist.
+    if os.path.commonpath([persist_root, candidate]) != persist_root:
+        app.logger.warning("Rejected unsafe content path in manifest: %r", entry["n"])
+        return make_response("Invalid content path", 400)
+
+    if not os.path.isfile(candidate):
+        return make_response("Content file not found", 404)
+
+    # Verify the bytes against the manifest before serving.
+    try:
+        hasher = hashlib.md5()
+        with open(candidate, "rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                hasher.update(chunk)
+    except OSError:
+        app.logger.exception("Unable to read content file: %s", candidate)
+        return make_response("Content file unavailable", 500)
+
+    if not hmac.compare_digest(hasher.hexdigest().lower(), digest.lower()):
+        app.logger.error("Content MD5 mismatch for manifest entry: %s", entry["n"])
+        return make_response("Content hash mismatch", 500)
+
+    response = make_response(send_from_directory(
+        os.path.dirname(candidate),
+        os.path.basename(candidate),
+        conditional=True
+    ))
+    response.headers["Content-Type"] = "application/octet-stream"
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return response
+
+
 @app.route("/persist/static/Blueprints/<path:filename>", methods=['GET'])
 def get_blueprints(filename):
     file_path = os.path.join("data/persist/blueprints", filename)
