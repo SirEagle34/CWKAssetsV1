@@ -6354,26 +6354,12 @@ def get_hash_string(source_value, key):
 @app.route("/persist/user_action2/", methods=['POST'])
 def UserAction2():
 	try:
-		# Unity clients may send form-urlencoded data or JSON depending on build.
-		# Parse both formats instead of treating JSON as an empty query string.
-		clientData = {}
-		if request.is_json:
-			json_data = request.get_json(silent=True)
-			if isinstance(json_data, dict):
-				clientData.update(json_data)
-		if request.form:
-			clientData.update(request.form.to_dict(flat=True))
-		if not clientData:
-			raw_data = request.get_data(as_text=True)
-			parsed_data = parse_qs(raw_data, keep_blank_values=True)
-			clientData = {k: v[0] if len(v) == 1 else v for k, v in parsed_data.items()}
-
-		player_id = str(clientData.get("player_id", clientData.get("playerId", "")) or "").strip()
+		clientData = parse_qs(request.get_data(as_text=True), keep_blank_values=True)
+		clientData = {k: v[0] if len(v) == 1 else v for k, v in clientData.items()}
+		player_id = str(clientData.get("player_id", "") or "").strip()
 		if not player_id:
-			app.logger.warning("[user_action2] Missing player_id; content_type=%r body_prefix=%r", request.content_type, request.get_data(as_text=True)[:300])
 			return jsonify({"success": False, "error": "Missing player_id"}), 400
 		if IsUserBanned(player_id, IPFromRequest(request)):
-			app.logger.warning("[user_action2] Rejected banned player/IP: player_id=%r ip=%r", player_id, IPFromRequest(request))
 			return make_response("User is banned!", 400)
 		db_user = Player.query.filter_by(username=player_id).first()
 		if db_user is None:
@@ -6389,9 +6375,7 @@ def UserAction2():
 			return int(value)
 
 		try:
-			# Currency snapshots can be omitted by some event-only calls.
-			# Treat omitted snapshots as zero; still reject malformed numeric values.
-			paid, free = int_field("pd", 0), int_field("fr", 0)
+			paid, free = int_field("pd"), int_field("fr")
 			custom = int_field("cu", 0)
 			paid_delta, free_delta = int_field("dp", 0), int_field("df", 0)
 			custom_delta = int_field("dc", 0)
