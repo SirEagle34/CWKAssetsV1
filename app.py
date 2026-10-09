@@ -6405,14 +6405,11 @@ def UserAction2():
 						if not isinstance(save_data, dict):
 							fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
 						else:
-							try:
-								soft_balance = int(save_data.get("SoftCurrency", 0) or 0)
-							except (TypeError, ValueError):
-								soft_balance = 0
-							if soft_balance < price:
+							# Store purchases use FreeHardCurrency, not SoftCurrency.
+							if free < price:
 								fields["reason"] = "INSUFFICIENT_CURRENCY"
 							else:
-								fields["cc"], fields["cb"] = price, "SoftCurrency"
+								fields["level2"] = free - price
 
 			return jsonify({"success": True, "data": json.dumps({"fields": fields}, separators=(",", ":"))})
 
