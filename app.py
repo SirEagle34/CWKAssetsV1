@@ -6299,108 +6299,108 @@ def get_hash_string(source_value, key):
 
 @app.route("/persist/user_action2/", methods=['POST'])
 def UserAction2():
-	"""
-	Compatibility endpoint for PlayerSaveData. The Unity client expects
-	"data" to be a JSON-encoded string containing a "fields" dictionary.
-	"""
 	try:
 		clientData = parse_qs(request.get_data(as_text=True), keep_blank_values=True)
 		clientData = {k: v[0] if len(v) == 1 else v for k, v in clientData.items()}
-
 		player_id = str(clientData.get("player_id", "") or "").strip()
 		if not player_id:
 			return jsonify({"success": False, "error": "Missing player_id"}), 400
-
 		if IsUserBanned(player_id, IPFromRequest(request)):
 			return make_response("User is banned!", 400)
-
 		db_user = Player.query.filter_by(username=player_id).first()
 		if db_user is None:
 			return make_response("No player found!", 404)
-
 		UpdateLastOnline(player_id)
 
-		def read_int(key, default=None):
-			value = clientData.get(key, default)
+		def int_field(name, default=None):
+			value = clientData.get(name, default)
 			if value is None or str(value).strip() == "":
 				if default is None:
-					raise ValueError("Missing integer field: " + key)
+					raise ValueError("Missing " + name)
 				return int(default)
 			return int(value)
 
 		try:
-			paid = read_int("pd")
-			free = read_int("fr")
-			custom = read_int("cu", 0)
-			paid_delta = read_int("dp", 0)
-			free_delta = read_int("df", 0)
-			custom_delta = read_int("dc", 0)
-			soft_delta = read_int("ds", 0)
-			pvp_delta = read_int("dv", 0)
-			shard_delta = read_int("de", 0)
-			misc = read_int("misc", 0)
+			paid, free = int_field("pd"), int_field("fr")
+			custom = int_field("cu", 0)
+			paid_delta, free_delta = int_field("dp", 0), int_field("df", 0)
+			custom_delta = int_field("dc", 0)
+			soft_delta, pvp_delta, shard_delta = int_field("ds", 0), int_field("dv", 0), int_field("de", 0)
+			misc = int_field("misc", 0)
 		except (TypeError, ValueError):
 			return jsonify({"success": False, "error": "Invalid currency fields"}), 400
 
 		event_name = str(clientData.get("evt", "") or "").strip()
 		ctx = str(clientData.get("ctx", "") or "").strip()
-
-		# IMPORTANT: PlayerSaveData computes this handle with FRDPAR_KEY +
-		# player_id + misc. The previous endpoint used a different key and a
-		# hard-coded "650", which cannot validate against the Unity client.
 		handle_key = "5424493204pemhi3148ifmanseu4iksdf4_4" + player_id + str(misc)
-		handle = get_hash_string(player_id, handle_key)
-
 		fields = {
 			"level1": paid + paid_delta,
 			"level2": free + free_delta,
 			"level3": custom + custom_delta,
-			"gs": soft_delta,
-			"gf": free_delta,
-			"gv": pvp_delta,
-			"ge": shard_delta,
-			"reason": "OK",
-			"handle": handle,
+			"gs": soft_delta, "gf": free_delta, "gv": pvp_delta, "ge": shard_delta,
+			"reason": "OK", "handle": get_hash_string(player_id, handle_key)
 		}
 
-		# Purchase() requires fields.reason == "OK", plus cc/cb to deduct
-		# the correct currency. Its ctx format is kind:id:count.
 		if event_name.lower() == "purchase":
 			parts = ctx.split(":")
 			if len(parts) != 3:
 				fields["reason"] = "INVALID_PURCHASE"
 			else:
 				kind, item_id, count_text = parts
+				kind, item_id = kind.strip().lower(), item_id.strip()
 				try:
 					count = int(count_text)
 				except (TypeError, ValueError):
 					count = 0
 
-				if kind.strip().lower() not in ("leader", "hero") or not item_id.strip() or count != 1:
-					fields["reason"] = "UNSUPPORTED_PURCHASE"
-				else:
-					leader_file = os.path.join(app.root_path, "data", "persist", "blueprints", "db_Leaders.json")
+				catalogs = {
+					"creature": ("db_StoreBuyCreatures.json", ("CreatureID",)),
+					"creatures": ("db_StoreBuyCreatures.json", ("CreatureID",)),
+					"actioncard": ("db_StoreBuyActionCards.json", ("CardID",)),
+					"actioncards": ("db_StoreBuyActionCards.json", ("CardID",)),
+					"card": ("db_StoreBuyActionCards.json", ("CardID",)),
+					"excard": ("db_StoreBuyActionCards.json", ("CardID",)),
+					"cardback": ("db_StoreBuyCardBacks.json", ("CardBackID",)),
+					"cardbacks": ("db_StoreBuyCardBacks.json", ("CardBackID",)),
+					"evomaterial": ("db_StoreBuyEvoMaterials.json", ("EvoMaterialID",)),
+					"evomaterials": ("db_StoreBuyEvoMaterials.json", ("EvoMaterialID",)),
+					"evo": ("db_StoreBuyEvoMaterials.json", ("EvoMaterialID",))
+				}
+				item_data, price = None, 0
+				if not item_id or count < 1 or count > 99:
+					fields["reason"] = "INVALID_PURCHASE"
+				elif kind in ("leader", "hero"):
+					filename, match_keys = "db_Leaders.json", ()
+					path = os.path.join(app.root_path, "data", "persist", "blueprints", filename)
 					try:
-						with open(leader_file, "r", encoding="utf-8") as leader_stream:
-							leaders = json.load(leader_stream)
-						leader_data = next(
-							(item for item in leaders
-							 if isinstance(item, dict) and str(item.get("ID", "")) == item_id.strip()),
-							None
-						)
-						price = int(float(leader_data.get("BuyCost", 0) or 0)) if leader_data else 0
+						with open(path, "r", encoding="utf-8") as stream:
+							rows = json.load(stream)
+							item_data = next((row for row in rows if isinstance(row, dict) and str(row.get("ID", "")) == item_id), None)
+						price = int(float(item_data.get("BuyCost", 0) or 0)) if item_data else 0
 					except (OSError, ValueError, TypeError, json.JSONDecodeError):
-						app.logger.exception("[user_action2] Could not load leader purchase data")
-						leader_data = None
-						price = 0
+						app.logger.exception("[user_action2] Leader catalog read failed")
+					if count != 1:
+						fields["reason"] = "INVALID_PURCHASE"
+				elif kind in catalogs:
+					filename, match_keys = catalogs[kind]
+					path = os.path.join(app.root_path, "data", "persist", "blueprints", filename)
+					try:
+						with open(path, "r", encoding="utf-8") as stream:
+							rows = json.load(stream)
+							item_data = next((row for row in rows if isinstance(row, dict) and (str(row.get("ID", "")) == item_id or any(str(row.get(key, "")) == item_id for key in match_keys))), None)
+						price = int(float(item_data.get("BuyCost", 0) or 0)) if item_data else 0
+					except (OSError, ValueError, TypeError, json.JSONDecodeError):
+						app.logger.exception("[user_action2] Store catalog read failed: %s", filename)
+				else:
+					fields["reason"] = "UNSUPPORTED_PURCHASE"
 
-					if leader_data is None:
+				if fields["reason"] == "OK":
+					if item_data is None:
 						fields["reason"] = "ITEM_NOT_FOUND"
 					elif price <= 0:
 						fields["reason"] = "ITEM_NOT_PURCHASABLE"
 					else:
-						# SoftCurrency is stored in the player's persisted game save.
-						# Do not approve the purchase if that save cannot be read.
+						price *= count
 						save_data = DecryptGameData(db_user.game)
 						if not isinstance(save_data, dict):
 							fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
@@ -6412,18 +6412,13 @@ def UserAction2():
 							if soft_balance < price:
 								fields["reason"] = "INSUFFICIENT_CURRENCY"
 							else:
-								fields["cc"] = price
-								fields["cb"] = "SoftCurrency"
+								fields["cc"], fields["cb"] = price, "SoftCurrency"
 
-			fields_json = json.dumps({"fields": fields}, separators=(",", ":"))
-			return jsonify({"success": True, "data": fields_json})
+			return jsonify({"success": True, "data": json.dumps({"fields": fields}, separators=(",", ":"))})
 
-		# Empty evt is intentional for PlayerSaveData.User_Action(): it still
-		# expects level fields and a valid handle. Do not treat key presence
-		# and non-empty event text as the same thing.
-		fields_json = json.dumps({"fields": fields}, separators=(",", ":"))
+		# Even an empty evt is meaningful to PlayerSaveData.User_Action().
 		PlayerLog(IPFromRequest(request), player_id, "Updated player data")
-		return jsonify({"success": True, "data": fields_json})
+		return jsonify({"success": True, "data": json.dumps({"fields": fields}, separators=(",", ":"))})
 	except Exception:
 		app.logger.exception("[user_action2] Unexpected server error")
 		return jsonify({"success": False, "error": "Internal server error"}), 500
