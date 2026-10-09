@@ -6299,56 +6299,131 @@ def get_hash_string(source_value, key):
 
 @app.route("/persist/user_action2/", methods=['POST'])
 def UserAction2():
+	"""
+	Compatibility endpoint for PlayerSaveData. The Unity client expects
+	"data" to be a JSON-encoded string containing a "fields" dictionary.
+	"""
 	try:
 		clientData = parse_qs(request.get_data(as_text=True), keep_blank_values=True)
 		clientData = {k: v[0] if len(v) == 1 else v for k, v in clientData.items()}
 
-		player_id = str(clientData.get("player_id", "")).strip()
+		player_id = str(clientData.get("player_id", "") or "").strip()
 		if not player_id:
 			return jsonify({"success": False, "error": "Missing player_id"}), 400
 
 		if IsUserBanned(player_id, IPFromRequest(request)):
 			return make_response("User is banned!", 400)
 
+		db_user = Player.query.filter_by(username=player_id).first()
+		if db_user is None:
+			return make_response("No player found!", 404)
+
 		UpdateLastOnline(player_id)
 
-		# SQServer.cs always includes the evt key. Only process an event when
-		# the value itself is non-empty.
+		def read_int(key, default=None):
+			value = clientData.get(key, default)
+			if value is None or str(value).strip() == "":
+				if default is None:
+					raise ValueError("Missing integer field: " + key)
+				return int(default)
+			return int(value)
+
+		try:
+			paid = read_int("pd")
+			free = read_int("fr")
+			custom = read_int("cu", 0)
+			paid_delta = read_int("dp", 0)
+			free_delta = read_int("df", 0)
+			custom_delta = read_int("dc", 0)
+			soft_delta = read_int("ds", 0)
+			pvp_delta = read_int("dv", 0)
+			shard_delta = read_int("de", 0)
+			misc = read_int("misc", 0)
+		except (TypeError, ValueError):
+			return jsonify({"success": False, "error": "Invalid currency fields"}), 400
+
 		event_name = str(clientData.get("evt", "") or "").strip()
-		if event_name:
-			db_user = Player.query.filter_by(username=player_id).first()
-			if db_user is None:
-				return make_response("No player found!", 404)
+		ctx = str(clientData.get("ctx", "") or "").strip()
 
-			try:
-				free_hard_currency = int(clientData.get("fr", ""))
-				delta = int(clientData.get("df", ""))
-			except (TypeError, ValueError):
-				app.logger.warning(
-					"[user_action2] Invalid fr/df values for player_id=%s event=%s",
-					player_id, event_name
-				)
-				return jsonify({"success": False, "error": "Invalid currency values"}), 400
+		# IMPORTANT: PlayerSaveData computes this handle with FRDPAR_KEY +
+		# player_id + misc. The previous endpoint used a different key and a
+		# hard-coded "650", which cannot validate against the Unity client.
+		handle_key = "5424493204pemhi3148ifmanseu4iksdf4_4" + player_id + str(misc)
+		handle = get_hash_string(player_id, handle_key)
 
-			final_amount = free_hard_currency + delta
-			PlayerLog(IPFromRequest(request), player_id, "Updated player data")
+		fields = {
+			"level1": paid + paid_delta,
+			"level2": free + free_delta,
+			"level3": custom + custom_delta,
+			"gs": soft_delta,
+			"gf": free_delta,
+			"gv": pvp_delta,
+			"ge": shard_delta,
+			"reason": "OK",
+			"handle": handle,
+		}
 
-			key = "5424498w34tiowhtgoae0tu4iksdf4_4" + player_id + "650"
-			handle = get_hash_string(player_id, key)
+		# Purchase() requires fields.reason == "OK", plus cc/cb to deduct
+		# the correct currency. Its ctx format is kind:id:count.
+		if event_name.lower() == "purchase":
+			parts = ctx.split(":")
+			if len(parts) != 3:
+				fields["reason"] = "INVALID_PURCHASE"
+			else:
+				kind, item_id, count_text = parts
+				try:
+					count = int(count_text)
+				except (TypeError, ValueError):
+					count = 0
 
-			# Keep the legacy response schema expected by the Unity client:
-			# data is a JSON-encoded string containing fields.level2 and fields.handle.
-			data = {
-				"success": True,
-				"data": json.dumps(
-					{"fields": {"level2": final_amount, "handle": handle}},
-					separators=(",", ":")
-				),
-			}
-		else:
-			data = {"success": True}
+				if kind.strip().lower() not in ("leader", "hero") or not item_id.strip() or count != 1:
+					fields["reason"] = "UNSUPPORTED_PURCHASE"
+				else:
+					leader_file = os.path.join(app.root_path, "data", "persist", "blueprints", "db_Leaders.json")
+					try:
+						with open(leader_file, "r", encoding="utf-8") as leader_stream:
+							leaders = json.load(leader_stream)
+						leader_data = next(
+							(item for item in leaders
+							 if isinstance(item, dict) and str(item.get("ID", "")) == item_id.strip()),
+							None
+						)
+						price = int(float(leader_data.get("BuyCost", 0) or 0)) if leader_data else 0
+					except (OSError, ValueError, TypeError, json.JSONDecodeError):
+						app.logger.exception("[user_action2] Could not load leader purchase data")
+						leader_data = None
+						price = 0
 
-		return jsonify(data)
+					if leader_data is None:
+						fields["reason"] = "ITEM_NOT_FOUND"
+					elif price <= 0:
+						fields["reason"] = "ITEM_NOT_PURCHASABLE"
+					else:
+						# SoftCurrency is stored in the player's persisted game save.
+						# Do not approve the purchase if that save cannot be read.
+						save_data = DecryptGameData(db_user.game)
+						if not isinstance(save_data, dict):
+							fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
+						else:
+							try:
+								soft_balance = int(save_data.get("SoftCurrency", 0) or 0)
+							except (TypeError, ValueError):
+								soft_balance = 0
+							if soft_balance < price:
+								fields["reason"] = "INSUFFICIENT_CURRENCY"
+							else:
+								fields["cc"] = price
+								fields["cb"] = "SoftCurrency"
+
+			fields_json = json.dumps({"fields": fields}, separators=(",", ":"))
+			return jsonify({"success": True, "data": fields_json})
+
+		# Empty evt is intentional for PlayerSaveData.User_Action(): it still
+		# expects level fields and a valid handle. Do not treat key presence
+		# and non-empty event text as the same thing.
+		fields_json = json.dumps({"fields": fields}, separators=(",", ":"))
+		PlayerLog(IPFromRequest(request), player_id, "Updated player data")
+		return jsonify({"success": True, "data": fields_json})
 	except Exception:
 		app.logger.exception("[user_action2] Unexpected server error")
 		return jsonify({"success": False, "error": "Internal server error"}), 500
