@@ -2717,35 +2717,10 @@ class MonthlyStorePurchase(db.Model):
 def Index():
 	return "200 App server running"
 
-# SQContentPatcher content storage.
-# Files in this directory must be named with the digest used in manifest.json.
-SQ_CONTENT_DIR = os.path.join(app.root_path, "data", "persist", "content")
-os.makedirs(SQ_CONTENT_DIR, exist_ok=True)
-
-
 @app.route("/persist/static/manifest.json")
 def Manifest():
-	manifest_path = os.path.join(app.root_path, "data", "persist", "manifest.json")
-	if not os.path.isfile(manifest_path):
-		return make_response("Content manifest not found", 404)
-	return send_from_directory(os.path.dirname(manifest_path), os.path.basename(manifest_path),
-						   mimetype="application/json")
-
-
-@app.route("/persist/content/<path:digest>")
-def PersistContent(digest):
-	# The client requests content by digest, not by an arbitrary filesystem path.
-	if not digest or digest in (".", "..") or "/" in digest or "\\" in digest:
-		return make_response("Invalid content digest", 400)
-
-	if not os.path.isdir(SQ_CONTENT_DIR):
-		return make_response("Content directory not found", 404)
-
-	content_path = os.path.join(SQ_CONTENT_DIR, digest)
-	if not os.path.isfile(content_path):
-		return make_response("Content not found", 404)
-
-	return send_from_directory(SQ_CONTENT_DIR, digest, conditional=True)
+	with open("data/persist/manifest.json", "r") as f:
+		return f.read()
 
 @app.route("/persist/static/Blueprints/<path:filename>", methods=['GET'])
 def get_blueprints(filename):
