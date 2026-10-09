@@ -27,6 +27,8 @@ from typing import Optional
 # Third-party library imports
 import schedule
 
+import secret as _secret_module
+
 from secret import (
     SMTP_HOST,
     SMTP_PORT,
@@ -5663,11 +5665,25 @@ _GOOGLE_TICKET_TTL = 300
 _GOOGLE_ALLOWED_MODES = {"link", "relink", "signin", "restore"}
 
 def _google_config():
-    return (
-        os.environ.get("GOOGLE_CLIENT_ID", "").strip(),
-        os.environ.get("GOOGLE_CLIENT_SECRET", "").strip(),
-        os.environ.get("GOOGLE_REDIRECT_URI", "").strip(),
+    """
+    Read OAuth settings from PythonAnywhere environment variables first,
+    then fall back to the private secret.py module used by this deployment.
+    The redirect URI is fixed to this app's public callback if not configured.
+    """
+    client_id = (
+        os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+        or str(getattr(_secret_module, "GOOGLE_CLIENT_ID", "") or "").strip()
     )
+    client_secret = (
+        os.environ.get("GOOGLE_CLIENT_SECRET", "").strip()
+        or str(getattr(_secret_module, "GOOGLE_CLIENT_SECRET", "") or "").strip()
+    )
+    redirect_uri = (
+        os.environ.get("GOOGLE_REDIRECT_URI", "").strip()
+        or str(getattr(_secret_module, "GOOGLE_REDIRECT_URI", "") or "").strip()
+        or "https://cardwarskingdomepicdarkmagic.pythonanywhere.com/account/google/callback"
+    )
+    return client_id, client_secret, redirect_uri
 
 def _google_json_body():
     payload = request.get_json(silent=True)
@@ -5933,8 +5949,19 @@ def GoogleAccountBegin():
         username = None
 
     client_id, client_secret, redirect_uri = _google_config()
-    if not client_id or not client_secret or not redirect_uri:
-        return jsonify({"error": "Google OAuth server configuration is incomplete."}), 503
+    missing = []
+    if not client_id:
+        missing.append("GOOGLE_CLIENT_ID")
+    if not client_secret:
+        missing.append("GOOGLE_CLIENT_SECRET")
+    if not redirect_uri:
+        missing.append("GOOGLE_REDIRECT_URI")
+    if missing:
+        app.logger.error("Google OAuth configuration missing: %s", ", ".join(missing))
+        return jsonify({
+            "error": "Google OAuth server configuration is incomplete.",
+            "missing": missing
+        }), 503
 
     ticket = secrets.token_urlsafe(32)
     ticket_hash = _google_ticket_hash(ticket)
