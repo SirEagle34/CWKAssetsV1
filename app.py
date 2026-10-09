@@ -6299,40 +6299,59 @@ def get_hash_string(source_value, key):
 
 @app.route("/persist/user_action2/", methods=['POST'])
 def UserAction2():
-	clientData = parse_qs(request.get_data().decode('utf-8'))
-	clientData = {k: v[0] if len(v) == 1 else v for k, v in clientData.items()}
+	try:
+		clientData = parse_qs(request.get_data(as_text=True), keep_blank_values=True)
+		clientData = {k: v[0] if len(v) == 1 else v for k, v in clientData.items()}
 
-	if IsUserBanned(clientData["player_id"], IPFromRequest(request)):
-		return make_response("User is banned!", 400)
+		player_id = str(clientData.get("player_id", "")).strip()
+		if not player_id:
+			return jsonify({"success": False, "error": "Missing player_id"}), 400
 
-	UpdateLastOnline(clientData["player_id"])
+		if IsUserBanned(player_id, IPFromRequest(request)):
+			return make_response("User is banned!", 400)
 
-	#Check if an event was sent
-	if "evt" in clientData:
-		db_user = Player.query.filter_by(username=clientData["player_id"]).first()
-		if db_user is None:
-			return make_response("No player found!", 404)
+		UpdateLastOnline(player_id)
 
-		FreeHardCurrency = int(clientData["fr"])
-		df = int(clientData["df"])
+		# SQServer.cs always includes the evt key. Only process an event when
+		# the value itself is non-empty.
+		event_name = str(clientData.get("evt", "") or "").strip()
+		if event_name:
+			db_user = Player.query.filter_by(username=player_id).first()
+			if db_user is None:
+				return make_response("No player found!", 404)
 
-		finalamount = FreeHardCurrency + df
+			try:
+				free_hard_currency = int(clientData.get("fr", ""))
+				delta = int(clientData.get("df", ""))
+			except (TypeError, ValueError):
+				app.logger.warning(
+					"[user_action2] Invalid fr/df values for player_id=%s event=%s",
+					player_id, event_name
+				)
+				return jsonify({"success": False, "error": "Invalid currency values"}), 400
 
-		PlayerLog(IPFromRequest(request), clientData["player_id"], "Updated player data")
+			final_amount = free_hard_currency + delta
+			PlayerLog(IPFromRequest(request), player_id, "Updated player data")
 
-		key = "5424498w34tiowhtgoae0tu4iksdf4_4" + clientData["player_id"] + "650"
-		handle = get_hash_string(clientData["player_id"], key)
+			key = "5424498w34tiowhtgoae0tu4iksdf4_4" + player_id + "650"
+			handle = get_hash_string(player_id, key)
 
-		data = {
-			"success": True,
-			"data": "{\"fields\": {\"level2\": " + str(finalamount) +  ", \"handle\": \"" + handle + "\"}}",
-		}
-	else:
-		data = {
-			"success": True,
-		}
+			# Keep the legacy response schema expected by the Unity client:
+			# data is a JSON-encoded string containing fields.level2 and fields.handle.
+			data = {
+				"success": True,
+				"data": json.dumps(
+					{"fields": {"level2": final_amount, "handle": handle}},
+					separators=(",", ":")
+				),
+			}
+		else:
+			data = {"success": True}
 
-	return jsonify(data)
+		return jsonify(data)
+	except Exception:
+		app.logger.exception("[user_action2] Unexpected server error")
+		return jsonify({"success": False, "error": "Internal server error"}), 500
 
 def InvalidUsername(username):
 	username = username.lower()
