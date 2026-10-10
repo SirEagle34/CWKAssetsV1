@@ -273,18 +273,40 @@ public class SQServer
 		tfServer.PostToJSON(SQSettings.SERVER_URL + "multiplayer/update_player/", dictionary, callback);
 	}
 
-	public void RedeemcodeCheck(string redeemcode, string version, string subject, string message, DateTime start_date, DateTime end_date, int soft_currency, TFServer.JsonResponseHandler callback)
+	public void RedeemcodeCheck(
+		string redeemcode,
+		string version,
+		string subject,
+		string message,
+		DateTime start_date,
+		DateTime end_date,
+		int soft_currency,
+		int hard_currency,
+		TFServer.JsonResponseHandler callback)
 	{
 		Dictionary<string, object> dictionary = new Dictionary<string, object>();
+
 		dictionary["redeemcode"] = redeemcode;
 		dictionary["version"] = 0;
 		dictionary["subject"] = subject;
 		dictionary["message"] = message;
 		dictionary["start_date"] = start_date.ToString("u");
 		dictionary["end_date"] = end_date.ToString("u");
+
 		dictionary["soft_currency"] = soft_currency;
-		dictionary["signature"] = SignDictionary(dictionary, nonce, "xc0u18^g0!ac3k%0+2vgglmnr1)x^!o(n6@$m3t^(7l!(#kv!-");
-		tfServer.PostToJSON(SQSettings.SERVER_URL + "multiplayer/redeemcodeDW/", dictionary, callback);
+		dictionary["free_hard_currency"] = hard_currency;
+
+		dictionary["signature"] = SignDictionary(
+			dictionary,
+			nonce,
+			"xc0u18^g0!ac3k%0+2vgglmnr1)x^!o(n6@$m3t^(7l!(#kv!-"
+		);
+
+		tfServer.PostToJSON(
+			SQSettings.SERVER_URL + "multiplayer/redeemcodeDW/",
+			dictionary,
+			callback
+		);
 	}
 
 	public void MultiplayerExtendedRecord(string playerId, TFServer.JsonResponseHandler callback)
