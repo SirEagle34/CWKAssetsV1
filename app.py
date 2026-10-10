@@ -2447,11 +2447,163 @@ class Player(db.Model):
 	anonymoushelpcount = db.Column(db.Integer, nullable=True, default=0)
 	devicename = db.Column(db.String(128), nullable=True)
 
+	name_change_count = db.Column(db.Integer, nullable=False, default=0)
+
 	def as_dict(self):
 		return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
+
+
+def MigratePlayerNameChangeCount():
+    """Add the persistent name-change counter without deleting player data."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(db.engine)
+    if "player" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("player")}
+    if "name_change_count" not in columns:
+        with db.engine.begin() as connection:
+            connection.execute(text(
+                "ALTER TABLE player ADD COLUMN name_change_count INTEGER NOT NULL DEFAULT 0"
+            ))
+        print("[Player Migration] Added 'name_change_count'.")
+
+
+def _encode_game_save_with_name(game_text, save_data):
+    """Preserve the existing query prefix while replacing only the compressed save payload."""
+    index = game_text.find("&data=")
+    if index < 0:
+        raise ValueError("Game save does not contain '&data='")
+
+    payload = json.dumps(save_data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    compressed = gzip.compress(payload, mtime=0)
+    encoded = base64.b64encode(compressed).decode("ascii")
+    return game_text[:index + 6] + encoded
+
+
+@app.route("/persist/multiplayer_name_change/", methods=["POST"])
+def PersistMultiplayerNameChange():
+    """
+    Change MultiplayerPlayerName without replacing the player's save.
+    POST form fields: player_id, name.
+    First non-empty name change is free; later non-empty changes cost 4500
+    FreeHardCurrency. Setting the name to an empty string is always free and
+    does not consume the free change.
+    """
+    try:
+        form = parse_qs(request.get_data(as_text=True), keep_blank_values=True)
+        form = {key: values[0] if len(values) == 1 else values for key, values in form.items()}
+
+        player_id = str(form.get("player_id", "") or "").strip()
+        if not player_id:
+            return jsonify({"success": False, "error": "MISSING_PLAYER_ID"}), 400
+
+        # Do not strip away the special empty-name request; whitespace-only names become empty.
+        raw_name = form.get("name", "")
+        if not isinstance(raw_name, str):
+            return jsonify({"success": False, "error": "INVALID_NAME"}), 400
+        new_name = raw_name.strip()
+        if len(new_name) > 128:
+            return jsonify({"success": False, "error": "NAME_TOO_LONG"}), 400
+
+        if IsUserBanned(player_id, IPFromRequest(request)):
+            return make_response("User is banned!", 400)
+
+        player = Player.query.filter_by(username=player_id).with_for_update().first()
+        if player is None:
+            return jsonify({"success": False, "error": "PLAYER_NOT_FOUND"}), 404
+
+        game_text = player.game
+        if isinstance(game_text, bytes):
+            game_text = game_text.decode("utf-8", errors="strict")
+        if not isinstance(game_text, str) or not game_text:
+            return jsonify({"success": False, "error": "PLAYER_SAVE_UNAVAILABLE"}), 400
+
+        marker = game_text.find("&data=")
+        if marker < 0:
+            return jsonify({"success": False, "error": "INVALID_PLAYER_SAVE"}), 400
+
+        try:
+            encoded = game_text[marker + 6:]
+            decoded_bytes = gzip.decompress(base64.b64decode(encoded, validate=True))
+            save_data = json.loads(decoded_bytes.decode("utf-8"))
+        except Exception:
+            app.logger.exception("[multiplayer_name_change] Could not decode save for %s", player_id)
+            return jsonify({"success": False, "error": "INVALID_PLAYER_SAVE"}), 400
+
+        if not isinstance(save_data, dict):
+            return jsonify({"success": False, "error": "INVALID_PLAYER_SAVE"}), 400
+
+        current_name = save_data.get("MultiplayerPlayerName", "")
+        current_name = current_name if isinstance(current_name, str) else str(current_name or "")
+        if current_name == new_name:
+            return jsonify({
+                "success": True,
+                "changed": False,
+                "name": new_name,
+                "cost": 0,
+                "free_hard_currency": int(save_data.get("FreeHardCurrency", 0) or 0),
+                "name_change_count": int(player.name_change_count or 0)
+            }), 200
+
+        count = max(0, int(player.name_change_count or 0))
+        cost = 0 if not new_name or count == 0 else 4500
+
+        try:
+            free_currency = int(save_data.get("FreeHardCurrency", 0) or 0)
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "error": "INVALID_CURRENCY"}), 400
+
+        if free_currency < cost:
+            return jsonify({
+                "success": False,
+                "error": "INSUFFICIENT_FREE_HARD_CURRENCY",
+                "required": cost,
+                "free_hard_currency": free_currency
+            }), 400
+
+        # Change only the name and the required currency fields; retain all other save data.
+        save_data["MultiplayerPlayerName"] = new_name
+        if cost:
+            save_data["FreeHardCurrency"] = free_currency - cost
+
+        try:
+            updated_game = _encode_game_save_with_name(game_text, save_data)
+            player.game = updated_game
+            player.multiplayer_name = new_name
+            # Empty names are always free and do not consume the free non-empty change.
+            if new_name:
+                player.name_change_count = count + 1
+            player.last_online = int(time.time())
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("[multiplayer_name_change] Failed to save name for %s", player_id)
+            return jsonify({"success": False, "error": "SAVE_FAILED"}), 500
+
+        Log(
+            "player",
+            f"Player {player_id} changed multiplayer name "
+            f"(empty={not bool(new_name)}, cost={cost})"
+        )
+
+        return jsonify({
+            "success": True,
+            "changed": True,
+            "name": new_name,
+            "cost": cost,
+            "free_hard_currency": free_currency - cost,
+            "name_change_count": int(player.name_change_count or 0)
+        }), 200
+
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("[multiplayer_name_change] Unexpected server error")
+        return jsonify({"success": False, "error": "INTERNAL_SERVER_ERROR"}), 500
 
 
 class CalendarClaim(db.Model):
@@ -7230,6 +7382,7 @@ with app.app_context():
         db.create_all()
         MigrateAdminSecurity()
         MigrateBanExpiration()
+        MigratePlayerNameChangeCount()
         _ensure_google_account_tables()
 
 
