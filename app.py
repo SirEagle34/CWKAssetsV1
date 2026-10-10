@@ -2551,7 +2551,7 @@ def PersistMultiplayerNameChange():
             }), 200
 
         count = max(0, int(player.name_change_count or 0))
-        cost = 0 if not new_name or count == 0 else 4500
+        cost = 0 if not new_name or not current_name or count == 0 else 4500
 
         try:
             free_currency = int(save_data.get("FreeHardCurrency", 0) or 0)
