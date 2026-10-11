@@ -24,12 +24,12 @@
 <div class="editor-panel">
   <div class="row g-3">
     <div class="col-md-6">
-      <label class="form-label" for="local_name_key">Local Name Key</label>
+      <label class="form-label" for="local_name_key">{{ "Action Card Name Key" if dataset == "action_cards" else "Creature Name Key" }}</label>
       <input class="form-control font-monospace" id="local_name_key" value="{{ selected_name_key }}" readonly>
-      <div class="form-text">Blueprint içindeki Name alanından otomatik alınır.</div>
+      <div class="form-text">JSON içindeki Name anahtarı, EN_Sheet1 yerelleştirme dosyasından çözülür.</div>
     </div>
     <div class="col-md-6">
-      <label class="form-label" for="localized_name">English display name · EN sheet</label>
+      <label class="form-label" for="localized_name">English Name · EN_Sheet1</label>
       <input class="form-control" id="localized_name" value="{{ selected_localized_name }}" readonly>
       <div class="form-text">Anahtar <code>!!CoolDog_Awaken_NAME</code> ise EN_Sheet1.txt içindeki karşılığı gösterilir.</div>
     </div>
