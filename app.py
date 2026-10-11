@@ -2533,14 +2533,13 @@ def PersistMultiplayerNameChange():
         if player is None:
             return jsonify({"success": False, "error": "PLAYER_NOT_FOUND"}), 404
 
-        # Apply the same device binding used by PUT /persist/<id>/game.
+        # Device names are not an authentication factor. Do not reject a
+        # multiplayer-name change only because the device label changed.
+        # Keep the stored device binding untouched; account authentication
+        # must be enforced by the game's account/login flow.
         device_name = request.headers.get("X-Nick-Description", "")
         if player.devicename is None or player.devicename == b"" or player.devicename == "":
             player.devicename = device_name
-        elif not hmac.compare_digest(str(player.devicename), device_name):
-            db.session.rollback()
-            Log("security", f"Rejected multiplayer-name change with mismatched device name for {username}")
-            return jsonify({"success": False, "error": "DEVICE_MISMATCH"}), 403
 
         game_text = player.game
         if isinstance(game_text, bytes):
