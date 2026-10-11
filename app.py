@@ -7698,8 +7698,14 @@ def BalancerLanguageData():
                         raise ValueError("Key was not found or is duplicated; file was not changed.")
                     targets[0].text = edited_value
                     _balancer_write_language_file(filename, tree)
+                    # Any translation edit invalidates the previous approval and requires review again.
+                    language = next((item for item in manifest["languages"] if item["file"] == filename), None)
+                    if language and language["status"] == "approved":
+                        language["status"] = "pending"
+                        _balancer_write_language_manifest(manifest)
+                        manifest = _balancer_language_manifest()
                     Log("balancer", account.username + " edited language key " + selected_key + " in " + filename)
-                    success = "Translation saved. The first-edit .balancer.bak backup is preserved."
+                    success = "Translation saved. The language is pending review if it was previously approved. The first-edit .balancer.bak backup is preserved."
                 except (OSError, ValueError, ET.ParseError) as exc:
                     error = str(exc)
         else:
