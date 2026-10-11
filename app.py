@@ -21,7 +21,7 @@ from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, quote
 from typing import Optional
 
 # Third-party library imports
@@ -7518,6 +7518,38 @@ def _balancer_read_blueprint(filename):
     return payload
 
 
+_BALANCER_ICON_DIRS = {
+    "creatures": "icon_creatures",
+    "action_cards": "icon_actioncards",
+}
+_BALANCER_ICON_EXTENSIONS = (".png", ".webp", ".jpg", ".jpeg")
+
+
+def _balancer_icon_filename(kind, card_id):
+    folder_name = _BALANCER_ICON_DIRS.get(kind)
+    safe_id = str(card_id or "").strip()
+    if not folder_name or not safe_id or os.path.basename(safe_id) != safe_id:
+        return None
+    folder = os.path.join(BALANCER_BLUEPRINT_DIR, folder_name)
+    for extension in _BALANCER_ICON_EXTENSIONS:
+        filename = safe_id + extension
+        if os.path.isfile(os.path.join(folder, filename)):
+            return filename
+    return None
+
+
+@app.route("/balancer/icon/<kind>/<path:filename>")
+def BalancerIcon(kind, filename):
+    if not get_balancer_account():
+        abort(404)
+    folder_name = _BALANCER_ICON_DIRS.get(kind)
+    if not folder_name or os.path.basename(filename) != filename:
+        abort(404)
+    if os.path.splitext(filename)[1].lower() not in _BALANCER_ICON_EXTENSIONS:
+        abort(404)
+    return send_from_directory(os.path.join(BALANCER_BLUEPRINT_DIR, folder_name), filename)
+
+
 def _balancer_cr_cards(force_refresh=False):
     """Fetch Clash Royale cards server-side; never expose the API token."""
     if not CLASH_ROYALE_API_TOKEN:
@@ -7747,6 +7779,12 @@ def BalancerPanel():
 
     clash_cards, api_error = _balancer_cr_cards(force_refresh=force_refresh)
     report = _balancer_build_report(creatures, action_cards, clash_cards)
+    for row in report["creatures"]["rows"]:
+        icon_name = _balancer_icon_filename("creatures", row.get("id"))
+        row["icon_url"] = "/balancer/icon/creatures/" + quote(icon_name, safe="") if icon_name else None
+    for row in report["action_cards"]["rows"]:
+        icon_name = _balancer_icon_filename("action_cards", row.get("id"))
+        row["icon_url"] = "/balancer/icon/action_cards/" + quote(icon_name, safe="") if icon_name else None
     if force_refresh:
         Log("balancer", balancer_account.username + " refreshed the Balancer Clash Royale data.")
         return redirect("/balancer/")
