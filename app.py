@@ -172,6 +172,24 @@ class Admin(UserMixin, db.Model):
     def get_id(self):
         return str(self.username)
 
+
+class BalancerAccount(db.Model):
+    """Separate credentials for Balancer panel users."""
+    username: Mapped[str] = mapped_column(
+        db.String(80), primary_key=True, unique=True, nullable=False
+    )
+    password: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    created_by: Mapped[str] = mapped_column(db.String(80), nullable=False)
+    created_at: Mapped[int] = mapped_column(db.Integer, nullable=False, default=lambda: int(time.time()))
+
+
+def get_balancer_account():
+    username = session.get("balancer_username")
+    if not username:
+        return None
+    return BalancerAccount.query.filter_by(username=username).first()
+
+
 def MigrateAdminSecurity():
     from sqlalchemy import inspect, text
 
@@ -7648,11 +7666,73 @@ def _balancer_build_report(creatures, action_cards, clash_cards):
     return report
 
 
-@app.route("/balancer/", methods=["GET", "POST"])
+@app.route("/balancer/login", methods=["GET", "POST"])
+def BalancerLogin():
+    if get_balancer_account():
+        return redirect("/balancer/")
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        account = BalancerAccount.query.filter_by(username=username).first()
+        if account and bcrypt.check_password_hash(account.password, password):
+            session["balancer_username"] = account.username
+            session.permanent = True
+            Log("balancer", "Balancer account logged in: " + account.username)
+            return redirect(request.args.get("next") if request.args.get("next", "").startswith("/balancer/") else "/balancer/")
+        error = "Kullanıcı adı veya şifre hatalı."
+    return render_template("balancer_login.html", error=error)
+
+
+@app.route("/balancer/logout", methods=["POST", "GET"])
+def BalancerLogout():
+    username = session.pop("balancer_username", None)
+    if username:
+        Log("balancer", "Balancer account logged out: " + username)
+    return redirect("/balancer/login")
+
+
+@app.route("/admin/createbalancer", methods=["GET", "POST"])
 @login_required
-def BalancerPanel():
+def AdminCreateBalancer():
     if not isAdmin(current_user):
         return abort(404)
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{3,80}", username):
+            error = "Kullanıcı adı 3-80 karakter olmalı; harf, rakam, nokta, tire ve alt çizgi kullanılabilir."
+        elif len(password) < 10:
+            error = "Şifre en az 10 karakter olmalı."
+        elif password != confirm_password:
+            error = "Şifreler eşleşmiyor."
+        elif BalancerAccount.query.filter_by(username=username).first():
+            error = "Bu Balancer kullanıcı adı zaten kullanılıyor."
+        else:
+            account = BalancerAccount(
+                username=username,
+                password=bcrypt.generate_password_hash(password).decode("utf-8"),
+                created_by=current_user.username
+            )
+            db.session.add(account)
+            db.session.commit()
+            Log("admin", current_user.username + " created Balancer account: " + username)
+            return redirect("/admin/createbalancer?created=" + username)
+    return render_template(
+        "create_balancers.html",
+        error=error,
+        created=request.args.get("created", "")
+    )
+
+
+@app.route("/balancer/", methods=["GET", "POST"])
+def BalancerPanel():
+    balancer_account = get_balancer_account()
+    if not balancer_account:
+        return redirect("/balancer/login?next=/balancer/")
+
     force_refresh = request.method == "POST" and request.form.get("action") == "refresh_api"
     try:
         creatures = _balancer_read_blueprint("db_Creatures.json")
@@ -7664,7 +7744,7 @@ def BalancerPanel():
     clash_cards, api_error = _balancer_cr_cards(force_refresh=force_refresh)
     report = _balancer_build_report(creatures, action_cards, clash_cards)
     if force_refresh:
-        Log("admin", current_user.username + " refreshed the Balancer Clash Royale data.")
+        Log("balancer", balancer_account.username + " refreshed the Balancer Clash Royale data.")
         return redirect("/balancer/")
 
     query = request.args.get("q", "").strip()[:100].casefold()
@@ -7692,7 +7772,7 @@ def BalancerPanel():
         api_count=len(clash_cards or []),
         query=query,
         selected_tab=selected_tab,
-        admin_name=current_user.username
+        admin_name=balancer_account.username
     )
 # ======================= END BALANCER PANEL =======================
 
