@@ -7586,6 +7586,42 @@ def _balancer_write_language_manifest(manifest, create_only=False):
                 pass
 
 
+_BALANCER_EN_LOCALIZATION_CACHE = {"path": None, "mtime": None, "values": {}}
+
+
+def _balancer_localized_text(value):
+    """Resolve !! localization keys to English text from the EN sheet; leave plain names untouched."""
+    text_value = str(value or "")
+    if not text_value.startswith("!!"):
+        return text_value
+
+    candidates = (
+        os.path.join(BALANCER_LANGUAGE_DATA_DIR, "EN_Sheet1.txt"),
+        os.path.join(BALANCER_LANGUAGE_DATA_DIR, "EN_Sheets1.txt"),
+        os.path.join(BALANCER_LANGUAGE_DATA_DIR, "EN_Sheet1.xml"),
+        os.path.join(BALANCER_LANGUAGE_DATA_DIR, "EN_Sheets1.xml"),
+    )
+    path = next((item for item in candidates if os.path.isfile(item)), None)
+    if not path:
+        return text_value
+
+    try:
+        mtime = os.path.getmtime(path)
+        cache = _BALANCER_EN_LOCALIZATION_CACHE
+        if cache["path"] != path or cache["mtime"] != mtime:
+            parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+            tree = ET.parse(path, parser=parser)
+            values = {}
+            for entry in tree.getroot().findall(".//entry"):
+                key = (entry.get("name") or "").strip()
+                if key:
+                    values[key] = entry.text or ""
+            cache.update({"path": path, "mtime": mtime, "values": values})
+        return cache["values"].get(text_value, text_value)
+    except (OSError, ET.ParseError):
+        return text_value
+
+
 def _balancer_language_files():
     manifest = _balancer_language_manifest()
     return [
@@ -8070,15 +8106,24 @@ def BalancerEditor():
             editor_json = "{}"
 
     record_options = [
-        {"id": str(row.get("ID", "")).strip(), "name": str(row.get("Name", "")).strip()}
+        {
+            "id": str(row.get("ID", "")).strip(),
+            "name_key": str(row.get("Name", "")).strip(),
+            "name": _balancer_localized_text(row.get("Name", "")),
+        }
         for row in records
     ]
+    selected_record = next((row for row in records if str(row.get("ID", "")).strip() == selected_id), {})
+    selected_name_key = str(selected_record.get("Name", "")).strip()
+    selected_localized_name = _balancer_localized_text(selected_name_key)
     return render_template(
         "balancer_editor.html",
         admin_name=balancer_account.username,
         dataset=dataset,
         record_options=record_options,
         selected_id=selected_id,
+        selected_name_key=selected_name_key,
+        selected_localized_name=selected_localized_name,
         record_json=editor_json,
         error=error,
         success=success
