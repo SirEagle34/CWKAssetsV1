@@ -7502,6 +7502,17 @@ CLASH_ROYALE_API_BASE = os.environ.get(
 ).rstrip("/")
 CLASH_ROYALE_API_TOKEN = os.environ.get("CLASH_ROYALE_API_TOKEN", "").strip()
 
+# Keep third-party card data on the server, never in Flask's client-side cookie.
+_BALANCER_CR_CARDS_CACHE = {"time": 0, "cards": None}
+
+
+@app.before_request
+def _balancer_clear_legacy_cookie_cache():
+    # Older versions stored the full Clash Royale card list in the session cookie,
+    # making the cookie exceed browsers' ~4 KB limit. Remove it for existing sessions.
+    if "clash_royale_cards_cache" in session:
+        session.pop("clash_royale_cards_cache", None)
+
 
 def _balancer_read_blueprint(filename):
     path = os.path.join(BALANCER_BLUEPRINT_DIR, filename)
@@ -7515,15 +7526,15 @@ def _balancer_read_blueprint(filename):
 
 
 def _balancer_cr_cards(force_refresh=False):
-    """Fetch Clash Royale cards server-side; never expose the API token."""
+    """Fetch Clash Royale cards and cache them in server memory, not the session cookie."""
     if not CLASH_ROYALE_API_TOKEN:
         return None, "CLASH_ROYALE_API_TOKEN is not configured."
 
-    cached = session.get("clash_royale_cards_cache")
     now = int(time.time())
-    if not force_refresh and isinstance(cached, dict):
-        if now - int(cached.get("time", 0)) < 900 and isinstance(cached.get("cards"), list):
-            return cached["cards"], None
+    cached_cards = _BALANCER_CR_CARDS_CACHE.get("cards")
+    cached_time = int(_BALANCER_CR_CARDS_CACHE.get("time", 0) or 0)
+    if not force_refresh and isinstance(cached_cards, list) and now - cached_time < 900:
+        return cached_cards, None
 
     req = urllib.request.Request(
         CLASH_ROYALE_API_BASE + "/cards",
@@ -7540,8 +7551,8 @@ def _balancer_cr_cards(force_refresh=False):
         cards = data.get("items", []) if isinstance(data, dict) else []
         if not isinstance(cards, list):
             return None, "Unexpected response from Clash Royale API."
-        session["clash_royale_cards_cache"] = {"time": now, "cards": cards}
-        session.modified = True
+        _BALANCER_CR_CARDS_CACHE["time"] = now
+        _BALANCER_CR_CARDS_CACHE["cards"] = cards
         return cards, None
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
