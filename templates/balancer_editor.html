@@ -17,7 +17,7 @@
 <div class="editor-panel">
   <form method="get" action="/balancer/editor" class="row g-3 align-items-end">
     <div class="col-md-4"><label class="form-label" for="dataset">Blueprint</label><select class="form-select" id="dataset" name="dataset" onchange="this.form.submit()"><option value="creatures" {{ 'selected' if dataset == 'creatures' else '' }}>Creatures · db_Creatures.json</option><option value="action_cards" {{ 'selected' if dataset == 'action_cards' else '' }}>Action Cards · db_ActionCards.json</option></select></div>
-    <div class="col-md-6"><label class="form-label" for="record_id">Kayıt (ID · Name)</label><select class="form-select" id="record_id" name="record_id" required>{% for item in record_options %}<option value="{{ item.id }}" {{ 'selected' if item.id == selected_id else '' }}>{{ item.id }}{% if item.name %} · {{ item.name }}{% endif %}</option>{% endfor %}</select></div>
+    <div class="col-md-6"><label class="form-label" for="record_id">Kayıt (ID · Name)</label><select class="form-select" id="record_id" name="record_id" required>{% for item in record_options %}<option value="{{ item.id }}" {{ 'selected' if item.id == selected_id else '' }}>{{ item.display_id }}{% if item.name %} * {{ item.name }}{% endif %}</option>{% endfor %}</select></div>
     <div class="col-md-2 d-grid"><button class="btn btn-primary" type="submit">Kaydı yükle</button></div>
   </form>
 </div>
