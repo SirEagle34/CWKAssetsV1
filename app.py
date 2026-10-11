@@ -8134,17 +8134,25 @@ def BalancerEditor():
         if not editor_json:
             editor_json = "{}"
 
-    record_options = [
-        {
-            "id": str(row.get("ID", "")).strip(),
-            "name_key": str(row.get("Name", "")).strip(),
-            "name": _balancer_localized_text(row.get("Name", "")),
-        }
-        for row in records
-    ]
+    record_options = []
+    for row in records:
+        raw_id = str(row.get("ID", "")).strip()
+        name_key = str(row.get("Name", "")).strip()
+        localized_name = _balancer_localized_text(name_key)
+        # Make CamelCase IDs easier to scan in the dropdown, without changing the real ID.
+        display_id = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", raw_id)
+        record_options.append({
+            "id": raw_id,
+            "display_id": display_id,
+            "name_key": name_key,
+            # Do not show an unresolved !!KEY as if it were a display name.
+            "name": "" if localized_name == name_key and name_key.startswith("!!") else localized_name,
+        })
     selected_record = next((row for row in records if str(row.get("ID", "")).strip() == selected_id), {})
     selected_name_key = str(selected_record.get("Name", "")).strip()
     selected_localized_name = _balancer_localized_text(selected_name_key)
+    if selected_name_key.startswith("!!") and selected_localized_name == selected_name_key:
+        selected_localized_name = ""
     return render_template(
         "balancer_editor.html",
         admin_name=balancer_account.username,
