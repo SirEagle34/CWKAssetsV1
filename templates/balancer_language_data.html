@@ -10,18 +10,60 @@
   .lang-key{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem;overflow-wrap:anywhere}
   .lang-value{color:var(--bs-secondary-color);font-size:.9rem;white-space:pre-wrap;overflow-wrap:anywhere}
   .lang-editor{min-height:220px}
+  .language-code{font-weight:700;letter-spacing:.04em}
 </style>
 <div class="lang-wrap">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
-    <div><div class="text-uppercase small text-secondary">Card Wars Kingdom · Balancer Tools</div><h1 class="h2 mt-1">Language Data</h1><p class="text-secondary mb-0">Search localization keys such as <code>!!COOLDOG_NAME</code> and edit their displayed text.</p></div>
+    <div><div class="text-uppercase small text-secondary">Card Wars Kingdom · Balancer Tools</div><h1 class="h2 mt-1">Language Data</h1><p class="text-secondary mb-0">Detect supported language files through <code>manifest.json</code>, review them, and edit keys such as <code>!!COOLDOG_NAME</code>.</p></div>
     <a class="btn btn-outline-light" href="/balancer/"><i class="bi bi-arrow-left me-1"></i>Back to Balancer</a>
   </div>
 
   {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
   {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
 
+  <div class="lang-panel">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <div><h2 class="h5 mb-1">Supported languages</h2><div class="small text-secondary">Manifest: <code>data/persist/languagedata/manifest.json</code></div></div>
+      <span class="small text-secondary">Approval is tracked per language.</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle mb-0">
+        <thead><tr><th>Language</th><th>File</th><th>Detection</th><th>Approval</th><th class="text-end">Action</th></tr></thead>
+        <tbody>
+          {% for language in manifest.languages %}
+          <tr>
+            <td><span class="language-code">{{ language.code }}</span><div class="small text-secondary">{{ language.name }}</div></td>
+            <td><code>{{ language.file }}</code></td>
+            <td>{% if language.detected %}<span class="badge text-bg-success">Detected</span>{% else %}<span class="badge text-bg-secondary">Missing</span>{% endif %}</td>
+            <td>{% if language.status == 'approved' %}<span class="badge text-bg-success">Approved</span>{% else %}<span class="badge text-bg-warning">Pending review</span>{% endif %}</td>
+            <td class="text-end">
+              {% if language.detected %}
+                <div class="d-inline-flex flex-wrap gap-2 justify-content-end">
+                  <a class="btn btn-sm btn-outline-info" href="/balancer/language-data?file={{ language.file|urlencode }}"><i class="bi bi-pencil-square me-1"></i>Edit</a>
+                  <form method="post" action="/balancer/language-data" class="m-0">
+                    <input type="hidden" name="language_code" value="{{ language.code }}">
+                    {% if language.status == 'approved' %}
+                      <input type="hidden" name="action" value="revoke_language">
+                      <button class="btn btn-sm btn-outline-warning" type="submit">Revoke approval</button>
+                    {% else %}
+                      <input type="hidden" name="action" value="approve_language">
+                      <button class="btn btn-sm btn-success" type="submit"><i class="bi bi-check2-circle me-1"></i>Approve</button>
+                    {% endif %}
+                  </form>
+                </div>
+              {% else %}
+                <span class="small text-secondary">Upload file to enable</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   {% if not files %}
-    <div class="alert alert-warning">No .txt or .xml language files found in <code>data/persist/languagedata/</code>. Add your EN_Sheet1.txt file there. Its contents should use an XML <code>&lt;entries&gt;</code> root.</div>
+    <div class="alert alert-warning">No language files detected yet. Upload files named exactly as listed in the manifest, for example <code>EN_Sheet1.txt</code>, into <code>data/persist/languagedata/</code>. Files must contain XML with an <code>&lt;entries&gt;</code> root.</div>
   {% else %}
     <div class="lang-panel">
       <form method="get" action="/balancer/language-data" class="row g-2 align-items-end">
@@ -63,7 +105,7 @@
             <p class="text-secondary">Choose an entry from the list to edit its displayed text.</p>
           {% endif %}
           <hr>
-          <div class="small text-secondary">Expected format:</div>
+          <div class="small text-secondary">Expected file format:</div>
           <pre class="small mt-2 mb-0"><code>&lt;entries&gt;
   &lt;entry name="!!0_CONNECTING"&gt;Connecting...&lt;/entry&gt;
   &lt;entry name="!!1_BATTLE"&gt;1 Battle&lt;/entry&gt;
