@@ -7727,6 +7727,111 @@ def AdminCreateBalancer():
     )
 
 
+
+def _balancer_write_blueprint(filename, payload):
+    """Validate and atomically replace a blueprint JSON array; no database/schema changes."""
+    if filename not in ("db_Creatures.json", "db_ActionCards.json"):
+        raise ValueError("Unsupported blueprint file.")
+    if not isinstance(payload, list) or any(not isinstance(row, dict) for row in payload):
+        raise ValueError("Blueprint must be a JSON array of objects.")
+
+    path = os.path.join(BALANCER_BLUEPRINT_DIR, filename)
+    if not os.path.isfile(path):
+        raise FileNotFoundError("Blueprint file not found: " + filename)
+
+    backup_path = path + ".balancer.bak"
+    if not os.path.exists(backup_path):
+        shutil.copy2(path, backup_path)
+
+    temp_path = path + ".balancer.tmp"
+    try:
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=4)
+            handle.write("\n")
+        with open(temp_path, "r", encoding="utf-8") as handle:
+            checked = json.load(handle)
+        if not isinstance(checked, list) or any(not isinstance(row, dict) for row in checked):
+            raise ValueError("Saved JSON failed validation.")
+        os.replace(temp_path, path)
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
+
+@app.route("/balancer/editor", methods=["GET", "POST"])
+def BalancerEditor():
+    balancer_account = get_balancer_account()
+    if not balancer_account:
+        return redirect("/balancer/login?next=/balancer/editor")
+
+    filenames = {"creatures": "db_Creatures.json", "action_cards": "db_ActionCards.json"}
+    dataset = request.values.get("dataset", "creatures")
+    if dataset not in filenames:
+        dataset = "creatures"
+
+    error = None
+    success = None
+    records = []
+    selected_id = request.values.get("record_id", "").strip()
+    editor_json = request.form.get("record_json", "")
+
+    try:
+        records = _balancer_read_blueprint(filenames[dataset])
+        if request.method == "POST":
+            if request.form.get("action", "save_record") != "save_record":
+                raise ValueError("Geçersiz işlem.")
+            if not selected_id:
+                raise ValueError("Önce düzenlenecek kayıt ID'sini seçin.")
+            try:
+                edited = json.loads(editor_json)
+            except json.JSONDecodeError as exc:
+                raise ValueError("JSON sözdizimi hatalı: " + str(exc))
+            if not isinstance(edited, dict):
+                raise ValueError("Kayıt bir JSON nesnesi olmalıdır.")
+            if str(edited.get("ID", "")).strip() != selected_id:
+                raise ValueError("ID alanı seçili kaydın ID'siyle aynı kalmalıdır.")
+
+            matches = [i for i, row in enumerate(records)
+                       if str(row.get("ID", "")).strip() == selected_id]
+            if len(matches) != 1:
+                raise ValueError("ID bulunamadı veya benzersiz değil; dosya değiştirilmedi.")
+
+            records[matches[0]] = edited
+            _balancer_write_blueprint(filenames[dataset], records)
+            Log("balancer", balancer_account.username + " edited " + filenames[dataset] + " record " + selected_id)
+            success = "Kayıt kaydedildi. İlk düzenleme öncesindeki .balancer.bak yedeği korunuyor."
+
+        if request.method == "GET" or success:
+            chosen = next((row for row in records if str(row.get("ID", "")).strip() == selected_id), None)
+            if chosen is None and records:
+                chosen = records[0]
+                selected_id = str(chosen.get("ID", "")).strip()
+            editor_json = json.dumps(chosen or {}, ensure_ascii=False, indent=4)
+
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        error = str(exc)
+        if not editor_json:
+            editor_json = "{}"
+
+    record_options = [
+        {"id": str(row.get("ID", "")).strip(), "name": str(row.get("Name", "")).strip()}
+        for row in records
+    ]
+    return render_template(
+        "balancer_editor.html",
+        admin_name=balancer_account.username,
+        dataset=dataset,
+        record_options=record_options,
+        selected_id=selected_id,
+        record_json=editor_json,
+        error=error,
+        success=success
+    )
+
+
 @app.route("/balancer/", methods=["GET", "POST"])
 def BalancerPanel():
     balancer_account = get_balancer_account()
