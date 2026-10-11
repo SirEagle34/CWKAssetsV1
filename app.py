@@ -7503,26 +7503,103 @@ CLASH_ROYALE_API_BASE = os.environ.get(
 CLASH_ROYALE_API_TOKEN = os.environ.get("CLASH_ROYALE_API_TOKEN", "").strip()
 
 # ======================= BALANCER LANGUAGE DATA =======================
-# Localization files live under data/persist/languagedata. Contents are XML
-# even when the game file uses a .txt extension.
+# Language files and approval state are tracked by data/persist/languagedata/manifest.json.
 import xml.etree.ElementTree as ET
 
 BALANCER_LANGUAGE_DATA_DIR = os.path.join("data", "persist", "languagedata")
+BALANCER_LANGUAGE_MANIFEST = os.path.join(BALANCER_LANGUAGE_DATA_DIR, "manifest.json")
+BALANCER_LANGUAGES = (
+    ("AR", "العربية", "AR_Sheet1.txt"),
+    ("EN", "English", "EN_Sheet1.txt"),
+    ("ES", "Español", "ES_Sheet1.txt"),
+    ("FR", "Français", "FR_Sheet1.txt"),
+    ("IT", "Italiano", "IT_Sheet1.txt"),
+    ("PT", "Português", "PT_Sheet1.txt"),
+    ("TR", "Türkçe", "TR_Sheet1.txt"),
+    ("VI", "Tiếng Việt", "VI_Sheet1.txt"),
+)
+
+
+def _balancer_language_default_manifest():
+    return {
+        "version": 1,
+        "languages": [
+            {"code": code, "name": name, "file": filename, "status": "pending"}
+            for code, name, filename in BALANCER_LANGUAGES
+        ]
+    }
+
+
+def _balancer_language_manifest():
+    os.makedirs(BALANCER_LANGUAGE_DATA_DIR, exist_ok=True)
+    if not os.path.isfile(BALANCER_LANGUAGE_MANIFEST):
+        manifest = _balancer_language_default_manifest()
+        _balancer_write_language_manifest(manifest, create_only=True)
+        return manifest
+
+    with open(BALANCER_LANGUAGE_MANIFEST, "r", encoding="utf-8-sig") as handle:
+        manifest = json.load(handle)
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("languages"), list):
+        raise ValueError("manifest.json must contain a languages array.")
+
+    existing = {
+        str(item.get("code", "")).upper(): item
+        for item in manifest["languages"] if isinstance(item, dict)
+    }
+    languages = []
+    for code, name, filename in BALANCER_LANGUAGES:
+        item = existing.get(code, {})
+        status = item.get("status", "pending")
+        if status not in ("pending", "approved"):
+            status = "pending"
+        languages.append({
+            "code": code,
+            "name": name,
+            "file": filename,
+            "status": status,
+            "detected": os.path.isfile(os.path.join(BALANCER_LANGUAGE_DATA_DIR, filename))
+        })
+    manifest["version"] = 1
+    manifest["languages"] = languages
+    return manifest
+
+
+def _balancer_write_language_manifest(manifest, create_only=False):
+    os.makedirs(BALANCER_LANGUAGE_DATA_DIR, exist_ok=True)
+    path = BALANCER_LANGUAGE_MANIFEST
+    if not create_only and os.path.isfile(path) and not os.path.exists(path + ".balancer.bak"):
+        shutil.copy2(path, path + ".balancer.bak")
+    temp_path = path + ".balancer.tmp"
+    try:
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        with open(temp_path, "r", encoding="utf-8") as handle:
+            checked = json.load(handle)
+        if not isinstance(checked, dict) or not isinstance(checked.get("languages"), list):
+            raise ValueError("Generated language manifest failed validation.")
+        os.replace(temp_path, path)
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
 
 
 def _balancer_language_files():
-    os.makedirs(BALANCER_LANGUAGE_DATA_DIR, exist_ok=True)
-    return sorted(
-        name for name in os.listdir(BALANCER_LANGUAGE_DATA_DIR)
-        if name.lower().endswith((".txt", ".xml"))
-        and os.path.isfile(os.path.join(BALANCER_LANGUAGE_DATA_DIR, name))
-        and re.fullmatch(r"[A-Za-z0-9_. -]+\.(?:txt|xml)", name, re.IGNORECASE)
-    )
+    manifest = _balancer_language_manifest()
+    return [
+        item["file"] for item in manifest["languages"]
+        if item["detected"]
+        and os.path.isfile(os.path.join(BALANCER_LANGUAGE_DATA_DIR, item["file"]))
+    ]
 
 
 def _balancer_language_path(filename):
-    if not filename or filename not in _balancer_language_files():
-        raise FileNotFoundError("Language file not found.")
+    allowed = {item[2] for item in BALANCER_LANGUAGES}
+    if not filename or filename not in allowed or filename not in _balancer_language_files():
+        raise FileNotFoundError("Language file not found or not listed in manifest.")
     return os.path.join(BALANCER_LANGUAGE_DATA_DIR, filename)
 
 
@@ -7568,51 +7645,82 @@ def BalancerLanguageData():
     if not account:
         return redirect("/balancer/login?next=/balancer/language-data")
 
-    files = _balancer_language_files()
+    error = None
+    success = None
+    try:
+        manifest = _balancer_language_manifest()
+        files = [item["file"] for item in manifest["languages"] if item["detected"]]
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return make_response("Language manifest error: " + str(exc), 500)
+
     filename = request.values.get("file", "").strip()
     if filename not in files:
         filename = files[0] if files else ""
     query = request.values.get("q", "").strip()[:200]
     selected_key = request.values.get("key", "").strip()[:500]
     edited_value = request.form.get("value", "")
-    error = None
-    success = None
     entries = []
 
-    if not filename:
-        return render_template(
-            "balancer_language_data.html", admin_name=account.username,
-            files=files, filename="", entries=[], query=query,
-            selected_key="", edited_value="", error=None, success=None
-        )
+    if request.method == "POST":
+        action = request.form.get("action", "")
+        code = request.form.get("language_code", "").strip().upper()
+        if action in ("approve_language", "revoke_language"):
+            language = next((item for item in manifest["languages"] if item["code"] == code), None)
+            if not language:
+                error = "Unsupported language code."
+            elif not language["detected"]:
+                error = "Upload " + language["file"] + " before approving this language."
+            elif action == "approve_language":
+                language["status"] = "approved"
+                success = code + " language approved."
+            else:
+                language["status"] = "pending"
+                success = code + " approval revoked; it is pending review again."
+            if not error:
+                _balancer_write_language_manifest(manifest)
+                manifest = _balancer_language_manifest()
+                Log("balancer", account.username + " changed language approval: " + code + " -> " + language["status"])
+                files = [item["file"] for item in manifest["languages"] if item["detected"]]
+                if filename not in files:
+                    filename = files[0] if files else ""
+        elif action == "save_entry":
+            if not filename or filename not in files:
+                error = "Select an existing language file before saving."
+            elif not selected_key:
+                error = "Select a language key before saving."
+            else:
+                try:
+                    tree, entries = _balancer_read_language_file(filename)
+                    targets = [
+                        item for item in tree.getroot().findall(".//entry")
+                        if (item.get("name") or "").strip() == selected_key
+                    ]
+                    if len(targets) != 1:
+                        raise ValueError("Key was not found or is duplicated; file was not changed.")
+                    targets[0].text = edited_value
+                    _balancer_write_language_file(filename, tree)
+                    Log("balancer", account.username + " edited language key " + selected_key + " in " + filename)
+                    success = "Translation saved. The first-edit .balancer.bak backup is preserved."
+                except (OSError, ValueError, ET.ParseError) as exc:
+                    error = str(exc)
+        else:
+            error = "Invalid action."
 
-    try:
-        tree, entries = _balancer_read_language_file(filename)
-        if request.method == "POST":
-            if request.form.get("action", "save_entry") != "save_entry":
-                raise ValueError("Invalid action.")
-            if not selected_key:
-                raise ValueError("Select a language key before saving.")
-            targets = [
-                item for item in tree.getroot().findall(".//entry")
-                if (item.get("name") or "").strip() == selected_key
-            ]
-            if len(targets) != 1:
-                raise ValueError("Key was not found or is duplicated; file was not changed.")
-            targets[0].text = edited_value
-            _balancer_write_language_file(filename, tree)
-            Log("balancer", account.username + " edited language key " + selected_key + " in " + filename)
-            success = "Translation saved. The first-edit .balancer.bak backup is preserved."
+    selected_language = next(
+        (item for item in manifest["languages"] if item["file"] == filename), None
+    )
+    if filename and not error:
+        try:
             tree, entries = _balancer_read_language_file(filename)
+        except (OSError, ValueError, ET.ParseError) as exc:
+            error = str(exc)
 
-        selected_entry = next((row for row in entries if row["key"] == selected_key), None)
-        if not selected_key and entries:
-            selected_key = entries[0]["key"]
-            selected_entry = entries[0]
-        if request.method == "GET" or success:
-            edited_value = selected_entry["value"] if selected_entry else ""
-    except (OSError, ValueError, ET.ParseError) as exc:
-        error = str(exc)
+    selected_entry = next((row for row in entries if row["key"] == selected_key), None)
+    if not selected_key and entries:
+        selected_key = entries[0]["key"]
+        selected_entry = entries[0]
+    if request.method == "GET" or success:
+        edited_value = selected_entry["value"] if selected_entry else ""
 
     filtered_entries = entries
     if query:
@@ -7624,7 +7732,8 @@ def BalancerLanguageData():
 
     return render_template(
         "balancer_language_data.html", admin_name=account.username,
-        files=files, filename=filename, entries=filtered_entries[:2000],
+        manifest=manifest, files=files, filename=filename,
+        selected_language=selected_language, entries=filtered_entries[:2000],
         query=query, selected_key=selected_key, edited_value=edited_value,
         error=error, success=success
     )
