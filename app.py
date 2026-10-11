@@ -7551,12 +7551,16 @@ def _balancer_language_manifest():
         status = item.get("status", "pending")
         if status not in ("pending", "approved"):
             status = "pending"
+        actual_filename = filename
+        if code == "EN" and not os.path.isfile(os.path.join(BALANCER_LANGUAGE_DATA_DIR, actual_filename)):
+            if os.path.isfile(os.path.join(BALANCER_LANGUAGE_DATA_DIR, "EN_Sheets1.txt")):
+                actual_filename = "EN_Sheets1.txt"
         languages.append({
             "code": code,
             "name": name,
-            "file": filename,
+            "file": actual_filename,
             "status": status,
-            "detected": os.path.isfile(os.path.join(BALANCER_LANGUAGE_DATA_DIR, filename))
+            "detected": os.path.isfile(os.path.join(BALANCER_LANGUAGE_DATA_DIR, actual_filename))
         })
     manifest["version"] = 1
     manifest["languages"] = languages
@@ -7632,7 +7636,7 @@ def _balancer_language_files():
 
 
 def _balancer_language_path(filename):
-    allowed = {item[2] for item in BALANCER_LANGUAGES}
+    allowed = {item[2] for item in BALANCER_LANGUAGES} | {"EN_Sheets1.txt"}
     if not filename or filename not in allowed or filename not in _balancer_language_files():
         raise FileNotFoundError("Language file not found or not listed in manifest.")
     return os.path.join(BALANCER_LANGUAGE_DATA_DIR, filename)
