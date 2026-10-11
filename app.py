@@ -7594,24 +7594,27 @@ _BALANCER_EN_LOCALIZATION_CACHE = {"path": None, "mtime": None, "values": {}}
 
 
 def _balancer_localized_text(value):
-    """Resolve !! localization keys from XML or EN_Sheet1.txt KEY = VALUE lines."""
+    """Resolve !! localization keys from the game's <entries><entry name="...">text</entry></entries> format."""
     text_value = str(value or "").strip()
     if not text_value.startswith("!!"):
         return text_value
 
+    # PythonAnywhere may run the app from a different working directory.
+    # Check both the configured data folder and the requested persist path.
     language_dirs = (
         BALANCER_LANGUAGE_DATA_DIR,
-        os.path.join("persist", "languagedata"),
+        os.path.join(app.root_path, "data", "persist", "languagedata"),
+        os.path.join(app.root_path, "persist", "languagedata"),
+        os.path.join(os.getcwd(), "data", "persist", "languagedata"),
+        os.path.join(os.getcwd(), "persist", "languagedata"),
         os.path.join(os.sep, "persist", "languagedata"),
     )
-    candidates = [
-        os.path.join(directory, filename)
-        for directory in language_dirs
-        for filename in (
-            "EN_Sheet1.txt",
-            "EN_Sheet1.xml",
-        )
-    ]
+    candidates = []
+    for directory in dict.fromkeys(language_dirs):
+        candidates.extend((
+            os.path.join(directory, "EN_Sheet1.txt"),
+            os.path.join(directory, "EN_Sheet1.xml"),
+        ))
     path = next((item for item in candidates if os.path.isfile(item)), None)
     if not path:
         return text_value
@@ -7622,28 +7625,31 @@ def _balancer_localized_text(value):
         if cache["path"] != path or cache["mtime"] != mtime:
             with open(path, "r", encoding="utf-8-sig") as handle:
                 content = handle.read()
+
             values = {}
+            # EN_Sheet1.txt may itself contain XML; the .txt extension is intentional.
             if content.lstrip().startswith("<"):
                 try:
                     root = ET.fromstring(content)
-                    for entry in root.findall(".//entry"):
+                    for entry in root.iter():
+                        if entry.tag.split("}")[-1].casefold() != "entry":
+                            continue
                         key = (entry.get("name") or "").strip()
                         if key:
                             values[key] = "".join(entry.itertext()).strip()
                 except ET.ParseError:
-                    pass
+                    app.logger.warning("Balancer localization XML is invalid: %s", path)
+
+            # Retain compatibility with legacy KEY = VALUE text files.
             for line in content.splitlines():
                 line = line.strip()
-                if not line or line.startswith("#") or line.startswith("//"):
-                    continue
-                # The game's language sheets are text files, e.g.:
-                # !!CORN_0002_DESC = Kung Fu Manual
-                if "=" not in line:
+                if not line or line.startswith("#") or line.startswith("//") or "=" not in line:
                     continue
                 key, translated = line.split("=", 1)
                 key = key.strip()
                 if key.startswith("!!"):
                     values[key] = translated.strip().strip('"')
+
             cache.update({"path": path, "mtime": mtime, "values": values})
 
         values = cache["values"]
@@ -7655,6 +7661,7 @@ def _balancer_localized_text(value):
                 return translated
         return text_value
     except OSError:
+        app.logger.warning("Could not read Balancer localization file: %s", path, exc_info=True)
         return text_value
 
 
