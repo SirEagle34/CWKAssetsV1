@@ -7594,8 +7594,8 @@ _BALANCER_EN_LOCALIZATION_CACHE = {"path": None, "mtime": None, "values": {}}
 
 
 def _balancer_localized_text(value):
-    """Resolve !! localization keys to English text from the EN sheet; leave plain names untouched."""
-    text_value = str(value or "")
+    """Resolve !! localization keys from XML or EN_Sheet1.txt KEY = VALUE lines."""
+    text_value = str(value or "").strip()
     if not text_value.startswith("!!"):
         return text_value
 
@@ -7613,16 +7613,41 @@ def _balancer_localized_text(value):
         mtime = os.path.getmtime(path)
         cache = _BALANCER_EN_LOCALIZATION_CACHE
         if cache["path"] != path or cache["mtime"] != mtime:
-            parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
-            tree = ET.parse(path, parser=parser)
+            with open(path, "r", encoding="utf-8-sig") as handle:
+                content = handle.read()
             values = {}
-            for entry in tree.getroot().findall(".//entry"):
-                key = (entry.get("name") or "").strip()
-                if key:
-                    values[key] = entry.text or ""
+            if content.lstrip().startswith("<"):
+                try:
+                    root = ET.fromstring(content)
+                    for entry in root.findall(".//entry"):
+                        key = (entry.get("name") or "").strip()
+                        if key:
+                            values[key] = "".join(entry.itertext()).strip()
+                except ET.ParseError:
+                    pass
+            for line in content.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or line.startswith("//"):
+                    continue
+                # The game's language sheets are text files, e.g.:
+                # !!CORN_0002_DESC = Kung Fu Manual
+                if "=" not in line:
+                    continue
+                key, translated = line.split("=", 1)
+                key = key.strip()
+                if key.startswith("!!"):
+                    values[key] = translated.strip().strip('"')
             cache.update({"path": path, "mtime": mtime, "values": values})
-        return cache["values"].get(text_value, text_value)
-    except (OSError, ET.ParseError):
+
+        values = cache["values"]
+        if text_value in values:
+            return values[text_value]
+        folded = text_value.casefold()
+        for key, translated in values.items():
+            if key.casefold() == folded:
+                return translated
+        return text_value
+    except OSError:
         return text_value
 
 
