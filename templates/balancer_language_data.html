@@ -1,0 +1,76 @@
+{% extends "balancer_base.html" %}
+{% block title %}Language Data · Balancer Panel{% endblock %}
+{% block content %}
+<style>
+  .lang-wrap{padding:1.25rem 0 3rem}
+  .lang-panel{border:1px solid var(--bs-border-color);border-radius:14px;padding:1rem;background:var(--bs-body-bg);margin-bottom:1rem}
+  .lang-list{max-height:62vh;overflow:auto}
+  .lang-row{display:block;padding:.65rem .75rem;border-bottom:1px solid var(--bs-border-color);text-decoration:none;color:inherit}
+  .lang-row:hover,.lang-row.active{background:#1d2b42;color:#fff}
+  .lang-key{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem;overflow-wrap:anywhere}
+  .lang-value{color:var(--bs-secondary-color);font-size:.9rem;white-space:pre-wrap;overflow-wrap:anywhere}
+  .lang-editor{min-height:220px}
+</style>
+<div class="lang-wrap">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+    <div><div class="text-uppercase small text-secondary">Card Wars Kingdom · Balancer Tools</div><h1 class="h2 mt-1">Language Data</h1><p class="text-secondary mb-0">Search localization keys such as <code>!!COOLDOG_NAME</code> and edit their displayed text.</p></div>
+    <a class="btn btn-outline-light" href="/balancer/"><i class="bi bi-arrow-left me-1"></i>Back to Balancer</a>
+  </div>
+
+  {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+  {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
+
+  {% if not files %}
+    <div class="alert alert-warning">No .txt or .xml language files found in <code>data/persist/languagedata/</code>. Add your EN_Sheet1.txt file there. Its contents should use an XML <code>&lt;entries&gt;</code> root.</div>
+  {% else %}
+    <div class="lang-panel">
+      <form method="get" action="/balancer/language-data" class="row g-2 align-items-end">
+        <div class="col-md-4"><label for="file" class="form-label">Language file</label><select id="file" name="file" class="form-select" onchange="this.form.submit()">{% for item in files %}<option value="{{ item }}" {{ 'selected' if item == filename else '' }}>{{ item }}</option>{% endfor %}</select></div>
+        <div class="col-md-6"><label for="q" class="form-label">Search key or translated text</label><input id="q" name="q" class="form-control" value="{{ query }}" placeholder="!!0_CONNECTING or Connecting..."></div>
+        <div class="col-md-2 d-grid"><button class="btn btn-primary" type="submit"><i class="bi bi-search me-1"></i>Search</button></div>
+      </form>
+      <div class="small text-secondary mt-2">Showing {{ entries|length }} matching entries (maximum 2,000). Saving creates a one-time <code>.balancer.bak</code> backup.</div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="lang-panel p-0 overflow-hidden">
+          <div class="p-3 border-bottom"><h2 class="h6 mb-0">Entries</h2></div>
+          <div class="lang-list">
+            {% for row in entries %}
+              <a class="lang-row {{ 'active' if row.key == selected_key else '' }}" href="/balancer/language-data?file={{ filename|urlencode }}&amp;q={{ query|urlencode }}&amp;key={{ row.key|urlencode }}">
+                <div class="lang-key">{{ row.key }}</div><div class="lang-value mt-1">{{ row.value if row.value else '(empty)' }}</div>
+              </a>
+            {% else %}
+              <div class="p-3 text-secondary">No matching entries found.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="lang-panel">
+          <h2 class="h5">Edit translation</h2>
+          {% if selected_key %}
+            <form method="post" action="/balancer/language-data">
+              <input type="hidden" name="action" value="save_entry">
+              <input type="hidden" name="file" value="{{ filename }}">
+              <input type="hidden" name="key" value="{{ selected_key }}">
+              <div class="mb-3"><label class="form-label">Localization key</label><input class="form-control font-monospace" value="{{ selected_key }}" readonly></div>
+              <div class="mb-3"><label for="value" class="form-label">Displayed text</label><textarea id="value" name="value" class="form-control lang-editor" maxlength="20000">{{ edited_value }}</textarea></div>
+              <button class="btn btn-success" type="submit"><i class="bi bi-save me-1"></i>Save translation</button>
+            </form>
+          {% else %}
+            <p class="text-secondary">Choose an entry from the list to edit its displayed text.</p>
+          {% endif %}
+          <hr>
+          <div class="small text-secondary">Expected format:</div>
+          <pre class="small mt-2 mb-0"><code>&lt;entries&gt;
+  &lt;entry name="!!0_CONNECTING"&gt;Connecting...&lt;/entry&gt;
+  &lt;entry name="!!1_BATTLE"&gt;1 Battle&lt;/entry&gt;
+&lt;/entries&gt;</code></pre>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
