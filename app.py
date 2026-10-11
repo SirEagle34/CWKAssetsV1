@@ -2611,7 +2611,9 @@ def PersistMultiplayerNameChange():
             db.session.rollback()
             return jsonify({"success": False, "error": "INVALID_CURRENCY"}), 400
 
-        if current_name == new_name:
+        # Return early only when BOTH the save and database already match.
+        # This ensures an empty name is also written to the database when needed.
+        if current_name == new_name and db_name == new_name:
             db.session.rollback()
             return jsonify({
                 "success": True,
@@ -2622,11 +2624,10 @@ def PersistMultiplayerNameChange():
                 "name_change_count": count
             }), 200
 
-        
-		# Clearing the name is free.
-		# The first non-empty name is free.
-		# Later non-empty names cost 4500, even after clearing.
-		cost = 4500 if new_name and count > 0 else 0
+        # Empty names ("", "   ") are always free.
+        # The first non-empty name is free.
+        # Subsequent non-empty names cost 4500 gems.
+        cost = 4500 if new_name and count > 0 else 0
 
         if free_currency < cost:
             db.session.rollback()
