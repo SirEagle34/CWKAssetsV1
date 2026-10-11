@@ -2489,42 +2489,69 @@ def _encode_game_save_with_name(game_text, save_data):
 def PersistMultiplayerNameChange():
     """
     Change MultiplayerPlayerName without replacing the player's save.
+    Requires the same request headers and device-name check as game persistence.
     POST form fields: player_id, name.
-    First non-empty name change is free; later non-empty changes cost 4500
-    FreeHardCurrency. Setting the name to an empty string is always free and
-    does not consume the free change.
+    Empty names and the first transition from empty to non-empty are free;
+    subsequent non-empty renames cost 4500 FreeHardCurrency.
     """
     try:
+        # Match the existing game-persistence request protocol.
+        username = request.headers.get("Player-Id", "").strip()
+        required_headers = ("Age", "Platform", "Version")
+        if not username:
+            return jsonify({"success": False, "error": "MISSING_PLAYER_ID_HEADER"}), 400
+        if any(not request.headers.get(header) for header in required_headers):
+            return jsonify({"success": False, "error": "MISSING_REQUIRED_HEADER"}), 400
+        if request.headers.get("User-Agent") != "Innertube Explorer v0.1":
+            return jsonify({"success": False, "error": "INVALID_USER_AGENT"}), 400
+        if not request.headers.get("X-Nick-Description"):
+            return jsonify({"success": False, "error": "MISSING_DEVICE_NAME"}), 400
+        if InvalidUsername(username):
+            return jsonify({"success": False, "error": "INVALID_USERNAME"}), 400
+
         form = parse_qs(request.get_data(as_text=True), keep_blank_values=True)
         form = {key: values[0] if len(values) == 1 else values for key, values in form.items()}
 
+        # Never allow the body to select a different account from the request identity.
         player_id = str(form.get("player_id", "") or "").strip()
-        if not player_id:
-            return jsonify({"success": False, "error": "MISSING_PLAYER_ID"}), 400
+        if not player_id or not hmac.compare_digest(player_id, username):
+            return jsonify({"success": False, "error": "PLAYER_ID_MISMATCH"}), 403
 
-        # Do not strip away the special empty-name request; whitespace-only names become empty.
         raw_name = form.get("name", "")
         if not isinstance(raw_name, str):
             return jsonify({"success": False, "error": "INVALID_NAME"}), 400
         new_name = raw_name.strip()
         if len(new_name) > 128:
             return jsonify({"success": False, "error": "NAME_TOO_LONG"}), 400
+        if any(ord(ch) < 32 for ch in new_name):
+            return jsonify({"success": False, "error": "INVALID_NAME"}), 400
 
-        if IsUserBanned(player_id, IPFromRequest(request)):
-            return make_response("User is banned!", 400)
+        if IsUserBanned(username, IPFromRequest(request)):
+            return jsonify({"success": False, "error": "USER_BANNED"}), 403
 
-        player = Player.query.filter_by(username=player_id).with_for_update().first()
+        player = Player.query.filter_by(username=username).with_for_update().first()
         if player is None:
             return jsonify({"success": False, "error": "PLAYER_NOT_FOUND"}), 404
+
+        # Apply the same device binding used by PUT /persist/<id>/game.
+        device_name = request.headers.get("X-Nick-Description", "")
+        if player.devicename is None or player.devicename == b"" or player.devicename == "":
+            player.devicename = device_name
+        elif not hmac.compare_digest(str(player.devicename), device_name):
+            db.session.rollback()
+            Log("security", f"Rejected multiplayer-name change with mismatched device name for {username}")
+            return jsonify({"success": False, "error": "DEVICE_MISMATCH"}), 403
 
         game_text = player.game
         if isinstance(game_text, bytes):
             game_text = game_text.decode("utf-8", errors="strict")
         if not isinstance(game_text, str) or not game_text:
+            db.session.rollback()
             return jsonify({"success": False, "error": "PLAYER_SAVE_UNAVAILABLE"}), 400
 
         marker = game_text.find("&data=")
         if marker < 0:
+            db.session.rollback()
             return jsonify({"success": False, "error": "INVALID_PLAYER_SAVE"}), 400
 
         try:
@@ -2532,33 +2559,40 @@ def PersistMultiplayerNameChange():
             decoded_bytes = gzip.decompress(base64.b64decode(encoded, validate=True))
             save_data = json.loads(decoded_bytes.decode("utf-8"))
         except Exception:
-            app.logger.exception("[multiplayer_name_change] Could not decode save for %s", player_id)
+            db.session.rollback()
+            app.logger.exception("[multiplayer_name_change] Could not decode save for %s", username)
             return jsonify({"success": False, "error": "INVALID_PLAYER_SAVE"}), 400
 
         if not isinstance(save_data, dict):
+            db.session.rollback()
             return jsonify({"success": False, "error": "INVALID_PLAYER_SAVE"}), 400
 
         current_name = save_data.get("MultiplayerPlayerName", "")
         current_name = current_name if isinstance(current_name, str) else str(current_name or "")
+        current_name = current_name.strip()
+        count = max(0, int(player.name_change_count or 0))
+
+        try:
+            free_currency = int(save_data.get("FreeHardCurrency", 0) or 0)
+        except (TypeError, ValueError):
+            db.session.rollback()
+            return jsonify({"success": False, "error": "INVALID_CURRENCY"}), 400
+
         if current_name == new_name:
+            db.session.rollback()
             return jsonify({
                 "success": True,
                 "changed": False,
                 "name": new_name,
                 "cost": 0,
-                "free_hard_currency": int(save_data.get("FreeHardCurrency", 0) or 0),
-                "name_change_count": int(player.name_change_count or 0)
+                "free_hard_currency": free_currency,
+                "name_change_count": count
             }), 200
 
-        count = max(0, int(player.name_change_count or 0))
-        cost = 0 if not new_name or not current_name or count == 0 else 4500
-
-        try:
-            free_currency = int(save_data.get("FreeHardCurrency", 0) or 0)
-        except (TypeError, ValueError):
-            return jsonify({"success": False, "error": "INVALID_CURRENCY"}), 400
-
+        # Clearing is always free. Empty -> non-empty is also always free.
+        cost = 4500 if current_name and new_name and count > 0 else 0
         if free_currency < cost:
+            db.session.rollback()
             return jsonify({
                 "success": False,
                 "error": "INSUFFICIENT_FREE_HARD_CURRENCY",
@@ -2566,31 +2600,19 @@ def PersistMultiplayerNameChange():
                 "free_hard_currency": free_currency
             }), 400
 
-        # Change only the name and the required currency fields; retain all other save data.
+        # Update only the requested name and fee; preserve every other save field.
         save_data["MultiplayerPlayerName"] = new_name
         if cost:
             save_data["FreeHardCurrency"] = free_currency - cost
 
-        try:
-            updated_game = _encode_game_save_with_name(game_text, save_data)
-            player.game = updated_game
-            player.multiplayer_name = new_name
-            # Empty names are always free and do not consume the free non-empty change.
-            if new_name:
-                player.name_change_count = count + 1
-            player.last_online = int(time.time())
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            app.logger.exception("[multiplayer_name_change] Failed to save name for %s", player_id)
-            return jsonify({"success": False, "error": "SAVE_FAILED"}), 500
+        player.game = _encode_game_save_with_name(game_text, save_data)
+        player.multiplayer_name = new_name
+        if new_name:
+            player.name_change_count = count + 1
+        player.last_online = int(time.time())
+        db.session.commit()
 
-        Log(
-            "player",
-            f"Player {player_id} changed multiplayer name "
-            f"(empty={not bool(new_name)}, cost={cost})"
-        )
-
+        Log("player", f"Player {username} changed multiplayer name (empty={not bool(new_name)}, cost={cost})")
         return jsonify({
             "success": True,
             "changed": True,
