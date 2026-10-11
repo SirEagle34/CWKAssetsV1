@@ -7516,7 +7516,7 @@ def _balancer_language_files():
         name for name in os.listdir(BALANCER_LANGUAGE_DATA_DIR)
         if name.lower().endswith((".txt", ".xml"))
         and os.path.isfile(os.path.join(BALANCER_LANGUAGE_DATA_DIR, name))
-        and re.fullmatch(r"[A-Za-z0-9_. -]+\\.(?:txt|xml)", name, re.IGNORECASE)
+        and re.fullmatch(r"[A-Za-z0-9_. -]+\.(?:txt|xml)", name, re.IGNORECASE)
     )
 
 
