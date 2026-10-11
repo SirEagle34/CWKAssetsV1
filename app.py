@@ -7599,12 +7599,19 @@ def _balancer_localized_text(value):
     if not text_value.startswith("!!"):
         return text_value
 
-    candidates = (
-        os.path.join(BALANCER_LANGUAGE_DATA_DIR, "EN_Sheet1.txt"),
-        os.path.join(BALANCER_LANGUAGE_DATA_DIR, "EN_Sheets1.txt"),
-        os.path.join(BALANCER_LANGUAGE_DATA_DIR, "EN_Sheet1.xml"),
-        os.path.join(BALANCER_LANGUAGE_DATA_DIR, "EN_Sheets1.xml"),
+    language_dirs = (
+        BALANCER_LANGUAGE_DATA_DIR,
+        os.path.join("persist", "languagedata"),
+        os.path.join(os.sep, "persist", "languagedata"),
     )
+    candidates = [
+        os.path.join(directory, filename)
+        for directory in language_dirs
+        for filename in (
+            "EN_Sheet1.txt", "EN_Sheets1.txt",
+            "EN_Sheet1.xml", "EN_Sheets1.xml",
+        )
+    ]
     path = next((item for item in candidates if os.path.isfile(item)), None)
     if not path:
         return text_value
@@ -7913,7 +7920,10 @@ def _balancer_build_report(creatures, action_cards, clash_cards):
         if invalid:
             report["action_cards"]["invalid_numbers"].append({"id": card_id or "(no ID)", "fields": invalid})
         report["action_cards"]["rows"].append({
-            "id": card_id, "name": _balancer_localized_text(row.get("Name", "")),
+            "id": card_id, "display_id": re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", card_id),
+            "name_key": str(row.get("Name", "")).strip(),
+            "name": _balancer_localized_text(row.get("Name", "")),
+            "display_name": _balancer_localized_text(row.get("Name", "")),
             "cost": row.get("Cost", ""), "rarity": row.get("Rarity", ""),
             "type": row.get("TypeText", ""), "faction": row.get("Faction", ""),
             "damage": row.get("DirectDamage", row.get("BurstSTR", "")),
@@ -7945,7 +7955,10 @@ def _balancer_build_report(creatures, action_cards, clash_cards):
         if missing_refs:
             report["creatures"]["broken_action_refs"].append({"id": creature_id or "(no ID)", "references": missing_refs})
         report["creatures"]["rows"].append({
-            "id": creature_id, "name": _balancer_localized_text(row.get("Name", "")),
+            "id": creature_id, "display_id": re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", creature_id),
+            "name_key": str(row.get("Name", "")).strip(),
+            "name": _balancer_localized_text(row.get("Name", "")),
+            "display_name": _balancer_localized_text(row.get("Name", "")),
             "deploy_cost": row.get("DeployCost", ""), "rarity": row.get("Rarity", ""),
             "hp": row.get("BalHP", ""), "str": row.get("BalSTR", ""),
             "int": row.get("BalINT", ""), "dex": row.get("BalDEX", ""),
