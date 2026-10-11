@@ -7502,6 +7502,134 @@ CLASH_ROYALE_API_BASE = os.environ.get(
 ).rstrip("/")
 CLASH_ROYALE_API_TOKEN = os.environ.get("CLASH_ROYALE_API_TOKEN", "").strip()
 
+# ======================= BALANCER LANGUAGE DATA =======================
+# Localization files live under data/persist/languagedata. Contents are XML
+# even when the game file uses a .txt extension.
+import xml.etree.ElementTree as ET
+
+BALANCER_LANGUAGE_DATA_DIR = os.path.join("data", "persist", "languagedata")
+
+
+def _balancer_language_files():
+    os.makedirs(BALANCER_LANGUAGE_DATA_DIR, exist_ok=True)
+    return sorted(
+        name for name in os.listdir(BALANCER_LANGUAGE_DATA_DIR)
+        if name.lower().endswith((".txt", ".xml"))
+        and os.path.isfile(os.path.join(BALANCER_LANGUAGE_DATA_DIR, name))
+        and re.fullmatch(r"[A-Za-z0-9_. -]+\\.(?:txt|xml)", name, re.IGNORECASE)
+    )
+
+
+def _balancer_language_path(filename):
+    if not filename or filename not in _balancer_language_files():
+        raise FileNotFoundError("Language file not found.")
+    return os.path.join(BALANCER_LANGUAGE_DATA_DIR, filename)
+
+
+def _balancer_read_language_file(filename):
+    path = _balancer_language_path(filename)
+    parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+    try:
+        tree = ET.parse(path, parser=parser)
+    except ET.ParseError as exc:
+        raise ValueError("Invalid language XML: " + str(exc))
+    if tree.getroot().tag != "entries":
+        raise ValueError("Root element must be <entries>.")
+    entries = []
+    for element in tree.getroot().findall(".//entry"):
+        key = (element.get("name") or "").strip()
+        if key:
+            entries.append({"key": key, "value": element.text or ""})
+    return tree, entries
+
+
+def _balancer_write_language_file(filename, tree):
+    path = _balancer_language_path(filename)
+    backup_path = path + ".balancer.bak"
+    if not os.path.exists(backup_path):
+        shutil.copy2(path, backup_path)
+    temp_path = path + ".balancer.tmp"
+    try:
+        ET.indent(tree, space="  ")
+        tree.write(temp_path, encoding="utf-8", xml_declaration=True)
+        ET.parse(temp_path)
+        os.replace(temp_path, path)
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
+
+@app.route("/balancer/language-data", methods=["GET", "POST"])
+def BalancerLanguageData():
+    account = get_balancer_account()
+    if not account:
+        return redirect("/balancer/login?next=/balancer/language-data")
+
+    files = _balancer_language_files()
+    filename = request.values.get("file", "").strip()
+    if filename not in files:
+        filename = files[0] if files else ""
+    query = request.values.get("q", "").strip()[:200]
+    selected_key = request.values.get("key", "").strip()[:500]
+    edited_value = request.form.get("value", "")
+    error = None
+    success = None
+    entries = []
+
+    if not filename:
+        return render_template(
+            "balancer_language_data.html", admin_name=account.username,
+            files=files, filename="", entries=[], query=query,
+            selected_key="", edited_value="", error=None, success=None
+        )
+
+    try:
+        tree, entries = _balancer_read_language_file(filename)
+        if request.method == "POST":
+            if request.form.get("action", "save_entry") != "save_entry":
+                raise ValueError("Invalid action.")
+            if not selected_key:
+                raise ValueError("Select a language key before saving.")
+            targets = [
+                item for item in tree.getroot().findall(".//entry")
+                if (item.get("name") or "").strip() == selected_key
+            ]
+            if len(targets) != 1:
+                raise ValueError("Key was not found or is duplicated; file was not changed.")
+            targets[0].text = edited_value
+            _balancer_write_language_file(filename, tree)
+            Log("balancer", account.username + " edited language key " + selected_key + " in " + filename)
+            success = "Translation saved. The first-edit .balancer.bak backup is preserved."
+            tree, entries = _balancer_read_language_file(filename)
+
+        selected_entry = next((row for row in entries if row["key"] == selected_key), None)
+        if not selected_key and entries:
+            selected_key = entries[0]["key"]
+            selected_entry = entries[0]
+        if request.method == "GET" or success:
+            edited_value = selected_entry["value"] if selected_entry else ""
+    except (OSError, ValueError, ET.ParseError) as exc:
+        error = str(exc)
+
+    filtered_entries = entries
+    if query:
+        q_lower = query.casefold()
+        filtered_entries = [
+            row for row in entries
+            if q_lower in row["key"].casefold() or q_lower in row["value"].casefold()
+        ]
+
+    return render_template(
+        "balancer_language_data.html", admin_name=account.username,
+        files=files, filename=filename, entries=filtered_entries[:2000],
+        query=query, selected_key=selected_key, edited_value=edited_value,
+        error=error, success=success
+    )
+# ===================== END BALANCER LANGUAGE DATA =======================
+
 # Keep third-party card data on the server, never in Flask's client-side cookie.
 _BALANCER_CR_CARDS_CACHE = {"time": 0, "cards": None}
 
