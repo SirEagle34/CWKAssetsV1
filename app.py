@@ -17,13 +17,11 @@ import subprocess
 import threading
 import traceback
 import time
-import tempfile
-import zipfile
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from urllib.parse import parse_qs, quote
+from urllib.parse import parse_qs
 from typing import Optional
 
 # Third-party library imports
@@ -7504,10 +7502,6 @@ CLASH_ROYALE_API_BASE = os.environ.get(
 ).rstrip("/")
 CLASH_ROYALE_API_TOKEN = os.environ.get("CLASH_ROYALE_API_TOKEN", "").strip()
 
-# Keep the external API cache on the server, never in Flask's client-side cookie.
-# The cards payload is large enough to exceed browser cookie limits.
-_BALANCER_CR_CACHE = {"time": 0, "cards": None}
-
 
 def _balancer_read_blueprint(filename):
     path = os.path.join(BALANCER_BLUEPRINT_DIR, filename)
@@ -7520,249 +7514,12 @@ def _balancer_read_blueprint(filename):
     return payload
 
 
-_BALANCER_ICON_DIRS = {
-    "creatures": "icon_creatures",
-    "action_cards": "icon_actioncards",
-}
-_BALANCER_ICON_EXTENSIONS = (".png", ".webp", ".jpg", ".jpeg")
-
-
-def _balancer_icon_filename(kind, card_id):
-    folder_name = _BALANCER_ICON_DIRS.get(kind)
-    safe_id = str(card_id or "").strip()
-    if not folder_name or not safe_id or os.path.basename(safe_id) != safe_id:
-        return None
-    folder = os.path.join(BALANCER_BLUEPRINT_DIR, folder_name)
-    for extension in _BALANCER_ICON_EXTENSIONS:
-        filename = safe_id + extension
-        if os.path.isfile(os.path.join(folder, filename)):
-            return filename
-    return None
-
-
-@app.route("/balancer/icon/<kind>/<path:filename>")
-def BalancerIcon(kind, filename):
-    if not get_balancer_account():
-        abort(404)
-    folder_name = _BALANCER_ICON_DIRS.get(kind)
-    if not folder_name or os.path.basename(filename) != filename:
-        abort(404)
-    if os.path.splitext(filename)[1].lower() not in _BALANCER_ICON_EXTENSIONS:
-        abort(404)
-    return send_from_directory(os.path.join(BALANCER_BLUEPRINT_DIR, folder_name), filename)
-
-
-
-# Public GitHub Releases must be PUBLISHED (draft releases are not available
-# through the unauthenticated public Releases API).
-_BALANCER_ICON_RELEASES = {
-    "creatures": {
-        "tag": "icons-creatures-v1",
-        "folder": "icon_creatures",
-        "asset_prefix": "icon_creatures_",
-    },
-    "action_cards": {
-        "tag": "icons-actioncards-v1",
-        "folder": "icon_actioncards",
-        "asset_prefix": "icon_actioncards_",
-    },
-}
-_BALANCER_ICON_SYNC_STATE = {
-    "running": False,
-    "message": "Not started",
-    "results": {},
-    "started_at": None,
-    "finished_at": None,
-}
-_BALANCER_ICON_SYNC_LOCK = threading.Lock()
-
-
-def _balancer_sync_release_icons(kind):
-    """Download ZIP assets from a published GitHub Release and extract only images."""
-    config = _BALANCER_ICON_RELEASES[kind]
-    folder_name = config["folder"]
-    target_dir = os.path.realpath(os.path.join(BALANCER_BLUEPRINT_DIR, folder_name))
-    os.makedirs(target_dir, exist_ok=True)
-
-    api_url = (
-        "https://api.github.com/repos/SirEagle34/CWKAssetsV1/releases/tags/"
-        + quote(config["tag"], safe="")
-    )
-    api_request = urllib.request.Request(
-        api_url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "CWK-Balancer-Icon-Sync/1.0",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-        method="GET",
-    )
-    try:
-        with urllib.request.urlopen(api_request, timeout=30) as response:
-            release = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
-            raise RuntimeError(
-                "GitHub Release '" + config["tag"] +
-                "' not found. Publish the release first; Draft releases cannot be downloaded publicly."
-            )
-        raise RuntimeError("GitHub Release API error: HTTP " + str(exc.code))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        raise RuntimeError("Could not read GitHub Release metadata: " + str(exc))
-
-    if release.get("draft"):
-        raise RuntimeError("Release '" + config["tag"] + "' is still a draft. Publish it first.")
-
-    assets = [
-        asset for asset in release.get("assets", [])
-        if str(asset.get("name", "")).lower().endswith(".zip")
-        and str(asset.get("name", "")).startswith(config["asset_prefix"])
-    ]
-    if not assets:
-        raise RuntimeError(
-            "No ZIP assets found for '" + config["tag"] +
-            "'. Expected filenames like " + config["asset_prefix"] + "001.zip."
-        )
-
-    extracted_files = 0
-    downloaded_bytes = 0
-    for asset in assets:
-        download_url = asset.get("browser_download_url", "")
-        asset_name = os.path.basename(str(asset.get("name", "")))
-        if not download_url.startswith("https://github.com/"):
-            raise RuntimeError("Unexpected download URL for asset: " + asset_name)
-
-        archive_path = None
-        try:
-            download_request = urllib.request.Request(
-                download_url,
-                headers={"User-Agent": "CWK-Balancer-Icon-Sync/1.0"},
-                method="GET",
-            )
-            with urllib.request.urlopen(download_request, timeout=60) as response:
-                with tempfile.NamedTemporaryFile(
-                    mode="wb", suffix=".zip", prefix="balancer-icons-",
-                    dir=target_dir, delete=False
-                ) as archive_file:
-                    archive_path = archive_file.name
-                    while True:
-                        chunk = response.read(1024 * 1024)
-                        if not chunk:
-                            break
-                        archive_file.write(chunk)
-                        downloaded_bytes += len(chunk)
-
-            with zipfile.ZipFile(archive_path, "r") as archive:
-                for item in archive.infolist():
-                    if item.is_dir():
-                        continue
-                    entry_name = item.filename.replace("\\", "/")
-                    parts = entry_name.split("/")
-                    if (entry_name.startswith("/") or not parts
-                            or parts[0] != folder_name
-                            or any(part in ("", ".", "..") for part in parts)):
-                        continue
-                    relative_parts = parts[1:]
-                    if not relative_parts:
-                        continue
-                    extension = os.path.splitext(relative_parts[-1])[1].lower()
-                    if extension not in _BALANCER_ICON_EXTENSIONS:
-                        continue
-                    output_path = os.path.realpath(os.path.join(target_dir, *relative_parts))
-                    if not output_path.startswith(target_dir + os.sep):
-                        continue
-                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                    with archive.open(item, "r") as source, open(output_path, "wb") as destination:
-                        shutil.copyfileobj(source, destination, length=1024 * 1024)
-                    extracted_files += 1
-        except (OSError, zipfile.BadZipFile, urllib.error.URLError, TimeoutError) as exc:
-            raise RuntimeError("Failed to download/extract " + asset_name + ": " + str(exc))
-        finally:
-            if archive_path and os.path.exists(archive_path):
-                try:
-                    os.remove(archive_path)
-                except OSError:
-                    app.logger.warning("Could not remove temporary icon ZIP: %s", archive_path)
-
-    if extracted_files == 0:
-        raise RuntimeError(
-            "ZIP assets downloaded, but no supported images were found. "
-            "Each ZIP must contain " + folder_name + "/<ID>.png (or webp/jpg/jpeg)."
-        )
-    return {
-        "tag": config["tag"],
-        "assets": len(assets),
-        "images_extracted": extracted_files,
-        "downloaded_bytes": downloaded_bytes,
-        "folder": target_dir,
-    }
-
-
-def _balancer_icon_sync_worker():
-    global _BALANCER_ICON_SYNC_STATE
-    results = {}
-    errors = []
-    for kind in ("creatures", "action_cards"):
-        try:
-            results[kind] = _balancer_sync_release_icons(kind)
-        except Exception as exc:
-            app.logger.exception("Balancer %s icon release sync failed", kind)
-            errors.append(kind + ": " + str(exc))
-            results[kind] = {"error": str(exc)}
-        with _BALANCER_ICON_SYNC_LOCK:
-            _BALANCER_ICON_SYNC_STATE["results"] = dict(results)
-            _BALANCER_ICON_SYNC_STATE["message"] = (
-                "Syncing icons: " + kind if kind == "creatures" else
-                "Finishing icon sync"
-            )
-    with _BALANCER_ICON_SYNC_LOCK:
-        _BALANCER_ICON_SYNC_STATE["running"] = False
-        _BALANCER_ICON_SYNC_STATE["results"] = results
-        _BALANCER_ICON_SYNC_STATE["finished_at"] = int(time.time())
-        _BALANCER_ICON_SYNC_STATE["message"] = (
-            "Finished with errors: " + " | ".join(errors) if errors
-            else "Icon sync completed successfully"
-        )
-
-
-@app.route("/balancer/icons/sync", methods=["GET"])
-def BalancerSyncIcons():
-    if not get_balancer_account():
-        abort(404)
-    with _BALANCER_ICON_SYNC_LOCK:
-        if _BALANCER_ICON_SYNC_STATE["running"]:
-            return jsonify(_BALANCER_ICON_SYNC_STATE), 202
-        _BALANCER_ICON_SYNC_STATE.update({
-            "running": True,
-            "message": "Starting icon download from GitHub Releases",
-            "results": {},
-            "started_at": int(time.time()),
-            "finished_at": None,
-        })
-    thread = threading.Thread(target=_balancer_icon_sync_worker, daemon=True)
-    thread.start()
-    return jsonify({
-        "ok": True,
-        "message": "Icon sync started in the background. Check /balancer/icons/sync/status for progress.",
-        "status_url": "/balancer/icons/sync/status",
-    }), 202
-
-
-@app.route("/balancer/icons/sync/status", methods=["GET"])
-def BalancerSyncIconsStatus():
-    if not get_balancer_account():
-        abort(404)
-    with _BALANCER_ICON_SYNC_LOCK:
-        return jsonify(dict(_BALANCER_ICON_SYNC_STATE))
-
-
 def _balancer_cr_cards(force_refresh=False):
     """Fetch Clash Royale cards server-side; never expose the API token."""
     if not CLASH_ROYALE_API_TOKEN:
         return None, "CLASH_ROYALE_API_TOKEN is not configured."
 
-    global _BALANCER_CR_CACHE
-    cached = _BALANCER_CR_CACHE
+    cached = session.get("clash_royale_cards_cache")
     now = int(time.time())
     if not force_refresh and isinstance(cached, dict):
         if now - int(cached.get("time", 0)) < 900 and isinstance(cached.get("cards"), list):
@@ -7783,7 +7540,8 @@ def _balancer_cr_cards(force_refresh=False):
         cards = data.get("items", []) if isinstance(data, dict) else []
         if not isinstance(cards, list):
             return None, "Unexpected response from Clash Royale API."
-        _BALANCER_CR_CACHE = {"time": now, "cards": cards}
+        session["clash_royale_cards_cache"] = {"time": now, "cards": cards}
+        session.modified = True
         return cards, None
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
@@ -7985,12 +7743,6 @@ def BalancerPanel():
 
     clash_cards, api_error = _balancer_cr_cards(force_refresh=force_refresh)
     report = _balancer_build_report(creatures, action_cards, clash_cards)
-    for row in report["creatures"]["rows"]:
-        icon_name = _balancer_icon_filename("creatures", row.get("id"))
-        row["icon_url"] = "/balancer/icon/creatures/" + quote(icon_name, safe="") if icon_name else None
-    for row in report["action_cards"]["rows"]:
-        icon_name = _balancer_icon_filename("action_cards", row.get("id"))
-        row["icon_url"] = "/balancer/icon/action_cards/" + quote(icon_name, safe="") if icon_name else None
     if force_refresh:
         Log("balancer", balancer_account.username + " refreshed the Balancer Clash Royale data.")
         return redirect("/balancer/")
