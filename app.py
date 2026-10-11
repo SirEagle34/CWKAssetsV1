@@ -2473,16 +2473,61 @@ def MigratePlayerNameChangeCount():
         print("[Player Migration] Added 'name_change_count'.")
 
 
-def _encode_game_save_with_name(game_text, save_data):
-    """Preserve the existing query prefix while replacing only the compressed save payload."""
-    index = game_text.find("&data=")
-    if index < 0:
-        raise ValueError("Game save does not contain '&data='")
+def _decode_game_save_for_name_change(game_text):
+    """Decode the save format used by the persistence API, or accept raw JSON saves."""
+    if isinstance(game_text, (bytes, bytearray)):
+        game_text = game_text.decode("utf-8", errors="strict")
+    if not isinstance(game_text, str) or not game_text.strip():
+        raise ValueError("Empty player save")
 
+    stripped = game_text.strip()
+    if stripped.startswith("{"):
+        data = json.loads(stripped)
+        if not isinstance(data, dict):
+            raise ValueError("Player save JSON is not an object")
+        return data, "json"
+
+    # Accept both '&data=' and '?data=' / 'data=' prefixes.
+    marker = stripped.find("data=")
+    if marker < 0:
+        raise ValueError("Player save has no data payload")
+    encoded = stripped[marker + len("data="):].split("&", 1)[0]
+    encoded = encoded.strip()
+    if not encoded:
+        raise ValueError("Player save data payload is empty")
+
+    # Some stored values may have URL-escaped base64 characters.
+    from urllib.parse import unquote
+    encoded = unquote(encoded)
+    encoded += "=" * ((4 - len(encoded) % 4) % 4)
+    compressed = base64.b64decode(encoded)
+    try:
+        payload = gzip.decompress(compressed)
+    except OSError:
+        # Support zlib-wrapped gzip-compatible payloads if the client emitted them.
+        payload = gzip.GzipFile(fileobj=BytesIO(compressed), mode="rb").read()
+    data = json.loads(payload.decode("utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("Decoded player save is not an object")
+    return data, ("encoded", marker, len("data="))
+
+
+def _encode_game_save_with_name(game_text, save_data, save_format="encoded"):
+    """Replace only the save payload while preserving the original storage format."""
     payload = json.dumps(save_data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if save_format == "json":
+        return payload.decode("utf-8")
+
+    marker = game_text.find("data=")
+    if marker < 0:
+        raise ValueError("Game save does not contain a data payload")
+    prefix = game_text[:marker + len("data=")]
     compressed = gzip.compress(payload, mtime=0)
     encoded = base64.b64encode(compressed).decode("ascii")
-    return game_text[:index + 6] + encoded
+    suffix_start = marker + len("data=")
+    suffix_end = game_text.find("&", suffix_start)
+    suffix = game_text[suffix_end:] if suffix_end >= 0 else ""
+    return prefix + encoded + suffix
 
 
 @app.route("/persist/multiplayer_name_change/", methods=["POST"])
@@ -2544,26 +2589,15 @@ def PersistMultiplayerNameChange():
         game_text = player.game
         if isinstance(game_text, bytes):
             game_text = game_text.decode("utf-8", errors="strict")
-        if not isinstance(game_text, str) or not game_text:
+        if not isinstance(game_text, str) or not game_text.strip():
             db.session.rollback()
             return jsonify({"success": False, "error": "PLAYER_SAVE_UNAVAILABLE"}), 400
 
-        marker = game_text.find("&data=")
-        if marker < 0:
-            db.session.rollback()
-            return jsonify({"success": False, "error": "INVALID_PLAYER_SAVE"}), 400
-
         try:
-            encoded = game_text[marker + 6:]
-            decoded_bytes = gzip.decompress(base64.b64decode(encoded, validate=True))
-            save_data = json.loads(decoded_bytes.decode("utf-8"))
+            save_data, save_format = _decode_game_save_for_name_change(game_text)
         except Exception:
             db.session.rollback()
             app.logger.exception("[multiplayer_name_change] Could not decode save for %s", username)
-            return jsonify({"success": False, "error": "INVALID_PLAYER_SAVE"}), 400
-
-        if not isinstance(save_data, dict):
-            db.session.rollback()
             return jsonify({"success": False, "error": "INVALID_PLAYER_SAVE"}), 400
 
         current_name = save_data.get("MultiplayerPlayerName", "")
@@ -2608,7 +2642,7 @@ def PersistMultiplayerNameChange():
         if cost:
             save_data["FreeHardCurrency"] = free_currency - cost
 
-        player.game = _encode_game_save_with_name(game_text, save_data)
+        player.game = _encode_game_save_with_name(game_text, save_data, save_format)
         player.multiplayer_name = new_name
         if new_name:
             player.name_change_count = count + 1
