@@ -2589,8 +2589,12 @@ def PersistMultiplayerNameChange():
                 "name_change_count": count
             }), 200
 
-        # Clearing is always free. Empty -> non-empty is also always free.
-        cost = 4500 if current_name and new_name and count > 0 else 0
+        
+		# Clearing the name is free.
+		# The first non-empty name is free.
+		# Later non-empty names cost 4500, even after clearing.
+		cost = 4500 if new_name and count > 0 else 0
+
         if free_currency < cost:
             db.session.rollback()
             return jsonify({
