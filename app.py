@@ -7884,7 +7884,7 @@ def _balancer_build_report(creatures, action_cards, clash_cards):
         if invalid:
             report["action_cards"]["invalid_numbers"].append({"id": card_id or "(no ID)", "fields": invalid})
         report["action_cards"]["rows"].append({
-            "id": card_id, "name": row.get("Name", ""),
+            "id": card_id, "name": _balancer_localized_text(row.get("Name", "")),
             "cost": row.get("Cost", ""), "rarity": row.get("Rarity", ""),
             "type": row.get("TypeText", ""), "faction": row.get("Faction", ""),
             "damage": row.get("DirectDamage", row.get("BurstSTR", "")),
@@ -7916,7 +7916,7 @@ def _balancer_build_report(creatures, action_cards, clash_cards):
         if missing_refs:
             report["creatures"]["broken_action_refs"].append({"id": creature_id or "(no ID)", "references": missing_refs})
         report["creatures"]["rows"].append({
-            "id": creature_id, "name": row.get("Name", ""),
+            "id": creature_id, "name": _balancer_localized_text(row.get("Name", "")),
             "deploy_cost": row.get("DeployCost", ""), "rarity": row.get("Rarity", ""),
             "hp": row.get("BalHP", ""), "str": row.get("BalSTR", ""),
             "int": row.get("BalINT", ""), "dex": row.get("BalDEX", ""),
