@@ -22,6 +22,20 @@
   </form>
 </div>
 <div class="editor-panel">
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label" for="local_name_key">Local Name Key</label>
+      <input class="form-control font-monospace" id="local_name_key" value="{{ selected_name_key }}" readonly>
+      <div class="form-text">Blueprint içindeki Name alanından otomatik alınır.</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label" for="localized_name">English display name · EN sheet</label>
+      <input class="form-control" id="localized_name" value="{{ selected_localized_name }}" readonly>
+      <div class="form-text">Anahtar <code>!!CoolDog_Awaken_NAME</code> ise EN_Sheet1.txt içindeki karşılığı gösterilir.</div>
+    </div>
+  </div>
+</div>
+<div class="editor-panel">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">Kayıt JSON'u</h2><p class="small text-secondary mb-0">Yalnızca seçilen ID'li nesne değiştirilir. ID aynı kalmalıdır; dosya JSON dizisi ve nesne türleri açısından doğrulanır.</p></div><span class="badge text-bg-secondary">{{ record_options|length }} kayıt</span></div>
   <form method="post" action="/balancer/editor">
     <input type="hidden" name="dataset" value="{{ dataset }}">
