@@ -7535,7 +7535,6 @@ def _balancer_language_manifest():
     if not os.path.isfile(BALANCER_LANGUAGE_MANIFEST):
         manifest = _balancer_language_default_manifest()
         _balancer_write_language_manifest(manifest, create_only=True)
-        return manifest
 
     with open(BALANCER_LANGUAGE_MANIFEST, "r", encoding="utf-8-sig") as handle:
         manifest = json.load(handle)
