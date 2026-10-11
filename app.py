@@ -7553,8 +7553,8 @@ def _balancer_language_manifest():
             status = "pending"
         actual_filename = filename
         if code == "EN" and not os.path.isfile(os.path.join(BALANCER_LANGUAGE_DATA_DIR, actual_filename)):
-            if os.path.isfile(os.path.join(BALANCER_LANGUAGE_DATA_DIR, "EN_Sheets1.txt")):
-                actual_filename = "EN_Sheets1.txt"
+            if os.path.isfile(os.path.join(BALANCER_LANGUAGE_DATA_DIR, "EN_Sheet1.txt")):
+                actual_filename = "EN_Sheet1.txt"
         languages.append({
             "code": code,
             "name": name,
@@ -7608,8 +7608,8 @@ def _balancer_localized_text(value):
         os.path.join(directory, filename)
         for directory in language_dirs
         for filename in (
-            "EN_Sheet1.txt", "EN_Sheets1.txt",
-            "EN_Sheet1.xml", "EN_Sheets1.xml",
+            "EN_Sheet1.txt",
+            "EN_Sheet1.xml",
         )
     ]
     path = next((item for item in candidates if os.path.isfile(item)), None)
@@ -7668,7 +7668,7 @@ def _balancer_language_files():
 
 
 def _balancer_language_path(filename):
-    allowed = {item[2] for item in BALANCER_LANGUAGES} | {"EN_Sheets1.txt"}
+    allowed = {item[2] for item in BALANCER_LANGUAGES}
     if not filename or filename not in allowed or filename not in _balancer_language_files():
         raise FileNotFoundError("Language file not found or not listed in manifest.")
     return os.path.join(BALANCER_LANGUAGE_DATA_DIR, filename)
