@@ -7470,3 +7470,229 @@ if __name__ == '__main__':
         debug=args.debug,
         port=args.port
     )
+
+
+# ========================= BALANCER PANEL =========================
+# The official Clash Royale API is used only as an external reference.
+# CWK-specific balance values stay in local blueprint JSON files.
+import urllib.error
+import urllib.request
+
+BALANCER_BLUEPRINT_DIR = os.path.join("data", "persist", "blueprints")
+CLASH_ROYALE_API_BASE = os.environ.get(
+    "CLASH_ROYALE_API_BASE", "https://api.clashroyale.com/v1"
+).rstrip("/")
+CLASH_ROYALE_API_TOKEN = os.environ.get("CLASH_ROYALE_API_TOKEN", "").strip()
+
+
+def _balancer_read_blueprint(filename):
+    path = os.path.join(BALANCER_BLUEPRINT_DIR, filename)
+    if not os.path.isfile(path):
+        raise FileNotFoundError("Blueprint file not found: " + filename)
+    with open(path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, list):
+        raise ValueError(filename + " must contain a JSON array")
+    return payload
+
+
+def _balancer_cr_cards(force_refresh=False):
+    """Fetch Clash Royale cards server-side; never expose the API token."""
+    if not CLASH_ROYALE_API_TOKEN:
+        return None, "CLASH_ROYALE_API_TOKEN is not configured."
+
+    cached = session.get("clash_royale_cards_cache")
+    now = int(time.time())
+    if not force_refresh and isinstance(cached, dict):
+        if now - int(cached.get("time", 0)) < 900 and isinstance(cached.get("cards"), list):
+            return cached["cards"], None
+
+    req = urllib.request.Request(
+        CLASH_ROYALE_API_BASE + "/cards",
+        headers={
+            "Authorization": "Bearer " + CLASH_ROYALE_API_TOKEN,
+            "Accept": "application/json",
+            "User-Agent": "CWK-Balancer/1.0"
+        },
+        method="GET"
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=12) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        cards = data.get("items", []) if isinstance(data, dict) else []
+        if not isinstance(cards, list):
+            return None, "Unexpected response from Clash Royale API."
+        session["clash_royale_cards_cache"] = {"time": now, "cards": cards}
+        session.modified = True
+        return cards, None
+    except urllib.error.HTTPError as exc:
+        if exc.code == 401:
+            message = "Clash Royale API rejected the token (401)."
+        elif exc.code == 403:
+            message = "Clash Royale API denied access (403). Check the token IP allowlist."
+        elif exc.code == 429:
+            message = "Clash Royale API rate limit reached (429)."
+        else:
+            message = "Clash Royale API returned HTTP " + str(exc.code) + "."
+        return None, message
+    except Exception as exc:
+        app.logger.warning("Balancer Clash Royale request failed: %s", repr(exc))
+        return None, "Could not connect to Clash Royale API."
+
+
+def _balancer_normalize(value):
+    return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+
+
+def _balancer_build_report(creatures, action_cards, clash_cards):
+    report = {
+        "creatures": {"total": len(creatures), "duplicate_ids": [], "missing_fields": [],
+                      "invalid_numbers": [], "broken_action_refs": [], "rows": []},
+        "action_cards": {"total": len(action_cards), "duplicate_ids": [], "missing_fields": [],
+                         "invalid_numbers": [], "rows": []},
+        "cross_game": {"matched": 0, "unmatched": 0, "matches": []},
+    }
+    creature_ids = set()
+    action_ids = set()
+    action_ref_ids = set()
+
+    for row in action_cards:
+        card_id = str(row.get("ID", "")).strip()
+        if card_id:
+            if card_id in action_ids:
+                report["action_cards"]["duplicate_ids"].append(card_id)
+            action_ids.add(card_id)
+            action_ref_ids.add(card_id)
+        missing = [key for key in ("ID", "Cost", "Rarity") if not str(row.get(key, "")).strip()]
+        if missing:
+            report["action_cards"]["missing_fields"].append({"id": card_id or "(no ID)", "fields": missing})
+        invalid = []
+        for key in ("Cost", "Rarity", "DirectDamage", "BurstSTR", "EnhanceSTR", "Heal", "Shield"):
+            value = row.get(key)
+            if value not in (None, ""):
+                try:
+                    float(value)
+                except (TypeError, ValueError):
+                    invalid.append(key)
+        if invalid:
+            report["action_cards"]["invalid_numbers"].append({"id": card_id or "(no ID)", "fields": invalid})
+        report["action_cards"]["rows"].append({
+            "id": card_id, "name": row.get("Name", ""),
+            "cost": row.get("Cost", ""), "rarity": row.get("Rarity", ""),
+            "type": row.get("TypeText", ""), "faction": row.get("Faction", ""),
+            "damage": row.get("DirectDamage", row.get("BurstSTR", "")),
+            "issues": len(missing) + len(invalid)
+        })
+
+    for row in creatures:
+        creature_id = str(row.get("ID", "")).strip()
+        if creature_id:
+            if creature_id in creature_ids:
+                report["creatures"]["duplicate_ids"].append(creature_id)
+            creature_ids.add(creature_id)
+        missing = [key for key in ("ID", "DeployCost", "Rarity", "BalHP", "BalSTR", "BalINT") if not str(row.get(key, "")).strip()]
+        if missing:
+            report["creatures"]["missing_fields"].append({"id": creature_id or "(no ID)", "fields": missing})
+        invalid = []
+        for key in ("DeployCost", "Rarity", "BalHP", "BalSTR", "BalINT", "BalDEX", "BalDEF", "BalRES", "MinHP", "MaxHP"):
+            value = row.get(key)
+            if value not in (None, ""):
+                try:
+                    float(value)
+                except (TypeError, ValueError):
+                    invalid.append(key)
+        if invalid:
+            report["creatures"]["invalid_numbers"].append({"id": creature_id or "(no ID)", "fields": invalid})
+        refs = [str(row.get("ActionCard" + str(i), "")).strip() for i in range(1, 7)]
+        refs = [value for value in refs if value]
+        missing_refs = [value for value in refs if value not in action_ref_ids]
+        if missing_refs:
+            report["creatures"]["broken_action_refs"].append({"id": creature_id or "(no ID)", "references": missing_refs})
+        report["creatures"]["rows"].append({
+            "id": creature_id, "name": row.get("Name", ""),
+            "deploy_cost": row.get("DeployCost", ""), "rarity": row.get("Rarity", ""),
+            "hp": row.get("BalHP", ""), "str": row.get("BalSTR", ""),
+            "int": row.get("BalINT", ""), "dex": row.get("BalDEX", ""),
+            "issues": len(missing) + len(invalid) + len(missing_refs)
+        })
+
+    # Clash Royale has a different data model. This is a name-reference check,
+    # not a gameplay-equivalent balance comparison.
+    normalized_cr = {}
+    for card in clash_cards or []:
+        key = _balancer_normalize(card.get("name"))
+        if key and key not in normalized_cr:
+            normalized_cr[key] = card
+
+    for row in report["creatures"]["rows"] + report["action_cards"]["rows"]:
+        key = _balancer_normalize(row.get("name", ""))
+        match = normalized_cr.get(key) if key else None
+        if not match:
+            composite = _balancer_normalize(row.get("id", "") + " " + row.get("name", ""))
+            candidates = [card for cr_key, card in normalized_cr.items()
+                          if cr_key and (cr_key in composite or composite in cr_key)]
+            if len(candidates) == 1:
+                match = candidates[0]
+        if match:
+            report["cross_game"]["matched"] += 1
+            report["cross_game"]["matches"].append({
+                "local_id": row.get("id", ""),
+                "local_name": row.get("name", ""),
+                "clash_royale_name": match.get("name", ""),
+                "elixir": match.get("elixirCost", ""),
+                "rarity": match.get("rarity", ""),
+                "type": match.get("type", "")
+            })
+        else:
+            report["cross_game"]["unmatched"] += 1
+    return report
+
+
+@app.route("/balancer/", methods=["GET", "POST"])
+@login_required
+def BalancerPanel():
+    if not isAdmin(current_user):
+        return abort(404)
+    force_refresh = request.method == "POST" and request.form.get("action") == "refresh_api"
+    try:
+        creatures = _balancer_read_blueprint("db_Creatures.json")
+        action_cards = _balancer_read_blueprint("db_ActionCards.json")
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        app.logger.exception("Balancer blueprint load failed")
+        return make_response("Balancer data error: " + str(exc), 500)
+
+    clash_cards, api_error = _balancer_cr_cards(force_refresh=force_refresh)
+    report = _balancer_build_report(creatures, action_cards, clash_cards)
+    if force_refresh:
+        Log("admin", current_user.username + " refreshed the Balancer Clash Royale data.")
+        return redirect("/balancer/")
+
+    query = request.args.get("q", "").strip()[:100].casefold()
+    selected_tab = request.args.get("tab", "creatures")
+    if selected_tab not in ("creatures", "action_cards", "matches"):
+        selected_tab = "creatures"
+    for key in ("creatures", "action_cards"):
+        rows = report[key]["rows"]
+        if query:
+            rows = [row for row in rows if query in str(row.get("id", "")).casefold()
+                    or query in str(row.get("name", "")).casefold()]
+        report[key]["filtered_rows"] = rows[:1000]
+    matches = report["cross_game"]["matches"]
+    if query:
+        matches = [row for row in matches if query in str(row.get("local_id", "")).casefold()
+                   or query in str(row.get("local_name", "")).casefold()
+                   or query in str(row.get("clash_royale_name", "")).casefold()]
+    report["cross_game"]["filtered_matches"] = matches[:1000]
+
+    return render_template(
+        "balancer.html",
+        report=report,
+        api_error=api_error,
+        api_configured=bool(CLASH_ROYALE_API_TOKEN),
+        api_count=len(clash_cards or []),
+        query=query,
+        selected_tab=selected_tab,
+        admin_name=current_user.username
+    )
+# ======================= END BALANCER PANEL =======================
+
