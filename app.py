@@ -6908,13 +6908,12 @@ def PersistGame(id):
 			stored_devicename = stored_devicename.decode("utf-8", errors="replace")
 		stored_devicename = str(stored_devicename or "").strip()
 
-		# Set the device name only when the account has no value yet.
-		if not stored_devicename:
+		# Device name is descriptive metadata, not a stable account credential.
+		# Mobile OS/device labels can change, so do not reject a valid save solely
+		# because the reported device name differs from the previous value.
+		if stored_devicename != devicename:
 			DeviceNameUser.devicename = devicename
 			db.session.commit()
-		elif stored_devicename != devicename:
-			DiscordWebhookMessage(username + " attempted to access game with wrong device name. Device name: '" + devicename + "'. IP: " + IPFromRequest(request))
-			return make_response("Invalid Username!", 400)
 
 	UpdateLastOnline(username)
 
