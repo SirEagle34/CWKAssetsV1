@@ -6899,21 +6899,17 @@ def PersistGame(id):
 			return make_response("No game found!", 404)
 
 		devicename = str(request.headers.get("X-Nick-Description", "") or "").strip()
-		if not devicename:
-			return make_response("Missing device name!", 400)
 
-		# Older rows may contain bytes while newer rows contain strings.
-		stored_devicename = DeviceNameUser.devicename
-		if isinstance(stored_devicename, bytes):
-			stored_devicename = stored_devicename.decode("utf-8", errors="replace")
-		stored_devicename = str(stored_devicename or "").strip()
-
-		# Device name is descriptive metadata, not a stable account credential.
-		# Mobile OS/device labels can change, so do not reject a valid save solely
-		# because the reported device name differs from the previous value.
-		if stored_devicename != devicename:
-			DeviceNameUser.devicename = devicename
-			db.session.commit()
+		# Device name is optional descriptive metadata, not an account credential.
+		# Empty/changing device labels must not block saving the player's game.
+		if devicename:
+			stored_devicename = DeviceNameUser.devicename
+			if isinstance(stored_devicename, bytes):
+				stored_devicename = stored_devicename.decode("utf-8", errors="replace")
+			stored_devicename = str(stored_devicename or "").strip()
+			if stored_devicename != devicename:
+				DeviceNameUser.devicename = devicename
+				db.session.commit()
 
 	UpdateLastOnline(username)
 
