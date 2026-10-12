@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="tr" data-bs-theme="dark">
+<html lang="en" data-bs-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -16,21 +16,21 @@
   <main class="login-card">
     <div class="brand-mark mb-3">B</div>
     <div class="small text-uppercase muted">Card Wars Kingdom</div>
-    <h1 class="h3 mt-1 mb-2">Balancer giriş</h1>
-    <p class="muted mb-4">Balancer hesabınızın kullanıcı adı ve şifresiyle giriş yapın.</p>
+    <h1 class="h3 mt-1 mb-2">Balancer Login</h1>
+    <p class="muted mb-4">Sign in with your Balancer account username and password.</p>
     {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
     <form method="post" action="/balancer/login{% if request.args.get('next') %}?next={{ request.args.get('next')|urlencode }}{% endif %}">
       <div class="mb-3">
-        <label class="form-label" for="username">Kullanıcı adı</label>
+        <label class="form-label" for="username">Username</label>
         <input class="form-control form-control-lg" id="username" name="username" autocomplete="username" required autofocus maxlength="80">
       </div>
       <div class="mb-4">
-        <label class="form-label" for="password">Şifre</label>
+        <label class="form-label" for="password">Password</label>
         <input class="form-control form-control-lg" type="password" id="password" name="password" autocomplete="current-password" required>
       </div>
-      <button class="btn btn-primary btn-lg w-100" type="submit">Giriş yap</button>
+      <button class="btn btn-primary btn-lg w-100" type="submit">Sign in</button>
     </form>
-    <p class="small muted mt-4 mb-0">Hesap oluşturmak için sunucu yöneticinizle iletişime geçin.</p>
+    <p class="small muted mt-4 mb-0">Contact your server administrator to create an account.</p>
   </main>
 </body>
 </html>
