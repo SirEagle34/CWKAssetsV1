@@ -6777,6 +6777,7 @@ def UserAction2():
 							price = int(float(misc_params.get("InventorySpacePurchaseCost", 1) or 1))
 							inventory_increment = int(float(misc_params.get("InventorySpacePerPurchase", 1) or 1))
 							inventory_max = int(float(misc_params.get("MaxInventorySpace", 1000) or 1000))
+							inventory_start = int(float(misc_params.get("StartingInventorySpace", 25) or 25))
 							if price <= 0 or inventory_increment <= 0 or inventory_max <= 0:
 								raise ValueError("Invalid inventory purchase settings")
 							item_data = {"ID": "inventory"}
@@ -6866,9 +6867,11 @@ def UserAction2():
 					else:
 						price *= count
 						save_data = DecryptGameData(db_user.game)
-						if not isinstance(save_data, dict):
+						if not isinstance(save_data, dict) and purchase_currency != "inventory":
 							fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
 						else:
+							if not isinstance(save_data, dict):
+								save_data = {}
 							if purchase_currency == "inventory":
 								# Use the persisted player save, never the client-supplied fr balance.
 								try:
@@ -6877,7 +6880,7 @@ def UserAction2():
 										game_text = game_text.decode("utf-8", errors="strict")
 									inventory_save, save_format = _decode_game_save_for_name_change(game_text)
 									server_free = int(inventory_save.get("FreeHardCurrency", 0) or 0)
-									current_space = int(inventory_save.get("InventorySpace", 0) or 0)
+									current_space = int(inventory_save.get("InventorySpace", inventory_start) or inventory_start)
 									if server_free < price:
 										fields["reason"] = "INSUFFICIENT_CURRENCY"
 									elif current_space + inventory_increment > inventory_max:
@@ -6895,7 +6898,7 @@ def UserAction2():
 									db.session.rollback()
 									app.logger.exception("[user_action2] Inventory purchase/save failed")
 									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
-							except Exception:
+								except Exception:
 								db.session.rollback()
 								app.logger.exception("[user_action2] Inventory purchase/save failed")
 								fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
