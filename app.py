@@ -6913,18 +6913,9 @@ def PersistGame(id):
 
 	UpdateLastOnline(username)
 
-	#check if user is PVP banned
-	pvp_ban_db_user = Player.query.filter_by(username=username).first()
-	if pvp_ban_db_user is not None:
-		try:
-			game = DecryptGameData(pvp_ban_db_user.game)
-			if game is not None:
-				if int(game["Zxcvbnm"]) == 1:
-					DiscordWebhookMessage(username +" attempted to access game while PVP banned. IP: " + IPFromRequest(request))
-					SystemBan(username)
-					return make_response("User is banned!", 400)
-		except Exception as e:
-			Log("persist", "Error while checking if user is PVP banned: " + str(e))
+	# A PVP restriction stored inside the player's save must not block
+	# ordinary game persistence or automatically create an account-wide ban.
+	# Ranked/Extreme matchmaking should enforce PVP restrictions separately.
 
 	if request.method == 'GET':
 		db_user = Player.query.filter_by(username=username).first()
