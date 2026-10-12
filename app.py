@@ -6737,7 +6737,8 @@ def UserAction2():
 				fields["reason"] = "INVALID_PURCHASE"
 			else:
 				kind, item_id, count_text = parts
-				kind, item_id = kind.strip().lower(), item_id.strip()
+				kind = kind.strip().lower().replace(" ", "").replace("-", "")
+				item_id = item_id.strip()
 				try:
 					count = int(count_text)
 				except (TypeError, ValueError):
