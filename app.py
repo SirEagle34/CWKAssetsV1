@@ -6757,6 +6757,7 @@ def UserAction2():
 					"evo": ("db_StoreBuyEvoMaterials.json", ("EvoMaterialID",))
 				}
 				item_data, price = None, 0
+				purchase_currency = "hard_free"
 				if not item_id or count < 1 or count > 99:
 					fields["reason"] = "INVALID_PURCHASE"
 				elif kind in ("leader", "hero"):
@@ -6771,6 +6772,53 @@ def UserAction2():
 						app.logger.exception("[user_action2] Leader catalog read failed")
 					if count != 1:
 						fields["reason"] = "INVALID_PURCHASE"
+				elif kind == "gacha":
+					filename = "db_GachaSlots.json"
+					path = os.path.join(
+						app.root_path,
+						"data",
+						"persist",
+						"blueprints",
+						filename
+					)
+
+					try:
+						with open(path, "r", encoding="utf-8") as stream:
+							rows = json.load(stream)
+
+						item_data = next(
+							(
+								row for row in rows
+								if isinstance(row, dict)
+								and str(row.get("ID", "")).strip().lower()
+								== item_id.lower()
+							),
+							None
+						)
+
+						if item_data is None:
+							fields["reason"] = "ITEM_NOT_FOUND"
+						else:
+							currency_type = str(
+								item_data.get("CurrencyType", "") or ""
+							).strip()
+
+							price = int(float(item_data.get("Cost", 0) or 0))
+
+							purchase_currency = {
+								"SoftCurrency": "soft",
+								"SocialCurrency": "social",
+								"HardCurrency": "hard"
+							}.get(currency_type, "unsupported")
+
+							if purchase_currency == "unsupported":
+								fields["reason"] = "UNSUPPORTED_GACHA_CURRENCY"
+
+					except (OSError, ValueError, TypeError, json.JSONDecodeError):
+						app.logger.exception(
+							"[user_action2] Gacha catalog read failed"
+						)
+						fields["reason"] = "GACHA_CATALOG_ERROR"
 				elif kind in catalogs:
 					filename, match_keys = catalogs[kind]
 					path = os.path.join(app.root_path, "data", "persist", "blueprints", filename)
@@ -6796,10 +6844,46 @@ def UserAction2():
 							fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
 						else:
 							# Store purchases use FreeHardCurrency, not SoftCurrency.
-							if free < price:
-								fields["reason"] = "INSUFFICIENT_CURRENCY"
-							else:
-								fields["level2"] = free - price
+							if purchase_currency == "hard_free":
+								# Normal mağaza: mevcut davranışı koru.
+								if free < price:
+									fields["reason"] = "INSUFFICIENT_CURRENCY"
+								else:
+									fields["level2"] = free - price
+
+							elif purchase_currency == "hard":
+								# Gacha HardCurrency: önce ücretsiz,
+								# sonra ücretli HardCurrency kullan.
+								server_free = int(
+									save_data.get("FreeHardCurrency", 0) or 0
+								)
+								server_paid = int(
+									save_data.get("PaidHardCurrency", 0) or 0
+								)
+
+								if server_free + server_paid < price:
+									fields["reason"] = "INSUFFICIENT_CURRENCY"
+								else:
+									free_spent = min(server_free, price)
+									paid_spent = price - free_spent
+
+									fields["level2"] = server_free - free_spent
+									fields["level1"] = server_paid - paid_spent
+
+							elif purchase_currency == "soft":
+								server_soft = int(
+									save_data.get("SoftCurrency", 0) or 0
+								)
+
+								if server_soft < price:
+									fields["reason"] = "INSUFFICIENT_CURRENCY"
+								else:
+									fields["gs"] = -price
+
+							elif purchase_currency == "social":
+								# SocialCurrency'nin sunucudaki gerçek
+								# alanını doğrulamadan yanlış bakiye düşme.
+								fields["reason"] = "SOCIAL_CURRENCY_MAPPING_REQUIRED"
 
 			return jsonify({"success": True, "data": json.dumps({"fields": fields}, separators=(",", ":"))})
 
