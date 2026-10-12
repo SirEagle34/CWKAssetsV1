@@ -2514,17 +2514,34 @@ def _decode_game_save_for_name_change(game_text):
     if not encoded:
         raise ValueError("Player save data payload is empty")
 
-    # Some stored values may have URL-escaped base64 characters.
+    # The persistence layer may store URL-encoded form data. In that case,
+    # '+' can already have been converted to a space before it reaches this
+    # decoder. Restore Base64 characters and support both standard and URL-safe
+    # Base64 while preserving the original save prefix/suffix.
     from urllib.parse import unquote
-    encoded = unquote(encoded)
+    encoded = unquote(encoded).replace(" ", "+")
+    encoded = encoded.replace("-", "+").replace("_", "/")
     encoded += "=" * ((4 - len(encoded) % 4) % 4)
-    compressed = base64.b64decode(encoded)
+
+    try:
+        compressed = base64.b64decode(encoded, validate=True)
+    except (ValueError, base64.binascii.Error) as exc:
+        raise ValueError("Player save payload is not valid Base64") from exc
+
     try:
         payload = gzip.decompress(compressed)
-    except OSError:
-        # Support zlib-wrapped gzip-compatible payloads if the client emitted them.
-        payload = gzip.GzipFile(fileobj=BytesIO(compressed), mode="rb").read()
-    data = json.loads(payload.decode("utf-8"))
+    except Exception as gzip_error:
+        # Use the same decoder as the rest of the server as a compatibility
+        # fallback for legacy persistence payloads.
+        decoded = DecryptGameData(game_text)
+        if isinstance(decoded, dict):
+            return decoded, ("encoded", marker, len("data="))
+        raise ValueError("Player save payload is not valid GZIP data") from gzip_error
+
+    try:
+        data = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Decoded player save is not valid JSON") from exc
     if not isinstance(data, dict):
         raise ValueError("Decoded player save is not an object")
     return data, ("encoded", marker, len("data="))
@@ -2621,6 +2638,7 @@ def PersistMultiplayerNameChange():
         current_name = save_data.get("MultiplayerPlayerName", "")
         current_name = current_name if isinstance(current_name, str) else str(current_name or "")
         current_name = current_name.strip()
+        db_name = (player.multiplayer_name or "").strip()
         count = max(0, int(player.name_change_count or 0))
 
         try:
