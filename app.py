@@ -6748,6 +6748,12 @@ def UserAction2():
 					"creatures": ("db_StoreBuyCreatures.json", ("CreatureID",)),
 					"actioncard": ("db_StoreBuyActionCards.json", ("CardID",)),
 					"actioncards": ("db_StoreBuyActionCards.json", ("CardID",)),
+					"action_card": ("db_StoreBuyActionCards.json", ("CardID",)),
+					"action_cards": ("db_StoreBuyActionCards.json", ("CardID",)),
+					"spell": ("db_StoreBuyActionCards.json", ("CardID",)),
+					"spells": ("db_StoreBuyActionCards.json", ("CardID",)),
+					"spellcard": ("db_StoreBuyActionCards.json", ("CardID",)),
+					"spellcards": ("db_StoreBuyActionCards.json", ("CardID",)),
 					"card": ("db_StoreBuyActionCards.json", ("CardID",)),
 					"excard": ("db_StoreBuyActionCards.json", ("CardID",)),
 					"cardback": ("db_StoreBuyCardBacks.json", ("CardBackID",)),
@@ -6852,7 +6858,18 @@ def UserAction2():
 					try:
 						with open(path, "r", encoding="utf-8") as stream:
 							rows = json.load(stream)
-							item_data = next((row for row in rows if isinstance(row, dict) and (str(row.get("ID", "")) == item_id or any(str(row.get(key, "")) == item_id for key in match_keys))), None)
+							requested_id = item_id.strip().casefold()
+							item_data = next(
+								(
+									row for row in rows
+									if isinstance(row, dict)
+									and any(
+										str(row.get(key, "") or "").strip().casefold() == requested_id
+										for key in ("ID",) + tuple(match_keys)
+									)
+								),
+								None
+							)
 						price = int(float(item_data.get("BuyCost", 0) or 0)) if item_data else 0
 					except (OSError, ValueError, TypeError, json.JSONDecodeError):
 						app.logger.exception("[user_action2] Store catalog read failed: %s", filename)
@@ -6904,11 +6921,34 @@ def UserAction2():
 									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
 
 							elif purchase_currency == "hard_free":
-								# Preserve existing normal-store response behavior.
-								if free < price:
-									fields["reason"] = "INSUFFICIENT_CURRENCY"
-								else:
-									fields["level2"] = free - price
+								# Validate and deduct Gems against the persisted server save.
+								# Client-reported "fr" is only a request value and may be stale.
+								try:
+									game_text = db_user.game
+									if isinstance(game_text, bytes):
+										game_text = game_text.decode("utf-8", errors="strict")
+									server_save, save_format = _decode_game_save_for_name_change(game_text)
+									server_free = int(server_save.get("FreeHardCurrency", 0) or 0)
+									if server_free < price:
+										fields["reason"] = "INSUFFICIENT_CURRENCY"
+									else:
+										server_save["FreeHardCurrency"] = server_free - price
+										db_user.game = _encode_game_save_with_name(
+											game_text, server_save, save_format
+										)
+										fields["level1"] = int(server_save.get("PaidHardCurrency", 0) or 0)
+										fields["level2"] = server_free - price
+										fields["cc"] = price
+										fields["cb"] = "HardCurrency"
+										db.session.commit()
+								except (TypeError, ValueError, KeyError, UnicodeDecodeError):
+									db.session.rollback()
+									app.logger.exception("[user_action2] Store purchase/save failed")
+									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
+								except Exception:
+									db.session.rollback()
+									app.logger.exception("[user_action2] Store purchase/save failed")
+									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
 
 							elif purchase_currency == "hard":
 								# Gacha HardCurrency: önce ücretsiz,
