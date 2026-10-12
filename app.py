@@ -6635,33 +6635,53 @@ def MultiplayerNewPlayer():
 
 @app.route("/multiplayer/update_deck_name/", methods=['POST'])
 def MultiplayerUpdateDeckName():
-	clientData = parse_qs(request.get_data().decode('utf-8'))
-	clientData = {k: v[0] if len(v) == 1 else v for k, v in clientData.items()}
+	try:
+		clientData = parse_qs(request.get_data(as_text=True), keep_blank_values=True)
+		clientData = {k: v[0] if len(v) == 1 else v for k, v in clientData.items()}
 
-	if InvalidUsername(clientData["name"]):
-		return make_response("Invalid username!", 400)
+		# Validate the payload before indexing it; malformed requests must not raise KeyError.
+		required_fields = (
+			"name", "player_id", "deck_rank", "landscapes",
+			"helper_creature", "leader", "leader_level", "allyboxspace"
+		)
+		missing_fields = [
+			field for field in required_fields
+			if field not in clientData or not isinstance(clientData[field], str)
+			or not clientData[field].strip()
+		]
+		if missing_fields:
+			app.logger.warning(
+				"[update_deck_name] Rejected request: missing/invalid fields: %s",
+				", ".join(missing_fields)
+			)
+			return jsonify({
+				"success": False,
+				"error": "Missing or invalid required fields",
+				"fields": missing_fields
+			}), 400
 
-	db_user = Player.query.filter_by(username=clientData["player_id"]).first()
-	if db_user is None:
-		return make_response("No player found!", 404)
+		if InvalidUsername(clientData["name"]):
+			return make_response("Invalid username!", 400)
 
-	db_user.deck_rank = clientData["deck_rank"]
-	db_user.landscapes = clientData["landscapes"]
-	db_user.helper_creature = clientData["helper_creature"]
-	db_user.leader = clientData["leader"]
+		player_id = clientData["player_id"].strip()
+		db_user = Player.query.filter_by(username=player_id).first()
+		if db_user is None:
+			return make_response("No player found!", 404)
 
+		db_user.deck_rank = clientData["deck_rank"]
+		db_user.landscapes = clientData["landscapes"]
+		db_user.helper_creature = clientData["helper_creature"]
+		db_user.leader = clientData["leader"]
+		db_user.leader_level = clientData["leader_level"]
+		db_user.allyboxspace = clientData["allyboxspace"]
 
-
-	db_user.leader_level = clientData["leader_level"]
-	db_user.allyboxspace = clientData["allyboxspace"]
-
-	db.session.commit()
-
-	PlayerLog(IPFromRequest(request), clientData["player_id"], "Updated player data")
-
-	return jsonify({
-		"success": True
-	})
+		db.session.commit()
+		PlayerLog(IPFromRequest(request), player_id, "Updated player data")
+		return jsonify({"success": True})
+	except Exception:
+		db.session.rollback()
+		app.logger.exception("[update_deck_name] Unexpected server error")
+		return jsonify({"success": False, "error": "Internal server error"}), 500
 
 def get_hash_string(source_value, key):
 	hmac_sha256 = hmac.new(key.encode('utf-8'), source_value.encode('utf-8'), hashlib.sha256)
@@ -6875,15 +6895,24 @@ def PersistGame(id):
 	#Device name check
 	if request.method == 'PUT':
 		DeviceNameUser = Player.query.filter_by(username=username).first()
-		devicename = request.headers["X-Nick-Description"]
+		if DeviceNameUser is None:
+			return make_response("No game found!", 404)
 
-		#check if player's devicename is empty, if so, set it to X-Nick-Description
-		if DeviceNameUser.devicename is None or DeviceNameUser.devicename == b"":
+		devicename = str(request.headers.get("X-Nick-Description", "") or "").strip()
+		if not devicename:
+			return make_response("Missing device name!", 400)
+
+		# Older rows may contain bytes while newer rows contain strings.
+		stored_devicename = DeviceNameUser.devicename
+		if isinstance(stored_devicename, bytes):
+			stored_devicename = stored_devicename.decode("utf-8", errors="replace")
+		stored_devicename = str(stored_devicename or "").strip()
+
+		# Set the device name only when the account has no value yet.
+		if not stored_devicename:
 			DeviceNameUser.devicename = devicename
 			db.session.commit()
-
-		#check if player's devicename is the same as X-Nick-Description, if not, return error
-		if DeviceNameUser.devicename != devicename:
+		elif stored_devicename != devicename:
 			DiscordWebhookMessage(username + " attempted to access game with wrong device name. Device name: '" + devicename + "'. IP: " + IPFromRequest(request))
 			return make_response("Invalid Username!", 400)
 
