@@ -2505,7 +2505,7 @@ def _loads_legacy_player_json(text):
             cleaned.append(char)
             if escaped:
                 escaped = False
-            elif char == "\\\\":
+            elif char == "\\":
                 escaped = True
             elif char == '"':
                 in_string = False
