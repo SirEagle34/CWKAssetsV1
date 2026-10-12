@@ -6899,9 +6899,9 @@ def UserAction2():
 									app.logger.exception("[user_action2] Inventory purchase/save failed")
 									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
 								except Exception:
-								db.session.rollback()
-								app.logger.exception("[user_action2] Inventory purchase/save failed")
-								fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
+									db.session.rollback()
+									app.logger.exception("[user_action2] Inventory purchase/save failed")
+									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
 
 							elif purchase_currency == "hard_free":
 								# Preserve existing normal-store response behavior.
