@@ -2491,6 +2491,47 @@ def MigratePlayerNameChangeCount():
         print("[Player Migration] Added 'name_change_count'.")
 
 
+def _loads_legacy_player_json(text):
+    """Parse player JSON while tolerating legacy trailing commas outside strings."""
+    cleaned = []
+    in_string = False
+    escaped = False
+    index = 0
+    length = len(text)
+
+    while index < length:
+        char = text[index]
+        if in_string:
+            cleaned.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+
+        if char == '"':
+            in_string = True
+            cleaned.append(char)
+            index += 1
+            continue
+
+        if char == ",":
+            lookahead = index + 1
+            while lookahead < length and text[lookahead].isspace():
+                lookahead += 1
+            if lookahead < length and text[lookahead] in "]}":
+                index += 1
+                continue
+
+        cleaned.append(char)
+        index += 1
+
+    return json.loads("".join(cleaned))
+
+
 def _decode_game_save_for_name_change(game_text):
     """Decode the save format used by the persistence API, or accept raw JSON saves."""
     if isinstance(game_text, (bytes, bytearray)):
@@ -2500,7 +2541,7 @@ def _decode_game_save_for_name_change(game_text):
 
     stripped = game_text.strip()
     if stripped.startswith("{"):
-        data = json.loads(stripped)
+        data = _loads_legacy_player_json(stripped)
         if not isinstance(data, dict):
             raise ValueError("Player save JSON is not an object")
         return data, "json"
@@ -2539,7 +2580,7 @@ def _decode_game_save_for_name_change(game_text):
         raise ValueError("Player save payload is not valid GZIP data") from gzip_error
 
     try:
-        data = json.loads(payload.decode("utf-8"))
+        data = _loads_legacy_player_json(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError("Decoded player save is not valid JSON") from exc
     if not isinstance(data, dict):
