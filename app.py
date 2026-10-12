@@ -3944,140 +3944,74 @@ def GetMonthlyStore():
     methods=["POST"]
 )
 def BuyMonthlyStore():
-
-    print("========================================")
-    print("[Monthly Store Buy] ROUTE HIT")
-    print("[Monthly Store Buy] Content-Type:", request.content_type)
-    print("[Monthly Store Buy] Raw Body:", request.get_data(as_text=True))
-    print("[Monthly Store Buy] FORM:", request.form.to_dict())
-    print("========================================")
-
+    """Validate a monthly offer, charge the authoritative save, then record the purchase."""
     try:
-
         data = request.form.to_dict()
+        if not data:
+            data = request.get_json(silent=True) or {}
 
-        print(
-            "[Monthly Store Buy] Parsed data:",
-            data
+        player_id = str(data.get("player_id", "") or "").strip()
+        store_type = str(data.get("store_type", "") or "").strip().lower()
+        offer_id = str(data.get("offer_id", "") or "").strip()
+
+        app.logger.info(
+            "[Monthly Store Buy] player_id=%s store_type=%s offer_id=%s",
+            player_id, store_type, offer_id
         )
-
-        player_id = data.get("player_id")
-        store_type = data.get("store_type")
-        offer_id = data.get("offer_id")
-
-        print(
-            "[Monthly Store Buy] player_id =",
-            repr(player_id)
-        )
-
-        print(
-            "[Monthly Store Buy] store_type =",
-            repr(store_type)
-        )
-
-        print(
-            "[Monthly Store Buy] offer_id =",
-            repr(offer_id)
-        )
-
-        # ---------------------------------------------------------
-        # VALIDATION
-        # ---------------------------------------------------------
 
         if not player_id:
-            print("[Monthly Store Buy] -> 400 MISSING_PLAYER_ID")
-
-            return jsonify({
-                "success": False,
-                "error": "MISSING_PLAYER_ID"
-            }), 400
-
-        if not store_type:
-            print("[Monthly Store Buy] -> 400 MISSING_STORE_TYPE")
-
-            return jsonify({
-                "success": False,
-                "error": "MISSING_STORE_TYPE"
-            }), 400
-
+            return jsonify({"success": False, "error": "MISSING_PLAYER_ID"}), 400
+        if store_type not in ("action", "evo"):
+            return jsonify({"success": False, "error": "INVALID_STORE_TYPE"}), 400
         if not offer_id:
-            print("[Monthly Store Buy] -> 400 MISSING_OFFER_ID")
+            return jsonify({"success": False, "error": "MISSING_OFFER_ID"}), 400
+        if IsUserBanned(player_id, IPFromRequest(request)):
+            return make_response("User is banned!", 400)
 
-            return jsonify({
-                "success": False,
-                "error": "MISSING_OFFER_ID"
-            }), 400
+        db_user = Player.query.filter_by(username=player_id).first()
+        if db_user is None:
+            return jsonify({"success": False, "error": "PLAYER_NOT_FOUND"}), 404
 
-        print(
-            "[Monthly Store Buy] Validation OK"
+        # Resolve the price from the server-side store catalog; never trust a client price.
+        filename = (
+            "db_StoreBuyActionCards.json"
+            if store_type == "action"
+            else "db_StoreBuyEvoMaterials.json"
         )
-
-        # ---------------------------------------------------------
-        # STORE TYPE
-        # ---------------------------------------------------------
-
-        buy_limit = MONTHLY_STORE_BUY_LIMITS.get(
-            store_type
+        catalog_path = os.path.join(
+            app.root_path, "data", "persist", "blueprints", filename
         )
+        try:
+            with open(catalog_path, "r", encoding="utf-8") as stream:
+                catalog_rows = json.load(stream)
+        except (OSError, json.JSONDecodeError):
+            app.logger.exception("[Monthly Store Buy] Could not read %s", filename)
+            return jsonify({"success": False, "error": "STORE_CATALOG_UNAVAILABLE"}), 500
 
-        print(
-            "[Monthly Store Buy] MONTHLY_STORE_BUY_LIMITS:",
-            MONTHLY_STORE_BUY_LIMITS
+        offer = next(
+            (
+                row for row in catalog_rows
+                if isinstance(row, dict)
+                and str(row.get("ID", "") or "").strip().casefold() == offer_id.casefold()
+            ),
+            None
         )
+        if offer is None:
+            return jsonify({"success": False, "error": "OFFER_NOT_FOUND"}), 400
 
-        print(
-            "[Monthly Store Buy] buy_limit:",
-            repr(buy_limit)
-        )
+        try:
+            price = int(float(offer.get("BuyCost", 0) or 0))
+        except (TypeError, ValueError, OverflowError):
+            price = 0
+        if price <= 0:
+            return jsonify({"success": False, "error": "OFFER_NOT_PURCHASABLE"}), 400
 
+        buy_limit = MONTHLY_STORE_BUY_LIMITS.get(store_type)
         if buy_limit is None:
+            return jsonify({"success": False, "error": "INVALID_STORE_TYPE"}), 400
 
-            print(
-                "[Monthly Store Buy] -> 400 INVALID_STORE_TYPE:",
-                repr(store_type)
-            )
-
-            return jsonify({
-                "success": False,
-                "error": "INVALID_STORE_TYPE"
-            }), 400
-
-        # ---------------------------------------------------------
-        # CURRENT COUNT
-        # ---------------------------------------------------------
-
-        print(
-            "[Monthly Store Buy] Calling "
-            "get_monthly_store_buy_count..."
-        )
-
-        current_count = get_monthly_store_buy_count(
-            player_id,
-            store_type,
-            offer_id
-        )
-
-        print(
-            "[Monthly Store Buy] Current count:",
-            repr(current_count)
-        )
-
-        print(
-            "[Monthly Store Buy] Limit:",
-            repr(buy_limit)
-        )
-
-        # ---------------------------------------------------------
-        # LIMIT
-        # ---------------------------------------------------------
-
+        current_count = get_monthly_store_buy_count(player_id, store_type, offer_id)
         if current_count >= buy_limit:
-
-            print(
-                "[Monthly Store Buy] -> 400 "
-                "BUY_LIMIT_REACHED"
-            )
-
             return jsonify({
                 "success": False,
                 "error": "BUY_LIMIT_REACHED",
@@ -4085,69 +4019,55 @@ def BuyMonthlyStore():
                 "buy_limit": buy_limit
             }), 400
 
-        # ---------------------------------------------------------
-        # INCREMENT
-        # ---------------------------------------------------------
+        # Charge Gems from the saved server balance, not the balance reported by the client.
+        # The count helper commits on success, so this pending save update is committed with it.
+        game_text = db_user.game
+        if isinstance(game_text, bytes):
+            game_text = game_text.decode("utf-8", errors="strict")
+        save_data, save_format = _decode_game_save_for_name_change(game_text)
+        if not isinstance(save_data, dict):
+            return jsonify({"success": False, "error": "PLAYER_SAVE_UNAVAILABLE"}), 500
 
-        print(
-            "[Monthly Store Buy] Calling "
-            "increment_monthly_store_buy_count..."
-        )
+        server_free = int(save_data.get("FreeHardCurrency", 0) or 0)
+        if server_free < price:
+            return jsonify({
+                "success": False,
+                "error": "INSUFFICIENT_CURRENCY",
+                "buy_cost": price,
+                "balance": server_free
+            }), 400
 
-        result = increment_monthly_store_buy_count(
-            player_id,
-            store_type,
-            offer_id
-        )
+        save_data["FreeHardCurrency"] = server_free - price
+        db_user.game = _encode_game_save_with_name(game_text, save_data, save_format)
 
-        print(
-            "[Monthly Store Buy] Increment result:",
-            repr(result)
-        )
-
+        result = increment_monthly_store_buy_count(player_id, store_type, offer_id)
         if not result.get("success"):
+            db.session.rollback()
+            status = 400 if result.get("error") in (
+                "BUY_LIMIT_REACHED", "OFFER_NOT_AVAILABLE"
+            ) else 500
+            return jsonify(result), status
 
-            print(
-                "[Monthly Store Buy] -> 400 "
-                "INCREMENT FAILED"
-            )
-
-            return jsonify(result), 400
-
-        # ---------------------------------------------------------
-        # SUCCESS
-        # ---------------------------------------------------------
-
-        print(
-            "[Monthly Store Buy] SUCCESS"
-        )
-
+        UpdateLastOnline(player_id)
         return jsonify({
             "success": True,
             "store_type": store_type,
             "offer_id": offer_id,
             "buy_count": result["buy_count"],
-            "buy_limit": result["buy_limit"]
+            "buy_limit": result["buy_limit"],
+            "buy_cost": price,
+            "currency": "HardCurrency",
+            "level2": server_free - price
         }), 200
 
-    except Exception as e:
-
+    except (TypeError, ValueError, KeyError, UnicodeDecodeError):
         db.session.rollback()
-
-        import traceback
-
-        print("========================================")
-        print("[Monthly Store Buy] EXCEPTION")
-        print("Type:", type(e).__name__)
-        print("Error:", str(e))
-        traceback.print_exc()
-        print("========================================")
-
-        return jsonify({
-            "success": False,
-            "error": "SERVER_ERROR",
-            "message": str(e)
-        }), 500
+        app.logger.exception("[Monthly Store Buy] Invalid player save or purchase data")
+        return jsonify({"success": False, "error": "PLAYER_SAVE_UNAVAILABLE"}), 500
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("[Monthly Store Buy] Unexpected exception")
+        return jsonify({"success": False, "error": "SERVER_ERROR"}), 500
 
 @app.route("/calendar/info", methods=["GET"])
 def CalendarInfo():
