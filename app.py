@@ -6758,7 +6758,33 @@ def UserAction2():
 				}
 				item_data, price = None, 0
 				purchase_currency = "hard_free"
-				if not item_id or count < 1 or count > 99:
+				if kind == "inventory":
+					# Inventory purchases intentionally use an empty item ID and count=1.
+					if item_id or count != 1:
+						fields["reason"] = "INVALID_PURCHASE"
+					else:
+						try:
+							misc_path = os.path.join(
+								app.root_path, "data", "persist", "blueprints",
+								"db_MiscParams.json"
+							)
+							with open(misc_path, "r", encoding="utf-8") as stream:
+								misc_rows = json.load(stream)
+							misc_params = {
+								str(row.get("Parameter", "")): row.get("Value", "1")
+								for row in misc_rows if isinstance(row, dict)
+							}
+							price = int(float(misc_params.get("InventorySpacePurchaseCost", 1) or 1))
+							inventory_increment = int(float(misc_params.get("InventorySpacePerPurchase", 1) or 1))
+							inventory_max = int(float(misc_params.get("MaxInventorySpace", 1000) or 1000))
+							if price <= 0 or inventory_increment <= 0 or inventory_max <= 0:
+								raise ValueError("Invalid inventory purchase settings")
+							item_data = {"ID": "inventory"}
+							purchase_currency = "inventory"
+						except (OSError, ValueError, TypeError, json.JSONDecodeError):
+							app.logger.exception("[user_action2] Inventory config read failed")
+							fields["reason"] = "INVENTORY_CONFIG_ERROR"
+				elif not item_id or count < 1 or count > 99:
 					fields["reason"] = "INVALID_PURCHASE"
 				elif kind in ("leader", "hero"):
 					filename, match_keys = "db_Leaders.json", ()
@@ -6843,9 +6869,39 @@ def UserAction2():
 						if not isinstance(save_data, dict):
 							fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
 						else:
-							# Store purchases use FreeHardCurrency, not SoftCurrency.
-							if purchase_currency == "hard_free":
-								# Normal mağaza: mevcut davranışı koru.
+							if purchase_currency == "inventory":
+								# Use the persisted player save, never the client-supplied fr balance.
+								try:
+									game_text = db_user.game
+									if isinstance(game_text, bytes):
+										game_text = game_text.decode("utf-8", errors="strict")
+									inventory_save, save_format = _decode_game_save_for_name_change(game_text)
+									server_free = int(inventory_save.get("FreeHardCurrency", 0) or 0)
+									current_space = int(inventory_save.get("InventorySpace", 0) or 0)
+									if server_free < price:
+										fields["reason"] = "INSUFFICIENT_CURRENCY"
+									elif current_space + inventory_increment > inventory_max:
+										fields["reason"] = "INVENTORY_FULL"
+									else:
+										inventory_save["FreeHardCurrency"] = server_free - price
+										inventory_save["InventorySpace"] = current_space + inventory_increment
+										db_user.game = _encode_game_save_with_name(
+											game_text, inventory_save, save_format
+										)
+										fields["level1"] = int(inventory_save.get("PaidHardCurrency", 0) or 0)
+										fields["level2"] = server_free - price
+										db.session.commit()
+								except (TypeError, ValueError, KeyError, UnicodeDecodeError):
+									db.session.rollback()
+									app.logger.exception("[user_action2] Inventory purchase/save failed")
+									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
+							except Exception:
+								db.session.rollback()
+								app.logger.exception("[user_action2] Inventory purchase/save failed")
+								fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
+
+							elif purchase_currency == "hard_free":
+								# Preserve existing normal-store response behavior.
 								if free < price:
 									fields["reason"] = "INSUFFICIENT_CURRENCY"
 								else:
