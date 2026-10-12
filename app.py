@@ -4057,6 +4057,7 @@ def BuyMonthlyStore():
             "buy_limit": result["buy_limit"],
             "buy_cost": price,
             "currency": "HardCurrency",
+            "level1": int(save_data.get("PaidHardCurrency", 0) or 0),
             "level2": server_free - price
         }), 200
 
