@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="tr" data-bs-theme="dark">
+<html lang="en" data-bs-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -25,18 +25,18 @@
   <nav class="navbar navbar-expand-lg navbar-dark balancer-navbar">
     <div class="container-fluid">
       <a class="navbar-brand balancer-brand" href="/balancer/"><i class="bi bi-sliders2-vertical me-2"></i>CWK Balancer</a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#balancerNavbar" aria-controls="balancerNavbar" aria-expanded="false" aria-label="Menüyü aç">
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#balancerNavbar" aria-controls="balancerNavbar" aria-expanded="false" aria-label="Open menu">
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="balancerNavbar">
         <ul class="navbar-nav me-auto">
-          <li class="nav-item"><a class="nav-link" href="/balancer/"><i class="bi bi-speedometer2 me-1"></i>Kontrol Paneli</a></li>
+          <li class="nav-item"><a class="nav-link" href="/balancer/"><i class="bi bi-speedometer2 me-1"></i>Dashboard</a></li>
           <li class="nav-item"><a class="nav-link" href="/balancer/language-data"><i class="bi bi-translate me-1"></i>Language Data</a></li>
         </ul>
         <div class="d-flex align-items-center gap-3">
           {% if admin_name %}<span class="navbar-text"><i class="bi bi-person-circle me-1"></i>{{ admin_name }}</span>{% endif %}
           <form method="post" action="/balancer/logout" class="m-0">
-            <button class="btn btn-outline-light btn-sm" type="submit"><i class="bi bi-box-arrow-right me-1"></i>Çıkış</button>
+            <button class="btn btn-outline-light btn-sm" type="submit"><i class="bi bi-box-arrow-right me-1"></i>Log out</button>
           </form>
         </div>
       </div>
