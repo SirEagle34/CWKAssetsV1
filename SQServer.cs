@@ -287,6 +287,7 @@ public class SQServer
 		Dictionary<string, object> dictionary = new Dictionary<string, object>();
 
 		dictionary["redeemcode"] = redeemcode;
+		dictionary["player_id"] = Singleton<PlayerInfoScript>.Instance.GetPlayerCode();
 		dictionary["version"] = 0;
 		dictionary["subject"] = subject;
 		dictionary["message"] = message;
