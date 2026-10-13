@@ -1,14 +1,19 @@
-"""
-Remove selected creature IDs from persisted player saves when players open the game.
+"""Remove selected creature IDs from persisted player saves.
 
-Set ENABLED = True to activate automatic cleanup, or False to disable it.
-Only matching creature entries in the save's Inventory list are removed.
-All other inventory entries and save fields are preserved.
+ENABLED controls the cleanup. DATABASE_TARGET selects which active database(s)
+are scanned when app.py loads: primary, localinstance, or all. Archive databases
+are never modified automatically. A one-time .removegameitems.bak backup is
+created before each database is changed.
 """
 
 from typing import Callable, Tuple, Any
 
+# Master switch. False disables both startup cleanup and per-player cleanup.
 ENABLED = True
+
+# Valid values: "primary", "localinstance", "all".
+# "all" means Primary + LocalInstance only; archive backups are excluded.
+DATABASE_TARGET = "primary"
 
 CREATURE_IDS_TO_REMOVE = frozenset({
     "CornRonin_Awaken",
@@ -25,13 +30,7 @@ def remove_game_items(
     decode_save: Callable[[Any], Tuple[dict, Any]],
     encode_save: Callable[[Any, dict, Any], str],
 ) -> Tuple[Any, int]:
-    """
-    Return (updated_game_text, removed_count).
-
-    decode_save must return (save_dict, save_format); encode_save must accept
-    (original_game_text, updated_save_dict, save_format). The caller supplies
-    the application's existing codec so the stored save format is preserved.
-    """
+    """Return (updated_game_text, removed_count), preserving save format."""
     if not ENABLED or not game_text:
         return game_text, 0
 
@@ -45,21 +44,20 @@ def remove_game_items(
 
     kept_items = []
     removed_count = 0
-
     for item in inventory:
         if not isinstance(item, dict):
             kept_items.append(item)
             continue
 
         creature_id = item.get("ID")
-        if item.get("_T") == "CR" and isinstance(creature_id, str) and creature_id in CREATURE_IDS_TO_REMOVE:
+        if (item.get("_T") == "CR" and isinstance(creature_id, str)
+                and creature_id in CREATURE_IDS_TO_REMOVE):
             removed_count += 1
         else:
             kept_items.append(item)
 
-    if removed_count == 0:
+    if not removed_count:
         return game_text, 0
 
     save_data["Inventory"] = kept_items
-    updated_game_text = encode_save(game_text, save_data, save_format)
-    return updated_game_text, removed_count
+    return encode_save(game_text, save_data, save_format), removed_count
