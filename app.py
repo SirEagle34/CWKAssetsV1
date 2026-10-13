@@ -2782,20 +2782,49 @@ from zoneinfo import ZoneInfo
 
 
 def MigratePlayerNameChangeCount():
-    """Add the persistent name-change counter without deleting player data."""
+    """Add name_change_count to Primary and enabled LocalInstance without deleting data."""
     from sqlalchemy import inspect, text
 
-    inspector = inspect(db.engine)
-    if "player" not in inspector.get_table_names():
+    # Primary database is managed by Flask-SQLAlchemy.
+    try:
+        inspector = inspect(db.engine)
+        if "player" in inspector.get_table_names():
+            columns = {column["name"] for column in inspector.get_columns("player")}
+            if "name_change_count" not in columns:
+                with db.engine.begin() as connection:
+                    connection.execute(text(
+                        "ALTER TABLE player ADD COLUMN name_change_count INTEGER NOT NULL DEFAULT 0"
+                    ))
+                print("[Player Migration] Added 'name_change_count' to Primary.")
+    except Exception as exc:
+        app.logger.exception("[Player Migration] Primary migration failed: %s", exc)
+
+    # Player ORM queries can be routed to LocalInstance, so that database needs
+    # the same schema even though db.create_all() only creates Primary tables.
+    local_path = _local_instance_db_path()
+    if not local_path or not os.path.isfile(local_path):
         return
 
-    columns = {column["name"] for column in inspector.get_columns("player")}
-    if "name_change_count" not in columns:
-        with db.engine.begin() as connection:
-            connection.execute(text(
+    connection = None
+    try:
+        connection = sqlite3.connect(local_path, timeout=15)
+        tables = {row[0] for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+        if "player" not in tables:
+            return
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(player)")}
+        if "name_change_count" not in columns:
+            connection.execute(
                 "ALTER TABLE player ADD COLUMN name_change_count INTEGER NOT NULL DEFAULT 0"
-            ))
-        print("[Player Migration] Added 'name_change_count'.")
+            )
+            connection.commit()
+            print("[Player Migration] Added 'name_change_count' to LocalInstance.")
+    except Exception as exc:
+        app.logger.exception("[Player Migration] LocalInstance migration failed: %s", exc)
+    finally:
+        if connection is not None:
+            connection.close()
 
 
 def _loads_legacy_player_json(text):
