@@ -1655,32 +1655,96 @@ def AdminPlayers():
 	if not isAdmin(current_user):
 		return abort(404)
 
-	players = Player.query.all()
+	# Load Primary through the normal ORM, then explicitly read LocalInstance.
+	# PlayerDatabaseRoutingSession intentionally routes only when a request names
+	# a particular player; an unqualified Player.query.all() only sees Primary.
+	players_by_username = {}
+	for player_obj in Player.query.all():
+		player_data = player_obj.as_dict()
+		player_data["source_database"] = "Primary"
+		players_by_username[str(player_data.get("username", ""))] = player_data
 
-	#convert player to dict
-	players = [player.as_dict() for player in players]
+	local_path = _local_instance_db_path()
+	if local_path and os.path.isfile(local_path):
+		try:
+			with sqlite3.connect(local_path, timeout=5) as connection:
+				connection.row_factory = sqlite3.Row
+				tables = {
+					row[0] for row in connection.execute(
+						"SELECT name FROM sqlite_master WHERE type='table'"
+					)
+				}
+				if "player" in tables:
+					columns = {
+						row[1] for row in connection.execute('PRAGMA table_info("player")')
+					}
+					if "username" in columns:
+						for row in connection.execute('SELECT * FROM "player"'):
+							player_data = dict(row)
+							username = str(player_data.get("username") or "").strip()
+							if not username:
+								continue
+							# Supply optional fields absent from older LocalInstance schemas.
+							for column in Player.__table__.columns:
+								player_data.setdefault(column.name, None)
+							player_data["source_database"] = "LocalInstance"
+							# LocalInstance wins if the same ID exists in both databases.
+							players_by_username[username] = player_data
+					else:
+						app.logger.warning(
+							"[AdminPlayers] LocalInstance has no username column: %s",
+							local_path
+						)
+				else:
+					app.logger.warning(
+							"[AdminPlayers] LocalInstance has no player table: %s",
+							local_path
+						)
+		except (OSError, sqlite3.Error):
+			app.logger.exception("[AdminPlayers] Could not read LocalInstance: %s", local_path)
 
-	#remove any players that do not have a multiplayer name
-	players = [player for player in players if player["game"] != None and player["leader_level"] != None]
+	players = list(players_by_username.values())
 
-	#remove any player that is banned
-	players = [player for player in players if not IsUserBanned(player["username"])]
+	# Keep the existing list rules: only saved, levelled, non-banned players.
+	players = [
+		player for player in players
+		if player.get("game") is not None and player.get("leader_level") is not None
+	]
+	players = [
+		player for player in players
+		if player.get("username") and not IsUserBanned(player["username"])
+	]
 
 	for player in players:
-		player["last_online"] = datetime.fromtimestamp(player["last_online"], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+		last_online = player.get("last_online")
+		try:
+			player["last_online"] = datetime.fromtimestamp(
+				int(last_online or 0), tz=timezone.utc
+				).strftime('%Y-%m-%d %H:%M:%S UTC')
+		except (TypeError, ValueError, OSError, OverflowError):
+			player["last_online"] = "Unknown"
 
-		#if player's multiplayer name is empty, attempt to get it from their game
-		if player["multiplayer_name"] == None:
-			player["multiplayer_name"] = GetNameFromSave(player["game"])
+		if not player.get("multiplayer_name"):
+			player["multiplayer_name"] = GetNameFromSave(player.get("game"))
 
 	sortQuery = request.args.get('sort')
-
-	if sortQuery is not None:
-		players = sorted(players, key=lambda player: player[sortQuery], reverse=True)
+	if sortQuery:
+		players = sorted(
+			players,
+			key=lambda player: (
+				player.get(sortQuery) is not None,
+				str(player.get(sortQuery) or "").casefold()
+			),
+			reverse=True
+		)
 	else:
 		players = players[::-1]
 
-	return render_template('admin_players.html', players=players, player_count=len(players))
+	return render_template(
+		'admin_players.html',
+		players=players,
+		player_count=len(players)
+	)
 
 def GetNameFromSave(save):
 
