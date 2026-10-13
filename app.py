@@ -45,7 +45,8 @@ from flask_bcrypt import Bcrypt
 from flask_login import (LoginManager, UserMixin, current_user,
                          login_required, login_user, logout_user)
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session as SQLAlchemySession
+from flask_sqlalchemy.session import Session as FlaskSQLAlchemySession
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import create_engine
 from sqlalchemy.sql import func
 
@@ -132,7 +133,7 @@ def _local_instance_engine():
         _LOCAL_PLAYER_ENGINE_PATH = path
     return _LOCAL_PLAYER_ENGINE
 
-class PlayerDatabaseRoutingSession(SQLAlchemySession):
+class PlayerDatabaseRoutingSession(FlaskSQLAlchemySession):
     def get_bind(self, mapper=None, clause=None, bind=None, **kwargs):
         if mapper is not None and getattr(getattr(mapper, "class_", None), "__name__", "") == "Player":
             try:
@@ -145,25 +146,6 @@ class PlayerDatabaseRoutingSession(SQLAlchemySession):
                 # No active Flask request (e.g. scheduled/background task).
                 pass
         return super().get_bind(mapper=mapper, clause=clause, bind=bind, **kwargs)
-
-
-#check if flaskkey exists
-if not os.path.exists("flaskkey"):
-	print("Creating new Flask secret key")
-	#create a new key
-	with open("flaskkey", "w") as f:
-		f.write(''.join(random.choice(string.ascii_letters + string.digits) for i in range(50)))
-app.secret_key = open("flaskkey", "r").read()
-
-bcrypt = Bcrypt(app)
-
-login_manager = LoginManager(app)
-login_manager.login_view = '/'
-
-
-class Base(DeclarativeBase):
-  pass
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///cardwarskingdom.db"
 
 
 #check if flaskkey exists
@@ -7405,13 +7387,25 @@ def PersistFriendsFindCandidates():
 		if allyinfo is not None:
 			data.append(allyinfo)
 
-	#Add explorers
-	strangers = Player.query.filter(
-		Player.username != clientData["player_id"],  # not the player
-		Player.username.notin_(player_friends),  # not a friend
-		Player.helper_creature != None,  # has a helper creature
-		Player.leader_level.between(db_user.leader_level - int(clientData["level"]), db_user.leader_level + int(clientData["level"]))  # level is within clientData["level"]
-	).order_by(func.random()).limit(3).all()
+	# Add explorers only when the requesting player's leader level is available.
+	# Some legacy player records have NULL leader_level values.
+	strangers = []
+	if db_user.leader_level is not None:
+		try:
+			level_range = max(0, int(clientData.get("level", 0)))
+		except (TypeError, ValueError):
+			level_range = 0
+
+		strangers = Player.query.filter(
+			Player.username != clientData["player_id"],  # not the player
+			Player.username.notin_(player_friends),  # not a friend
+			Player.helper_creature.isnot(None),  # has a helper creature
+			Player.leader_level.isnot(None),
+			Player.leader_level.between(
+				db_user.leader_level - level_range,
+				db_user.leader_level + level_range
+			)
+		).order_by(func.random()).limit(3).all()
 
 	for stranger in strangers:
 		if IsUserBanned(stranger.username):
