@@ -44,7 +44,8 @@ from flask_bcrypt import Bcrypt
 from flask_login import (LoginManager, UserMixin, current_user,
                          login_required, login_user, logout_user)
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session as SQLAlchemySession
+from sqlalchemy import create_engine
 from sqlalchemy.sql import func
 
 parser = argparse.ArgumentParser()
@@ -54,6 +55,96 @@ parser.add_argument('--debug', action='store_true')
 args, _ = parser.parse_known_args()
 
 app = Flask(__name__)
+
+# Route Player ORM operations to LocalInstance when the requested account
+# exists there. Other models (admins, logs, bans, store counters) stay on Primary.
+_LOCAL_PLAYER_ENGINE = None
+_LOCAL_PLAYER_ENGINE_PATH = None
+
+def _requested_player_identity():
+    if not request:
+        return ""
+    identity = (request.headers.get("Player-Id") or "").strip()
+    if not identity:
+        identity = (request.view_args or {}).get("player", "") or ""
+    if not identity:
+        identity = request.args.get("player_id", "") or request.args.get("username", "")
+    if not identity:
+        identity = request.form.get("player_id", "") or request.form.get("username", "")
+    if not identity:
+        payload = request.get_json(silent=True)
+        if isinstance(payload, dict):
+            identity = payload.get("player_id", "") or payload.get("username", "")
+    return str(identity).strip()[:80]
+
+def _local_instance_db_path():
+    manifest_path = os.path.join(app.root_path, "localinstance", "manifest.json")
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as stream:
+            manifest = json.load(stream)
+        for item in manifest.get("databases", []):
+            if isinstance(item, dict) and item.get("id") == "local" and item.get("enabled", True):
+                filename = str(item.get("file", "local_001_cardwarskingdom.db"))
+                if os.path.basename(filename) == filename and filename.endswith(".db"):
+                    return os.path.join(app.root_path, "localinstance", filename)
+    except (OSError, ValueError, TypeError):
+        return None
+    return None
+
+def _local_instance_has_player(username):
+    if not username:
+        return False
+    path = _local_instance_db_path()
+    if not path or not os.path.isfile(path):
+        return False
+    try:
+        connection = sqlite3.connect("file:" + os.path.abspath(path) + "?mode=ro", uri=True, timeout=2)
+        try:
+            tables = {row[0] for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            if "player" not in tables:
+                return False
+            columns = {row[1] for row in connection.execute('PRAGMA table_info("player")')}
+            if "username" not in columns:
+                return False
+            return connection.execute(
+                'SELECT 1 FROM "player" WHERE "username" = ? LIMIT 1', (username,)
+            ).fetchone() is not None
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        app.logger.exception("Could not inspect LocalInstance player identity")
+        return False
+
+def _local_instance_engine():
+    global _LOCAL_PLAYER_ENGINE, _LOCAL_PLAYER_ENGINE_PATH
+    path = _local_instance_db_path()
+    if not path or not os.path.isfile(path):
+        return None
+    if _LOCAL_PLAYER_ENGINE is None or _LOCAL_PLAYER_ENGINE_PATH != path:
+        if _LOCAL_PLAYER_ENGINE is not None:
+            _LOCAL_PLAYER_ENGINE.dispose()
+        _LOCAL_PLAYER_ENGINE = create_engine(
+            "sqlite:///" + path.replace("\\", "/"),
+            connect_args={"timeout": 15, "check_same_thread": False}
+        )
+        _LOCAL_PLAYER_ENGINE_PATH = path
+    return _LOCAL_PLAYER_ENGINE
+
+class PlayerDatabaseRoutingSession(SQLAlchemySession):
+    def get_bind(self, mapper=None, clause=None, bind=None, **kwargs):
+        if mapper is not None and getattr(getattr(mapper, "class_", None), "__name__", "") == "Player":
+            try:
+                username = _requested_player_identity()
+                if username and _local_instance_has_player(username):
+                    local_engine = _local_instance_engine()
+                    if local_engine is not None:
+                        return local_engine
+            except RuntimeError:
+                # No active Flask request (e.g. scheduled/background task).
+                pass
+        return super().get_bind(mapper=mapper, clause=clause, bind=bind, **kwargs)
+
 
 #check if flaskkey exists
 if not os.path.exists("flaskkey"):
@@ -72,7 +163,7 @@ login_manager.login_view = '/'
 class Base(DeclarativeBase):
   pass
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///cardwarskingdom.db"
-db = SQLAlchemy(model_class=Base)
+db = SQLAlchemy(model_class=Base, session_options={"class_": PlayerDatabaseRoutingSession})
 db.init_app(app)
 
 badcharaters = ['/', '\\', ':', '*', '?', '"', '<', '>', '|', ";", "%", "^", "&", "(", ")", "{", "}", "[", "]", ".", ",", "'", "`", "!", "$", "#", "@", "+", "="]
