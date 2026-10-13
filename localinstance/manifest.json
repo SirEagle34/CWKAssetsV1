@@ -5,7 +5,7 @@
       "id": "local",
       "name": "LocalInstance",
       "type": "local",
-      "file": "cardwarskingdom_local.db",
+      "file": "local_001_cardwarskingdom.db",
       "enabled": true
     },
     {
