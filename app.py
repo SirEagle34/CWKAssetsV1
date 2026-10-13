@@ -1792,6 +1792,7 @@ def AdminPlayer(player):
 	if not isAdmin(current_user):
 		return abort(404)
 
+	source_database = "LocalInstance" if _local_instance_has_player(player) else "Primary"
 	player = Player.query.filter_by(username=player).first()
 
 	if player is None:
@@ -1811,7 +1812,7 @@ def AdminPlayer(player):
 		game = None
 
 	if game is None:
-		return render_template('admin_player.html', player=player)
+		return render_template('admin_player.html', player=player, source_database=source_database)
 
 	battle_history = game["BattleHistory"]
 	battle_history.sort(key=lambda x: x["recordTime"])
@@ -1829,11 +1830,13 @@ def AdminPlayer(player):
 	if Inventory is not None:
 		Inventory = [item for item in Inventory if item["_T"] == "CR"]
 
-	return render_template('admin_player.html', player=player, is_banned=IsUserBanned(player["username"]), SoftCurrency=game["SoftCurrency"], HardCurrency=int(game["PaidHardCurrency"]) + int(game["FreeHardCurrency"]), PvpCurrency=game["PvpCurrency"], InstalledDate=datetime.fromtimestamp(game["InstalledDate"], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S GMT'), PVPBanned=bool(game["Zxcvbnm"]), MultiplayerLevel=game["MultiplayerLevel"], InventorySpace=game["InventorySpace"], BattleHistory=battle_history, DeviceName=player["devicename"], Inventory=Inventory)
+	return render_template('admin_player.html', player=player, source_database=source_database, is_banned=IsUserBanned(player["username"]), SoftCurrency=game.get("SoftCurrency"), HardCurrency=int(game.get("PaidHardCurrency", 0) or 0) + int(game.get("FreeHardCurrency", 0) or 0), PvpCurrency=game.get("PvpCurrency"), InstalledDate=datetime.fromtimestamp(game["InstalledDate"], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S GMT') if game.get("InstalledDate") else None, PVPBanned=bool(game.get("Zxcvbnm", False)), MultiplayerLevel=game.get("MultiplayerLevel"), InventorySpace=game.get("InventorySpace"), BattleHistory=battle_history, DeviceName=player.get("devicename"), Inventory=Inventory)
 
 @app.route("/admin/players/<player>/game")
 @login_required
 def AdminPlayerGame(player):
+
+    source_database = "LocalInstance" if _local_instance_has_player(player) else "Primary"
 
     print("========================================")
     print("[AdminPlayerGame] ROUTE HIT")
@@ -1889,7 +1892,8 @@ def AdminPlayerGame(player):
     return render_template(
         'admin_player_game.html',
         game=game_json,
-        player_id=player["username"]
+        player_id=player["username"],
+        source_database=source_database
     )
 
 @app.route("/admin/players/<player>/game/edit", methods=['POST'])
