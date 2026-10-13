@@ -13,7 +13,7 @@ ENABLED = True
 
 # Valid values: "primary", "localinstance", "all".
 # "all" means Primary + LocalInstance only; archive backups are excluded.
-DATABASE_TARGET = "primary"
+DATABASE_TARGET = "localinstance"
 
 CREATURE_IDS_TO_REMOVE = frozenset({
     "CornRonin_Awaken",
