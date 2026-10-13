@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from urllib.parse import parse_qs
 from typing import Optional
+from RemoveGameItems import remove_game_items
 
 # Third-party library imports
 import schedule
@@ -7290,6 +7291,27 @@ def PersistGame(id):
 			return make_response("No game found!", 404)
 		if db_user.game == b"" or db_user.game == b" ":
 			return make_response("No game found!", 404)
+
+		# Apply the configured inventory cleanup when the player opens the game.
+		# The helper only removes the listed creature IDs and preserves other save data.
+		try:
+			updated_game, removed_count = remove_game_items(
+				db_user.game,
+				_decode_game_save_for_name_change,
+				_encode_game_save_with_name
+			)
+			if removed_count > 0:
+				db_user.game = updated_game
+				db.session.commit()
+				app.logger.info(
+					"[RemoveGameItems] Removed %s creature item(s) for player %s",
+					removed_count, username
+				)
+		except Exception:
+			# Never prevent a player from loading the game because cleanup failed.
+			db.session.rollback()
+			app.logger.exception("[RemoveGameItems] Cleanup failed for player %s", username)
+
 		return db_user.game
 
 	if request.method == 'PUT':
