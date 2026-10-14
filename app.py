@@ -24,7 +24,7 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from urllib.parse import parse_qs
 from typing import Optional
-from RemoveGameItems import remove_game_items
+from RemoveGameItems import remove_game_items, ENABLED as REMOVE_GAME_ITEMS_ENABLED, DATABASE_TARGET as REMOVE_GAME_ITEMS_DATABASE_TARGET
 
 # Third-party library imports
 import schedule
@@ -8007,13 +8007,154 @@ def Log(category, message):
 		log = f"{time} - [{category.upper()}] - {message} \n"
 		f.write(log)
 
-# Create database tables and run migrations
+def RunRemoveGameItemsStartupCleanup():
+    """Clean configured Inventory IDs from active player databases on web-app reload."""
+    if not REMOVE_GAME_ITEMS_ENABLED:
+        app.logger.info("[RemoveGameItems] Disabled; startup cleanup skipped.")
+        return
+
+    target = str(REMOVE_GAME_ITEMS_DATABASE_TARGET or "localinstance").strip().lower()
+    database_paths = []
+
+    if target in ("primary", "all"):
+        primary_path = os.path.join(app.instance_path, "cardwarskingdom.db")
+        if os.path.isfile(primary_path):
+            database_paths.append(("Primary", primary_path))
+
+    if target in ("localinstance", "all"):
+        local_path = _local_instance_db_path()
+        if local_path and os.path.isfile(local_path):
+            database_paths.append(("LocalInstance", local_path))
+
+    if target not in ("primary", "localinstance", "all"):
+        app.logger.error(
+            "[RemoveGameItems] Invalid DATABASE_TARGET=%r; cleanup skipped.",
+            target
+        )
+        return
+
+    if not database_paths:
+        app.logger.info(
+            "[RemoveGameItems] No active database found for target %s.",
+            target
+        )
+        return
+
+    for database_label, database_path in database_paths:
+        connection = None
+        try:
+            connection = sqlite3.connect(database_path, timeout=30)
+            connection.row_factory = sqlite3.Row
+            tables = {
+                row[0] for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            if "player" not in tables:
+                app.logger.warning(
+                    "[RemoveGameItems] %s database has no player table; skipped.",
+                    database_label
+                )
+                continue
+
+            columns = {
+                row[1] for row in connection.execute('PRAGMA table_info("player")')
+            }
+            if not {"username", "game"}.issubset(columns):
+                app.logger.warning(
+                    "[RemoveGameItems] %s player table lacks username/game; skipped.",
+                    database_label
+                )
+                continue
+
+            pending_updates = []
+            failed_saves = 0
+            for row in connection.execute(
+                'SELECT "username", "game" FROM "player" WHERE "game" IS NOT NULL'
+            ):
+                username = row["username"]
+                game_text = row["game"]
+                try:
+                    updated_game, removed_count = remove_game_items(
+                        game_text,
+                        _decode_game_save_for_name_change,
+                        _encode_game_save_with_name
+                    )
+                    if removed_count > 0:
+                        pending_updates.append((updated_game, username, removed_count))
+                except Exception:
+                    failed_saves += 1
+                    app.logger.exception(
+                        "[RemoveGameItems] Could not decode save for player %s in %s; left unchanged.",
+                        username,
+                        database_label
+                    )
+
+            if not pending_updates:
+                app.logger.info(
+                    "[RemoveGameItems] %s: no configured inventory items found%s.",
+                    database_label,
+                    " (some saves could not be read)" if failed_saves else ""
+                )
+                continue
+
+            # Make a one-time SQLite backup before changing any save data.
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            backup_path = database_path + ".removegameitems-" + timestamp + ".bak"
+            backup_connection = sqlite3.connect(backup_path, timeout=30)
+            try:
+                connection.backup(backup_connection)
+            finally:
+                backup_connection.close()
+
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.executemany(
+                    'UPDATE "player" SET "game" = ? WHERE "username" = ?',
+                    [(updated_game, username) for updated_game, username, _ in pending_updates]
+                )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+
+            total_removed = sum(count for _, _, count in pending_updates)
+            app.logger.warning(
+                "[RemoveGameItems] %s: removed %s inventory object(s) from %s player save(s). Backup: %s",
+                database_label,
+                total_removed,
+                len(pending_updates),
+                backup_path
+            )
+            if failed_saves:
+                app.logger.warning(
+                    "[RemoveGameItems] %s: %s player save(s) were skipped because decoding failed.",
+                    database_label,
+                    failed_saves
+                )
+        except Exception:
+            if connection is not None:
+                try:
+                    connection.rollback()
+                except Exception:
+                    pass
+            app.logger.exception(
+                "[RemoveGameItems] Startup cleanup failed for %s database.",
+                database_label
+            )
+        finally:
+            if connection is not None:
+                connection.close()
+
+
+# Create database tables, run migrations, then clean configured saves on every web-app reload.
 with app.app_context():
         db.create_all()
         MigrateAdminSecurity()
         MigrateBanExpiration()
         MigratePlayerNameChangeCount()
         _ensure_google_account_tables()
+        RunRemoveGameItemsStartupCleanup()
 
 
 if __name__ == '__main__':
