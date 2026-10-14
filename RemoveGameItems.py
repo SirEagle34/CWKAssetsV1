@@ -12,7 +12,7 @@ ENABLED = True
 
 # Valid values: "primary", "localinstance", or "all".
 # "all" means Primary + LocalInstance only; archive backups are excluded.
-DATABASE_TARGET = "localinstance"
+DATABASE_TARGET = "all"
 
 # Add IDs to the relevant set to remove complete Inventory objects.
 # Matching uses both the save item's "_T" type and its "ID".
