@@ -1,0 +1,243 @@
+[
+  {
+    "ID": "CRAFT_CARD_001",
+    "CraftItem": "CORN_0009",
+    "CraftItemData": "CardData",
+    "CraftCurrencyCost": 3,
+
+    "Item1": "Card",
+    "Item1Data": "CORN_0008",
+    "Item1Cost": 1,
+
+    "Item2": "Card",
+    "Item2Data": "CORN_0002",
+    "Item2Cost": 1,
+
+    "Item3": "EvoMaterial",
+    "Item3Data": "MAT_TUE_T4",
+    "Item3Cost": 2,
+
+    "Item4": "EvoMaterial",
+    "Item4Data": "MAT_TUE_T3",
+    "Item4Cost": 3
+  },
+  {
+    "ID": "CRAFT_CARD_002",
+    "CraftItem": "NICE_0052",
+    "CraftItemData": "CardData",
+    "CraftCurrencyCost": 3,
+
+    "Item1": "Card",
+    "Item1Data": "PLAINS_0012",
+    "Item1Cost": 1,
+
+    "Item2": "EvoMaterial",
+    "Item2Data": "MAT_SAT_T4",
+    "Item2Cost": 3,
+
+    "Item3": "EvoMaterial",
+    "Item3Data": "MAT_MON_T4",
+    "Item3Cost": 3
+  },
+  {
+    "ID": "CRAFT_CARD_003",
+    "CraftItem": "SWAMP_0010",
+    "CraftItemData": "CardData",
+    "CraftCurrencyCost": 3,
+
+    "Item1": "Card",
+    "Item1Data": "SWAMP_0002",
+    "Item1Cost": 1,
+
+    "Item2": "Card",
+    "Item2Data": "SWAMP_0001",
+    "Item2Cost": 1,
+
+    "Item3": "EvoMaterial",
+    "Item3Data": "MAT_SUN_T2",
+    "Item3Cost": 2,
+
+    "Item4": "EvoMaterial",
+    "Item4Data": "MAT_COK1_T2",
+    "Item4Cost": 4,
+
+    "Item5": "EvoMaterial",
+    "Item5Data": "MAT_FRI_T2",
+    "Item5Cost": 2
+  },
+  {
+    "ID": "CRAFT_CARD_004",
+    "CraftItem": "CORN_0010",
+    "CraftItemData": "CardData",
+    "CraftCurrencyCost": 3,
+
+    "Item1": "Card",
+    "Item1Data": "NICE_0043",
+    "Item1Cost": 1,
+
+    "Item2": "Card",
+    "Item2Data": "CORN_0007",
+    "Item2Cost": 1,
+
+    "Item3": "Card",
+    "Item3Data": "CORN_0004",
+    "Item3Cost": 1,
+
+    "Item4": "EvoMaterial",
+    "Item4Data": "MAT_VLC1_T4",
+    "Item4Cost": 3,
+
+    "Item5": "EvoMaterial",
+    "Item5Data": "MAT_COK1_T4",
+    "Item5Cost": 3
+  },
+  {
+    "ID": "CRAFT_CARD_005",
+    "CraftItem": "CORN_0014",
+    "CraftItemData": "CardData",
+    "CraftCurrencyCost": 3,
+
+    "Item1": "Card",
+    "Item1Data": "CORN_0007",
+    "Item1Cost": 1,
+
+    "Item2": "Card",
+    "Item2Data": "CORN_0004",
+    "Item2Cost": 1,
+
+    "Item3": "Card",
+    "Item3Data": "SWAMP_0002",
+    "Item3Cost": 1,
+
+    "Item4": "EvoMaterial",
+    "Item4Data": "MAT_MON_T3",
+    "Item4Cost": 3,
+
+    "Item5": "EvoMaterial",
+    "Item5Data": "MAT_COK1_T3",
+    "Item5Cost": 3
+  },
+  {
+    "ID": "CRAFT_CARD_006",
+    "CraftItem": "SWAMP_0012",
+    "CraftItemData": "CardData",
+    "CraftCurrencyCost": 7,
+
+    "Item1": "Card",
+    "Item1Data": "SWAMP_0002",
+    "Item1Cost": 1,
+
+    "Item2": "Card",
+    "Item2Data": "SAND_0016",
+    "Item2Cost": 1,
+
+    "Item3": "EvoMaterial",
+    "Item3Data": "MAT_COK1_T4",
+    "Item3Cost": 12,
+
+    "Item4": "EvoMaterial",
+    "Item4Data": "MAT_TUE_T4",
+    "Item4Cost": 5,
+
+    "Item5": "EvoMaterial",
+    "Item5Data": "MAT_VLC1_T4",
+    "Item5Cost": 12,
+
+    "Item6": "EvoMaterial",
+    "Item6Data": "MAT_SUN_T4",
+    "Item6Cost": 5
+  },
+  {
+    "ID": "CRAFT_CARD_007",
+    "CraftItem": "SAND_0006",
+    "CraftItemData": "CardData",
+    "CraftCurrencyCost": 7,
+    "Item1": "Card",
+    "Item1Data": "SAND_0001",
+    "Item1Cost": 1,
+    "Item2": "Card",
+    "Item2Data": "SAND_0002",
+    "Item2Cost": 1,
+    "Item3": "EvoMaterial",
+    "Item3Data": "MAT_COK1_T1",
+    "Item3Cost": 9,
+    "Item4": "EvoMaterial",
+    "Item4Data": "MAT_COK1_T2",
+    "Item4Cost": 7,
+    "Item5": "EvoMaterial",
+    "Item5Data": "MAT_COK1_T3",
+    "Item5Cost": 4,
+    "Item6": "EvoMaterial",
+    "Item6Data": "MAT_COK1_T4",
+    "Item6Cost": 2,
+    "Item7": "EvoMaterial",
+    "Item7Data": "MAT_VLC1_T2",
+    "Item7Cost": 10,
+    "Item8": "EvoMaterial",
+    "Item8Data": "MAT_VLC1_T4",
+    "Item8Cost": 5
+  },
+  {
+        "ID": "CRAFT_CARD_008",
+        "CraftItem": "CORN_0033",
+        "CraftItemData": "CardData",
+        "CraftCurrencyCost": 7,
+        "Item1": "Card",
+        "Item1Data": "CORN_0007",
+        "Item1Cost": 1,
+        "Item2": "Card",
+        "Item2Data": "CORN_0002",
+        "Item2Cost": 1,
+        "Item3": "EvoMaterial",
+        "Item3Data": "MAT_THU_T2",
+        "Item3Cost": 5,
+        "Item4": "EvoMaterial",
+        "Item4Data": "MAT_THU_T3",
+        "Item4Cost": 7,
+        "Item5": "EvoMaterial",
+        "Item5Data": "MAT_THU_T4",
+        "Item5Cost": 9,
+        "Item6": "EvoMaterial",
+        "Item6Data": "MAT_VLC1_T2",
+        "Item6Cost": 5,
+        "Item7": "EvoMaterial",
+        "Item7Data": "MAT_VLC1_T3",
+        "Item7Cost": 7,
+        "Item8": "EvoMaterial",
+        "Item8Data": "MAT_VLC1_T4",
+        "Item8Cost": 9
+    },
+    {
+        "ID": "CRAFT_CARD_012",
+        "CraftItem": "SAND_0021",
+        "CraftItemData": "CardData",
+        "CraftCurrencyCost": 7,
+        "Item1": "Card",
+        "Item1Data": "SAND_0001",
+        "Item1Cost": 1,
+        "Item2": "Card",
+        "Item2Data": "PLAINS_0012",
+        "Item2Cost": 1,
+        "Item3": "EvoMaterial",
+        "Item3Data": "MAT_MON_T4",
+        "Item3Cost": 7,
+        "Item4": "EvoMaterial",
+        "Item4Data": "MAT_TUE_T4",
+        "Item4Cost": 7,
+        "Item5": "EvoMaterial",
+        "Item5Data": "MAT_FRI_T4",
+        "Item5Cost": 7,
+        "Item6": "EvoMaterial",
+        "Item6Data": "MAT_SAT_T4",
+        "Item6Cost": 7,
+        "Item7": "EvoMaterial",
+        "Item7Data": "MAT_SUN_T4",
+        "Item7Cost": 7,
+        "Item8": "EvoMaterial",
+        "Item8Data": "MAT_RND1_T4",
+        "Item8Cost": 7,
+        "Item9": "EvoMaterial",
+        "Item9Data": "MAT_COK1_T4",
+        "Item9Cost": 7
+    },
+]
