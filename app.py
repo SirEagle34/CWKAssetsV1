@@ -2934,6 +2934,13 @@ def _encode_game_save_with_name(game_text, save_data, save_format="encoded"):
     if save_format == "json":
         return payload.decode("utf-8")
 
+    # SQLite normally returns TEXT as str, but legacy rows may contain bytes.
+    # The decoder accepts bytes too, so normalize here before searching for data=.
+    if isinstance(game_text, (bytes, bytearray)):
+        game_text = game_text.decode("utf-8", errors="strict")
+    if not isinstance(game_text, str):
+        raise TypeError("Game save must be text or UTF-8 bytes")
+
     marker = game_text.find("data=")
     if marker < 0:
         raise ValueError("Game save does not contain a data payload")
