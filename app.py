@@ -431,28 +431,12 @@ def faction_icon(edition, faction):
     # In the game data, Colorless uses the Rainbow faction icon.
     icon_name = "Rainbow" if faction == "Colorless" else faction
 
-    # Keep the small faction icons on the PythonAnywhere instance after first use.
-    icon_dir = BASE_DIR / "static" / "icons_items"
-    icon_path = icon_dir / f"Icon_Faction_{icon_name}.png"
-    if icon_path.is_file():
-        data = icon_path.read_bytes()
-    else:
-        member = None
-        for source_edition in (edition, "obsidian" if edition == "darkmagic" else "darkmagic"):
-            member = _find_member(source_edition, icon_path.name)
-            if member:
-                try:
-                    data = _read_member(source_edition, member)
-                    icon_dir.mkdir(parents=True, exist_ok=True)
-                    icon_path.write_bytes(data)
-                    break
-                except OSError:
-                    app.logger.exception("Could not cache faction icon %s locally", icon_path.name)
-                    abort(503, description="Could not save the faction icon to the wiki's local static folder.")
-        else:
-            abort(404, description=f"{icon_path.name} was not found in either wiki archive.")
+    # Faction icons must be supplied locally in static/icons_items; never read them from ZIP archives.
+    icon_path = BASE_DIR / "static" / "icons_items" / f"Icon_Faction_{icon_name}.png"
+    if not icon_path.is_file():
+        abort(404, description=f"{icon_path.name} must exist in static/icons_items.")
 
-    response = app.response_class(data, mimetype="image/png")
+    response = app.response_class(icon_path.read_bytes(), mimetype="image/png")
     response.headers["Cache-Control"] = "public, max-age=86400"
     return response
 
