@@ -3438,13 +3438,10 @@ def PersistStaticContentByDigest(digest):
 
 CARD_BACK_STORE_BLUEPRINT = "db_StoreBuyCardBacks.json"
 CARD_BACK_STORE_MONTHLY_COUNT = 15
-CARD_BACK_STORE_PERMANENT_IDS = {
-    f"CardBack_{number}_Store" for number in range(60, 65)
-}
 
 
 def filter_monthly_cardback_store(blueprint_data):
-    """Return 15 stable monthly cardbacks plus CardBack_60-64, which never rotate."""
+    """Keep every Set=Permanent cardback and rotate only Set=Route entries."""
     if isinstance(blueprint_data, dict):
         entries = blueprint_data.get("data", [])
     elif isinstance(blueprint_data, list):
@@ -3453,22 +3450,19 @@ def filter_monthly_cardback_store(blueprint_data):
         return blueprint_data
 
     entries = [entry for entry in entries if isinstance(entry, dict)]
-    permanent_cardback_ids = {f"CardBack_{number}" for number in range(60, 65)}
     permanent = [
         entry for entry in entries
-        if str(entry.get("ID", "")).strip() in CARD_BACK_STORE_PERMANENT_IDS
-        or str(entry.get("CardBackID", "")).strip() in permanent_cardback_ids
+        if str(entry.get("Set", "")).strip().casefold() == "permanent"
     ]
     rotating = [
         entry for entry in entries
-        if entry not in permanent
+        if str(entry.get("Set", "")).strip().casefold() == "route"
         and str(entry.get("ID", "")).strip()
         and str(entry.get("CardBackID", "")).strip()
     ]
     rotating.sort(key=lambda entry: str(entry.get("ID", "")))
 
-    # Keep the pool order stable and advance by 15 each month. With at least
-    # 30 rotating entries, consecutive months have no rotating cardbacks in common.
+    # Keep the route pool stable and advance by 15 each month.
     pool_seed = int(hashlib.sha256(
         b"cardback-store-rotation-v1"
     ).hexdigest()[:16], 16)
@@ -3490,7 +3484,6 @@ def filter_monthly_cardback_store(blueprint_data):
         selected = random.Random(month_seed).sample(rotating, selected_count)
 
     selected.sort(key=lambda entry: str(entry.get("ID", "")))
-
     result = selected + permanent
     if isinstance(blueprint_data, dict):
         filtered = dict(blueprint_data)
@@ -7223,7 +7216,6 @@ def UserAction2():
 						if (
 							item_data is not None
 							and kind in ("cardback", "cardbacks")
-							and item_data.get("ID") not in CARD_BACK_STORE_PERMANENT_IDS
 							and item_data.get("ID") not in {
 								entry.get("ID")
 								for entry in filter_monthly_cardback_store(rows)
