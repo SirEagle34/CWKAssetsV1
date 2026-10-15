@@ -3467,14 +3467,28 @@ def filter_monthly_cardback_store(blueprint_data):
     ]
     rotating.sort(key=lambda entry: str(entry.get("ID", "")))
 
-    month_key = datetime.now(timezone.utc).strftime("%Y-%m")
-    month_seed = int(hashlib.sha256(
-        f"cardback-store:{month_key}".encode("utf-8")
+    # Keep the pool order stable and advance by 15 each month. With at least
+    # 30 rotating entries, consecutive months have no rotating cardbacks in common.
+    pool_seed = int(hashlib.sha256(
+        b"cardback-store-rotation-v1"
     ).hexdigest()[:16], 16)
-    selected = random.Random(month_seed).sample(
-        rotating,
-        min(CARD_BACK_STORE_MONTHLY_COUNT, len(rotating))
-    )
+    random.Random(pool_seed).shuffle(rotating)
+
+    now = datetime.now(timezone.utc)
+    month_index = now.year * 12 + now.month - 1
+    selected_count = min(CARD_BACK_STORE_MONTHLY_COUNT, len(rotating))
+    if len(rotating) >= CARD_BACK_STORE_MONTHLY_COUNT * 2:
+        start_index = (month_index * CARD_BACK_STORE_MONTHLY_COUNT) % len(rotating)
+        selected = [
+            rotating[(start_index + offset) % len(rotating)]
+            for offset in range(selected_count)
+        ]
+    else:
+        month_seed = int(hashlib.sha256(
+            f"cardback-store:{now.year}-{now.month:02d}".encode("utf-8")
+        ).hexdigest()[:16], 16)
+        selected = random.Random(month_seed).sample(rotating, selected_count)
+
     selected.sort(key=lambda entry: str(entry.get("ID", "")))
 
     result = selected + permanent
