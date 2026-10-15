@@ -3436,24 +3436,90 @@ def PersistStaticContentByDigest(digest):
     return response
 
 
+CARD_BACK_STORE_BLUEPRINT = "db_StoreBuyCardBacks.json"
+CARD_BACK_STORE_MONTHLY_COUNT = 15
+CARD_BACK_STORE_PERMANENT_IDS = {
+    f"CardBack_{number}_Store" for number in range(60, 65)
+}
+
+
+def filter_monthly_cardback_store(blueprint_data):
+    """Return 15 stable monthly cardbacks plus CardBack_60-64, which never rotate."""
+    if isinstance(blueprint_data, dict):
+        entries = blueprint_data.get("data", [])
+    elif isinstance(blueprint_data, list):
+        entries = blueprint_data
+    else:
+        return blueprint_data
+
+    entries = [entry for entry in entries if isinstance(entry, dict)]
+    permanent_cardback_ids = {f"CardBack_{number}" for number in range(60, 65)}
+    permanent = [
+        entry for entry in entries
+        if str(entry.get("ID", "")).strip() in CARD_BACK_STORE_PERMANENT_IDS
+        or str(entry.get("CardBackID", "")).strip() in permanent_cardback_ids
+    ]
+    rotating = [
+        entry for entry in entries
+        if entry not in permanent
+        and str(entry.get("ID", "")).strip()
+        and str(entry.get("CardBackID", "")).strip()
+    ]
+    rotating.sort(key=lambda entry: str(entry.get("ID", "")))
+
+    month_key = datetime.now(timezone.utc).strftime("%Y-%m")
+    month_seed = int(hashlib.sha256(
+        f"cardback-store:{month_key}".encode("utf-8")
+    ).hexdigest()[:16], 16)
+    selected = random.Random(month_seed).sample(
+        rotating,
+        min(CARD_BACK_STORE_MONTHLY_COUNT, len(rotating))
+    )
+    selected.sort(key=lambda entry: str(entry.get("ID", "")))
+
+    result = selected + permanent
+    if isinstance(blueprint_data, dict):
+        filtered = dict(blueprint_data)
+        filtered["data"] = result
+        return filtered
+    return result
+
+
 @app.route("/persist/static/Blueprints/<path:filename>", methods=['GET'])
 def get_blueprints(filename):
     file_path = os.path.join("data/persist/blueprints", filename)
 
-    with open(file_path, "r") as file:
-        return file.read()
+    with open(file_path, "r", encoding="utf-8") as file:
+        content = file.read()
+
+    if os.path.basename(filename).lower() == CARD_BACK_STORE_BLUEPRINT.lower():
+        content = json.dumps(
+            filter_monthly_cardback_store(json.loads(content)),
+            ensure_ascii=False
+        )
+
+    return content
+
 
 #only works in v1.18.0
 @app.route("/persist/static/blueprints", methods=['GET'])
 def Blueprints():
-	data = []
-	for root, dirs, files in os.walk("data/persist/blueprints"):
-		for file in files:
-			data.append({
-				"name": file.replace(".json", ""),
-				"data": open(f"{root}/{file}", "r").read()
-			})
-	return jsonify(data)
+    data = []
+    for root, dirs, files in os.walk("data/persist/blueprints"):
+        for file in files:
+            with open(os.path.join(root, file), "r", encoding="utf-8") as stream:
+                blueprint_data = stream.read()
+            if file.lower() == CARD_BACK_STORE_BLUEPRINT.lower():
+                blueprint_data = json.dumps(
+                    filter_monthly_cardback_store(json.loads(blueprint_data)),
+                    ensure_ascii=False
+                )
+            data.append({
+                "name": file.replace(".json", ""),
+                "data": blueprint_data
+            })
+    return jsonify(data)
+
 
 def get_monthly_store_offers(
     store_type,
@@ -7140,6 +7206,17 @@ def UserAction2():
 								None
 							)
 						price = int(float(item_data.get("BuyCost", 0) or 0)) if item_data else 0
+						if (
+							item_data is not None
+							and kind in ("cardback", "cardbacks")
+							and item_data.get("ID") not in CARD_BACK_STORE_PERMANENT_IDS
+							and item_data.get("ID") not in {
+								entry.get("ID")
+								for entry in filter_monthly_cardback_store(rows)
+								if isinstance(entry, dict)
+							}
+						):
+							fields["reason"] = "CARD_BACK_NOT_ON_SALE"
 					except (OSError, ValueError, TypeError, json.JSONDecodeError):
 						app.logger.exception("[user_action2] Store catalog read failed: %s", filename)
 				else:
