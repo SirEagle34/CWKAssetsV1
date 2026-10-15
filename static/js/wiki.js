@@ -38,6 +38,7 @@
     Light: "Nicelands",
     Green: "Sandlands",
     Dark: "Useless Swamp",
+    Black: "Obsidian",
     White: "Icylands",
     Purple: "Spookyland",
     Orange: "Magmalands",
