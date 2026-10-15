@@ -1,25 +1,34 @@
+import io
 import json
 import os
 import threading
+import urllib.error
+import urllib.request
 import zipfile
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
+from mimetypes import guess_type
 
-from flask import Flask, abort, jsonify, render_template, send_file, send_from_directory
+from flask import Flask, abort, jsonify, render_template
 
 app = Flask(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
+# Optional local archives can be used for development. Production reads GitHub ZIPs
+# directly using HTTP Range requests and never downloads or extracts the full archive.
 ARCHIVE_DIR = Path(os.environ.get("CWK_WIKI_ARCHIVE_DIR", BASE_DIR / "data" / "archives"))
+RANGE_TIMEOUT = int(os.environ.get("CWK_WIKI_RANGE_TIMEOUT", "30"))
 
 EDITIONS = {
     "obsidian": {
         "archive": ARCHIVE_DIR / "cwk_obsidian_wiki_data.zip",
+        "url": "https://github.com/SirEagle34/CWKAssetsV1/releases/download/cwk-wiki/cwk_obsidian_wiki_data.zip",
         "label": "Obsidian",
     },
     "darkmagic": {
         "archive": ARCHIVE_DIR / "cwk_darkmagic_wiki_data.zip",
+        "url": "https://github.com/SirEagle34/CWKAssetsV1/releases/download/cwk-wiki/cwk_darkmagic_wiki_data.zip",
         "label": "Dark Magic",
     },
 }
@@ -36,48 +45,150 @@ PAGES = {
 ZIP_LOCK = threading.RLock()
 
 
-def _archive(edition):
-    config = EDITIONS.get(edition)
-    if not config:
-        abort(404)
-    path = config["archive"]
-    if not path.is_file():
-        abort(503, description=(
-            f"{config['label']} data archive is missing. Place "
-            f"{path.name} in {ARCHIVE_DIR}; do not extract the ZIP."
-        ))
-    return path
+class HTTPRangeReader:
+    """Small seekable file-like adapter backed by HTTP Range requests."""
+
+    def __init__(self, url):
+        self.url = url
+        self.position = 0
+        self.size = self._discover_size()
+
+    def _request_range(self, start, end):
+        if start > end:
+            return b""
+        request = urllib.request.Request(
+            self.url,
+            headers={
+                "Range": f"bytes={start}-{end}",
+                "User-Agent": "CWK-Wiki/1.0",
+                "Accept-Encoding": "identity",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=RANGE_TIMEOUT) as response:
+                if response.status != 206:
+                    raise OSError(
+                        f"GitHub did not honor HTTP Range (HTTP {response.status}). "
+                        "The wiki requires partial-content support."
+                    )
+                content_range = response.headers.get("Content-Range", "")
+                expected_prefix = f"bytes {start}-"
+                if not content_range.startswith(expected_prefix):
+                    raise OSError(f"Unexpected Content-Range header: {content_range!r}")
+                data = response.read()
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise OSError(f"Could not read GitHub release range: {exc}") from exc
+        expected_length = end - start + 1
+        if len(data) != expected_length:
+            raise OSError(
+                f"Short range read at {start}-{end}: got {len(data)} of {expected_length} bytes"
+            )
+        return data
+
+    def _discover_size(self):
+        request = urllib.request.Request(
+            self.url,
+            headers={
+                "Range": "bytes=0-0",
+                "User-Agent": "CWK-Wiki/1.0",
+                "Accept-Encoding": "identity",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=RANGE_TIMEOUT) as response:
+                content_range = response.headers.get("Content-Range", "")
+                if response.status != 206 or "/" not in content_range:
+                    raise OSError(
+                        f"GitHub release does not support byte ranges: "
+                        f"HTTP {response.status}, Content-Range={content_range!r}"
+                    )
+                size = int(content_range.rsplit("/", 1)[1])
+                if size <= 0:
+                    raise OSError("GitHub returned an invalid ZIP size.")
+                return size
+        except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+            raise OSError(f"Could not determine GitHub ZIP size: {exc}") from exc
+
+    def seek(self, offset, whence=io.SEEK_SET):
+        if whence == io.SEEK_SET:
+            position = offset
+        elif whence == io.SEEK_CUR:
+            position = self.position + offset
+        elif whence == io.SEEK_END:
+            position = self.size + offset
+        else:
+            raise ValueError("Invalid seek mode")
+        if position < 0:
+            raise ValueError("Negative seek position")
+        self.position = position
+        return self.position
+
+    def tell(self):
+        return self.position
+
+    def read(self, size=-1):
+        if size is None or size < 0:
+            size = max(0, self.size - self.position)
+        size = min(size, max(0, self.size - self.position))
+        if size == 0:
+            return b""
+        start = self.position
+        end = start + size - 1
+        data = self._request_range(start, end)
+        self.position += len(data)
+        return data
+
+    def readable(self):
+        return True
+
+    def seekable(self):
+        return True
+
+    def close(self):
+        pass
 
 
 def _normalized(name):
     return str(name).replace("\\", "/").strip("/").lower()
 
 
+def _open_archive(edition):
+    config = EDITIONS.get(edition)
+    if not config:
+        abort(404)
+    local_path = config["archive"]
+    if local_path.is_file():
+        return zipfile.ZipFile(local_path, "r")
+    try:
+        return zipfile.ZipFile(HTTPRangeReader(config["url"]), "r")
+    except (OSError, zipfile.BadZipFile, ValueError) as exc:
+        app.logger.exception("Unable to open %s wiki ZIP via HTTP ranges", edition)
+        abort(503, description=(
+            f"{config['label']} archive could not be read from GitHub using HTTP Range "
+            f"requests: {exc}"
+        ))
+
+
 @lru_cache(maxsize=8)
-def _zip_index(edition, mtime_ns, size):
-    path = _archive(edition)
-    with ZIP_LOCK, zipfile.ZipFile(path, "r") as archive:
+def _zip_index(edition):
+    with ZIP_LOCK, _open_archive(edition) as archive:
         return tuple(name for name in archive.namelist() if not name.endswith("/"))
 
 
 def _members(edition):
-    path = _archive(edition)
-    stat = path.stat()
-    return _zip_index(edition, stat.st_mtime_ns, stat.st_size)
+    return _zip_index(edition)
 
 
 def _find_member(edition, filename):
     wanted = _normalized(filename)
     members = _members(edition)
-    # Prefer an exact archive path.
     for member in members:
         if _normalized(member) == wanted:
             return member
-    # Archive roots may contain an edition folder; match a full path suffix next.
     for member in members:
         if _normalized(member).endswith("/" + wanted):
             return member
-    # Resource paths in the game JSON may omit extensions or use Unity Resources paths.
+
     wanted_base = wanted.rsplit("/", 1)[-1]
     wanted_stem = wanted_base.rsplit(".", 1)[0]
     matches = []
@@ -87,16 +198,18 @@ def _find_member(edition, filename):
         if member_base == wanted_base or member_stem == wanted_stem:
             matches.append(member)
     if matches:
-        # Prefer image files when the source path has no extension.
         preferred = (".png", ".jpg", ".jpeg", ".webp", ".tga", ".json", ".txt", ".xml")
-        matches.sort(key=lambda m: (preferred.index(Path(m).suffix.lower()) if Path(m).suffix.lower() in preferred else len(preferred), len(m)))
+        matches.sort(key=lambda m: (
+            preferred.index(Path(m).suffix.lower())
+            if Path(m).suffix.lower() in preferred else len(preferred),
+            len(m),
+        ))
         return matches[0]
     return None
 
 
 def _read_member(edition, member):
-    path = _archive(edition)
-    with ZIP_LOCK, zipfile.ZipFile(path, "r") as archive:
+    with ZIP_LOCK, _open_archive(edition) as archive:
         return archive.read(member)
 
 
@@ -150,25 +263,32 @@ def catalogue_api(edition, kind):
 def wiki_asset(edition, filename):
     if edition not in EDITIONS:
         abort(404)
-    # ZIP member paths are looked up inside the archive. Nothing is extracted to disk.
     member = _find_member(edition, filename)
     if not member:
         abort(404)
-    import io
-    from mimetypes import guess_type
     data = _read_member(edition, member)
-    response = app.response_class(data, mimetype=guess_type(member)[0] or "application/octet-stream")
+    response = app.response_class(
+        data,
+        mimetype=guess_type(member)[0] or "application/octet-stream",
+    )
     response.headers["Cache-Control"] = "public, max-age=86400"
     return response
 
 
 @app.get("/health")
 def health():
-    available = {
-        edition: config["archive"].is_file()
-        for edition, config in EDITIONS.items()
+    return {
+        "status": "ok",
+        "app": "CWK Wiki",
+        "archives": {
+            edition: {
+                "local": config["archive"].is_file(),
+                "remote": bool(config.get("url")),
+                "range_enabled": True,
+            }
+            for edition, config in EDITIONS.items()
+        },
     }
-    return {"status": "ok", "app": "CWK Wiki", "archives": available}
 
 
 if __name__ == "__main__":
