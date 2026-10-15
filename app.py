@@ -313,16 +313,22 @@ def _resolve_localized_value(value, translations):
     if translated:
         return translated
 
-    normalized_key = "".join(
-        char for char in key.casefold()
-        if not char.isspace() and char not in ("\\u200b", "\\ufeff", "\\u200e", "\\u200f")
-    )
-    for translation_key, translation_value in translations.items():
-        normalized_translation_key = "".join(
-            char for char in translation_key.casefold()
+    # Some exported language sheets store the key without the leading "!!",
+    # even though the game database references it with that prefix.
+    key_without_prefix = key[2:] if key.startswith("!!") else key
+
+    def normalize_translation_key(candidate):
+        candidate = candidate.strip()
+        if candidate.startswith("!!"):
+            candidate = candidate[2:]
+        return "".join(
+            char for char in candidate.casefold()
             if not char.isspace() and char not in ("\\u200b", "\\ufeff", "\\u200e", "\\u200f")
         )
-        if normalized_translation_key == normalized_key and translation_value:
+
+    normalized_key = normalize_translation_key(key_without_prefix)
+    for translation_key, translation_value in translations.items():
+        if normalize_translation_key(translation_key) == normalized_key and translation_value:
             return translation_value
 
     return value
