@@ -109,11 +109,12 @@ public class StoreBuyCardBackScript : MonoBehaviour
             data.ID
         );
 
-        if (data.CardBack == null)
+        // Set = Disable explicitly hides this entry.
+        if (string.Equals(data.Set, "Disable", System.StringComparison.OrdinalIgnoreCase))
         {
-            Debug.LogError(
-                "StoreBuyCardBackScript: CardBack is NULL. " +
-                data.CardBackID
+            Debug.Log(
+                "StoreBuyCardBackScript: Entry hidden by Set=Disable. ID: " +
+                data.ID
             );
 
             Disable();
@@ -134,37 +135,33 @@ public class StoreBuyCardBackScript : MonoBehaviour
             return;
         }
 
-        mData = data;
+        if (data.CardBack == null)
+        {
+            Debug.LogError(
+                "StoreBuyCardBackScript: CardBack is NULL. " +
+                data.CardBackID
+            );
 
-        // =====================================================
-        // NAME
-        // =====================================================
+            Disable();
+            return;
+        }
+
+        mData = data;
 
         if (Name != null)
         {
-            Name.text =
-                data.CardBack.Name;
+            Name.text = data.CardBack.Name;
         }
-
-        // =====================================================
-        // COST
-        // =====================================================
 
         if (Cost != null)
         {
-            Cost.text =
-                data.BuyCost + " Gems";
+            Cost.text = data.BuyCost + " Gems";
         }
-
-        // =====================================================
-        // CARD BACK TEXTURE
-        // =====================================================
 
         if (CardBackTexture == null)
         {
             Debug.LogError(
-                "StoreBuyCardBackScript: " +
-                "CardBackTexture is NULL."
+                "StoreBuyCardBackScript: CardBackTexture is NULL."
             );
 
             Disable();
@@ -179,10 +176,6 @@ public class StoreBuyCardBackScript : MonoBehaviour
             "[CardBack UI] Texture populated: " +
             data.CardBack.TextureUI
         );
-
-        // =====================================================
-        // BUY COUNT
-        // =====================================================
 
         RefreshBuyCount();
 
@@ -210,16 +203,11 @@ public class StoreBuyCardBackScript : MonoBehaviour
         if (StoreScreenController.Instance == null)
         {
             Debug.LogError(
-                "StoreBuyCardBackScript: " +
-                "StoreScreenController.Instance is NULL."
+                "StoreBuyCardBackScript: StoreScreenController.Instance is NULL."
             );
 
             return;
         }
-
-        // =====================================================
-        // BUY LIMIT CHECK
-        // =====================================================
 
         int buyCount =
             StoreScreenController.Instance.GetCardBackBuyCount(
@@ -255,16 +243,9 @@ public class StoreBuyCardBackScript : MonoBehaviour
             );
 
             RefreshBuyCount();
-
             return;
         }
 
-        // =====================================================
-        // BUY
-        // =====================================================
-
-        StoreScreenController.Instance.OnClickBuyCardBack(
-            mData
-        );
+        StoreScreenController.Instance.OnClickBuyCardBack(mData);
     }
 }
