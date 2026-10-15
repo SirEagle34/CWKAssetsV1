@@ -1195,38 +1195,38 @@ public class StoreScreenController : Singleton<StoreScreenController>
 		isProcessingPurchase = false;
 	}
 
-	public void OnClickBuyCraftCoins()
-	{
-		if (!isProcessingPurchase)
-		{
-			int buyCraftCurrencyCost = MiscParams.BuyCraftCurrencyCost;
-			int buyCraftCurrencyAmount = MiscParams.BuyCraftCurrencyAmount;
-			if (Singleton<PlayerInfoScript>.Instance.SaveData.HardCurrency < buyCraftCurrencyCost)
-			{
-				Singleton<SimplePopupController>.Instance.ShowMessage(string.Empty, "Not enough gems for a Craft Coin.");
-				return;
-			}
-			isProcessingPurchase = true;
-			Singleton<SimplePopupController>.Instance.ShowPurchasePrompt((buyCraftCurrencyAmount == 1) ? "Buy 1 Craft Coin?" : ("Buy " + buyCraftCurrencyAmount + " Craft Coins?"), string.Empty, buyCraftCurrencyCost, ConfirmBuyCraftCoins, cancelPopup);
-		}
-	}
+	//public void OnClickBuyCraftCoins()
+	//{
+	//	if (!isProcessingPurchase)
+	//	{
+	//		int buyCraftCurrencyCost = MiscParams.BuyCraftCurrencyCost;
+	//		int buyCraftCurrencyAmount = MiscParams.BuyCraftCurrencyAmount;
+	//		if (Singleton<PlayerInfoScript>.Instance.SaveData.HardCurrency < buyCraftCurrencyCost)
+	//		{
+	//			Singleton<SimplePopupController>.Instance.ShowMessage(string.Empty, "Not enough gems for a Craft Coin.");
+	//			return;
+	//		}
+	//		isProcessingPurchase = true;
+	//		Singleton<SimplePopupController>.Instance.ShowPurchasePrompt((buyCraftCurrencyAmount == 1) ? "Buy 1 Craft Coin?" : ("Buy " + buyCraftCurrencyAmount + " Craft Coins?"), string.Empty, buyCraftCurrencyCost, ConfirmBuyCraftCoins, cancelPopup);
+	//	}
+	//}
 
-	private void ConfirmBuyCraftCoins()
-	{
-		mWaitForUserAction = true;
-		mUserActionProceed = NextAction.WAITING;
-		Singleton<BusyIconPanelController>.Instance.Show();
-		Singleton<PlayerInfoScript>.Instance.SaveData.ClaimCurrency("craft coin purchase", string.Empty, 0, -MiscParams.BuyCraftCurrencyCost, 0, 0, UserActionCallback);
-		mNextFunction = CraftCoinsExecute;
-		isProcessingPurchase = false;
-	}
+	//private void ConfirmBuyCraftCoins()
+	//{
+	//	mWaitForUserAction = true;
+	//	mUserActionProceed = NextAction.WAITING;
+	//	Singleton<BusyIconPanelController>.Instance.Show();
+	//	Singleton<PlayerInfoScript>.Instance.SaveData.ClaimCurrency("craft coin purchase", string.Empty, 0, -MiscParams.BuyCraftCurrencyCost, 0, 0, UserActionCallback);
+	//	mNextFunction = CraftCoinsExecute;
+	//	isProcessingPurchase = false;
+	//}
 
-	private void CraftCoinsExecute()
-	{
-		Singleton<PlayerInfoScript>.Instance.Save();
-		int buyCraftCurrencyAmount = MiscParams.BuyCraftCurrencyAmount;
-		Singleton<SimplePopupController>.Instance.ShowMessage(string.Empty, (buyCraftCurrencyAmount == 1) ? "You got 1 Craft Coin!" : ("You got " + buyCraftCurrencyAmount + " Craft Coins!"));
-	}
+	//private void CraftCoinsExecute()
+	//{
+	//	Singleton<PlayerInfoScript>.Instance.Save();
+	//	int buyCraftCurrencyAmount = MiscParams.BuyCraftCurrencyAmount;
+	//	Singleton<SimplePopupController>.Instance.ShowMessage(string.Empty, (buyCraftCurrencyAmount == 1) ? "You got 1 Craft Coin!" : ("You got " + buyCraftCurrencyAmount + " Craft Coins!"));
+	//}
 
 	private void EvolutionShardsExecute()
 	{
