@@ -206,6 +206,31 @@ def _find_member(edition, filename):
             len(m),
         ))
         return matches[0]
+
+    # Creature database UITexture values may use the Unity resource path
+    # "UI/Icons_Creatures/Creature_Name", while the exported archive can store
+    # the same artwork as "icon_creatures/Name.png" (without "Creature_").
+    # Try common filename aliases only after exact matches have failed.
+    aliases = {wanted_base, wanted_stem}
+    for prefix in ("creature_", "icons_creatures_", "icon_creatures_"):
+        if wanted_stem.startswith(prefix):
+            aliases.add(wanted_stem[len(prefix):])
+    if wanted_stem.startswith("creature_"):
+        aliases.add(wanted_stem[len("creature_"):])
+    alias_matches = []
+    for member in members:
+        member_base = _normalized(member).rsplit("/", 1)[-1]
+        member_stem = member_base.rsplit(".", 1)[0]
+        if member_stem in aliases:
+            alias_matches.append(member)
+    if alias_matches:
+        preferred = (".png", ".jpg", ".jpeg", ".webp", ".tga")
+        alias_matches.sort(key=lambda m: (
+            preferred.index(Path(m).suffix.lower())
+            if Path(m).suffix.lower() in preferred else len(preferred),
+            len(m),
+        ))
+        return alias_matches[0]
     return None
 
 
