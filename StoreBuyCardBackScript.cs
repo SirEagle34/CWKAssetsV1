@@ -108,6 +108,18 @@ public class StoreBuyCardBackScript : MonoBehaviour
             return;
         }
 
+        if (!string.Equals(data.Set, "Permanent", System.StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(data.Set, "Route", System.StringComparison.OrdinalIgnoreCase))
+        {
+            Debug.LogWarning(
+                "StoreBuyCardBackScript: Unsupported Set value. ID: " +
+                data.ID +
+                " | Set: " +
+                data.Set
+            );
+            return;
+        }
+
         mData = data;
 
         // =====================================================
