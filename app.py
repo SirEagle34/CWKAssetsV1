@@ -423,14 +423,17 @@ def faction_icon(edition, faction):
     if edition not in EDITIONS:
         abort(404)
 
-    allowed_factions = ("Blue", "Red", "Light", "Green", "Dark", "White")
+    allowed_factions = ("Blue", "Red", "Light", "Green", "Dark", "White", "Purple", "Orange", "Rainbow", "Colorless")
     faction = next((name for name in allowed_factions if name.lower() == faction.lower()), None)
     if not faction:
         abort(404)
 
+    # In the game data, Colorless uses the Rainbow faction icon.
+    icon_name = "Rainbow" if faction == "Colorless" else faction
+
     # Keep the small faction icons on the PythonAnywhere instance after first use.
     icon_dir = BASE_DIR / "static" / "icons_items"
-    icon_path = icon_dir / f"Icon_Faction_{faction}.png"
+    icon_path = icon_dir / f"Icon_Faction_{icon_name}.png"
     if icon_path.is_file():
         data = icon_path.read_bytes()
     else:
