@@ -3441,7 +3441,7 @@ CARD_BACK_STORE_MONTHLY_COUNT = 15
 
 
 def filter_monthly_cardback_store(blueprint_data):
-    """Keep every Set=Permanent cardback and rotate only Set=Route entries."""
+    """Keep Set=Permanent, rotate Set=Route, and exclude Set=Disable entries."""
     if isinstance(blueprint_data, dict):
         entries = blueprint_data.get("data", [])
     elif isinstance(blueprint_data, list):
@@ -3450,12 +3450,19 @@ def filter_monthly_cardback_store(blueprint_data):
         return blueprint_data
 
     entries = [entry for entry in entries if isinstance(entry, dict)]
-    permanent = [
+
+    # Disabled entries must never be sent to the client or accepted for purchase.
+    enabled_entries = [
         entry for entry in entries
+        if str(entry.get("Set", "")).strip().casefold() != "disable"
+    ]
+
+    permanent = [
+        entry for entry in enabled_entries
         if str(entry.get("Set", "")).strip().casefold() == "permanent"
     ]
     rotating = [
-        entry for entry in entries
+        entry for entry in enabled_entries
         if str(entry.get("Set", "")).strip().casefold() == "route"
         and str(entry.get("ID", "")).strip()
         and str(entry.get("CardBackID", "")).strip()
