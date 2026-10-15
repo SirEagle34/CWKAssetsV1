@@ -418,6 +418,42 @@ def catalogue_api(edition, kind):
     return jsonify({"edition": edition, "kind": kind, "count": len(items), "items": items})
 
 
+@app.get("/faction-icon/<edition>/<faction>.png")
+def faction_icon(edition, faction):
+    if edition not in EDITIONS:
+        abort(404)
+
+    allowed_factions = ("Blue", "Red", "Light", "Green", "Dark", "White")
+    faction = next((name for name in allowed_factions if name.lower() == faction.lower()), None)
+    if not faction:
+        abort(404)
+
+    # Keep the small faction icons on the PythonAnywhere instance after first use.
+    icon_dir = BASE_DIR / "static" / "images" / "factions"
+    icon_path = icon_dir / f"Icon_Faction_{faction}.png"
+    if icon_path.is_file():
+        data = icon_path.read_bytes()
+    else:
+        member = None
+        for source_edition in (edition, "obsidian" if edition == "darkmagic" else "darkmagic"):
+            member = _find_member(source_edition, icon_path.name)
+            if member:
+                try:
+                    data = _read_member(source_edition, member)
+                    icon_dir.mkdir(parents=True, exist_ok=True)
+                    icon_path.write_bytes(data)
+                    break
+                except OSError:
+                    app.logger.exception("Could not cache faction icon %s locally", icon_path.name)
+                    abort(503, description="Could not save the faction icon to the wiki's local static folder.")
+        else:
+            abort(404, description=f"{icon_path.name} was not found in either wiki archive.")
+
+    response = app.response_class(data, mimetype="image/png")
+    response.headers["Cache-Control"] = "public, max-age=86400"
+    return response
+
+
 @app.get("/wiki-asset/<edition>/<path:filename>")
 def wiki_asset(edition, filename):
     if edition not in EDITIONS:
