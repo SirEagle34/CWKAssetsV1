@@ -32,6 +32,14 @@
     : ["UITexture", "PortraitTexture", "SpriteName", "Icon", "IconPath", "IconName", "Portrait", "Image", "Texture", "CardPortrait", "ActionPortrait", "ID"];
   const descriptionKeys = ["Description", "description", "Effect", "EffectText", "Text", "RulesText", "FlavorText"];
   const metaKeys = ["Rarity", "Faction", "Cost", "EnergyCost", "Type", "CardType", "Attack", "Health", "Level", "HP", "STR", "INT", "DEX", "DEF", "RES"];
+  const factionNames = {
+    Blue: "Blue Plains",
+    Red: "Cornfields",
+    Light: "Nicelands",
+    Green: "Sandlands",
+    Dark: "Useless Swamp",
+    White: "Icylands"
+  };
 
   let allItems = [];
 
@@ -118,10 +126,16 @@
       const metadata = document.createElement("div");
       metadata.className = "wiki-entry-meta";
       for (const key of metaKeys) {
-        const value = textValue(item && item[key]);
-        if (!value) continue;
+        const rawValue = textValue(item && item[key]);
+        if (!rawValue) continue;
+        const value = key === "Faction"
+          ? (factionNames[rawValue.trim()] || rawValue)
+          : rawValue;
         const chip = document.createElement("span");
         chip.textContent = key + ": " + value;
+        if (key === "Faction") {
+          chip.classList.add("wiki-faction", "wiki-faction-" + rawValue.trim().toLowerCase());
+        }
         metadata.appendChild(chip);
       }
       if (metadata.childElementCount) body.appendChild(metadata);
