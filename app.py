@@ -388,9 +388,12 @@ def _level50_creature_stats(items):
 
 
 
-def _load_content_json(filename):
-    """Read optional shared JSON data from the repository's content directory."""
-    path = BASE_DIR / "content" / filename
+def _load_content_json(edition, filename):
+    """Read optional edition-specific JSON data from its content directory."""
+    edition_dir = {"obsidian": "obsidian_cwk", "darkmagic": "darkmagic_cwk"}.get(edition)
+    if not edition_dir:
+        return []
+    path = BASE_DIR / "content" / edition_dir / filename
     if not path.is_file():
         app.logger.info("Optional content file is not installed: %s", path)
         return []
@@ -413,7 +416,7 @@ def _load_content_json(filename):
 
 def _attach_creature_passives(edition, creatures):
     """Attach localized passive descriptions to creatures with matching IDs."""
-    passives = _load_content_json("db_CreaturePassives.json")
+    passives = _load_content_json(edition, "db_CreaturePassives.json")
     if not passives or not isinstance(creatures, list):
         return creatures
 
