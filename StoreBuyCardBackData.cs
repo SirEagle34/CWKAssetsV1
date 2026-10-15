@@ -35,6 +35,18 @@ public class StoreBuyCardBackData : ILoadableData
         }
     }
 
+    public bool IsDisabled
+    {
+        get
+        {
+            return string.Equals(
+                _Set,
+                "Disable",
+                System.StringComparison.OrdinalIgnoreCase
+            );
+        }
+    }
+
     public CardBackData CardBack
     {
         get
@@ -97,6 +109,22 @@ public class StoreBuyCardBackData : ILoadableData
                 "Quantity",
                 1
             );
+
+        // Disabled entries do not need CardBack data.
+        if (IsDisabled)
+        {
+            _CardBack = null;
+
+            Debug.Log(
+                "StoreBuyCardBackData: Entry disabled. " +
+                "ID: " +
+                _ID +
+                " | CardBackID: " +
+                _CardBackID
+            );
+
+            return;
+        }
 
         // =====================================================
         // CARD BACK
