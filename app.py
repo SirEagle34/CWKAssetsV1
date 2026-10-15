@@ -183,12 +183,30 @@ def _members(edition):
 def _find_member(edition, filename):
     wanted = _normalized(filename)
     members = _members(edition)
-    for member in members:
-        if _normalized(member) == wanted:
-            return member
-    for member in members:
-        if _normalized(member).endswith("/" + wanted):
-            return member
+
+    # Map Unity resource paths to the actual exported creature-icon directory.
+    # Example: UI/Icons_Creatures/Creature_Name -> icons_creatures/Creature_Name
+    path_candidates = [wanted]
+    for prefix in ("ui/icons_creatures/", "icons_creatures/"):
+        if wanted.startswith(prefix):
+            relative = wanted[len(prefix):]
+            path_candidates.extend([
+                "icons_creatures/" + relative,
+                "icons_creatures/" + relative + ".png",
+                "icons_creatures/" + relative + ".jpg",
+                "icons_creatures/" + relative + ".jpeg",
+                "icons_creatures/" + relative + ".webp",
+            ])
+            break
+
+    normalized_members = [(_normalized(member), member) for member in members]
+    for candidate in path_candidates:
+        for normalized_member, member in normalized_members:
+            if normalized_member == candidate:
+                return member
+        for normalized_member, member in normalized_members:
+            if normalized_member.endswith("/" + candidate):
+                return member
 
     wanted_base = wanted.rsplit("/", 1)[-1]
     wanted_stem = wanted_base.rsplit(".", 1)[0]
