@@ -495,7 +495,11 @@ def catalogue_api(edition, kind):
     if edition not in EDITIONS or kind not in ("creatures", "actioncards"):
         abort(404)
     filename = "db_Creatures.json" if kind == "creatures" else "db_ActionCards.json"
-    items = _load_json(edition, filename)
+    items = _load_content_json(edition, filename)
+    edition_dir = {"obsidian": "obsidian_cwk", "darkmagic": "darkmagic_cwk"}[edition]
+    content_path = BASE_DIR / "content" / edition_dir / filename
+    if not content_path.is_file():
+        abort(503, description=f"Required catalogue file is missing: content/{edition_dir}/{filename}")
     items = _localize_items(edition, items)
     if kind == "creatures":
         items = _level50_creature_stats(items)
