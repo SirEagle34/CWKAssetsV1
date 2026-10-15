@@ -5,6 +5,7 @@ public class StoreBuyCardBackData : ILoadableData
 {
     private string _ID;
     private string _CardBackID;
+    private string _Set;
     private int _BuyCost;
     private int _Quantity;
 
@@ -23,6 +24,14 @@ public class StoreBuyCardBackData : ILoadableData
         get
         {
             return _CardBackID;
+        }
+    }
+
+    public string Set
+    {
+        get
+        {
+            return _Set;
         }
     }
 
@@ -68,6 +77,13 @@ public class StoreBuyCardBackData : ILoadableData
                 string.Empty
             );
 
+        _Set =
+            TFUtils.LoadString(
+                dict,
+                "Set",
+                string.Empty
+            );
+
         _BuyCost =
             TFUtils.LoadInt(
                 dict,
@@ -109,6 +125,8 @@ public class StoreBuyCardBackData : ILoadableData
             _ID +
             " | CardBackID: " +
             _CardBackID +
+            " | Set: " +
+            _Set +
             " | Quantity: " +
             _Quantity +
             " | BuyCost: " +
