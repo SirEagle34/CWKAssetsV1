@@ -161,12 +161,25 @@
       if (metadata.childElementCount) body.appendChild(metadata);
 
       if (kind === "creatures") {
-        const passiveDescription = textValue(firstValue(item, ["CreaturePassives", "Passives"])).trim();
+        const passiveData = firstValue(item, ["CreaturePassives", "Passives"]);
+        let passiveDescription = "";
+        if (typeof passiveData === "string" || typeof passiveData === "number") {
+          passiveDescription = textValue(passiveData).trim();
+        } else if (Array.isArray(passiveData)) {
+          passiveDescription = passiveData.map(passive =>
+            typeof passive === "object" && passive !== null
+              ? textValue(firstValue(passive, ["Description", "description", "Effect", "EffectText", "Text"]))
+              : textValue(passive)
+          ).filter(Boolean).join(" ");
+        } else if (passiveData && typeof passiveData === "object") {
+          passiveDescription = textValue(firstValue(passiveData, ["Description", "description", "Effect", "EffectText", "Text"])).trim();
+        }
+
         if (passiveDescription) {
           const passive = document.createElement("p");
           passive.className = "wiki-entry-passives";
           const passiveLabel = document.createElement("strong");
-          passiveLabel.textContent = "Passives: ";
+          passiveLabel.textContent = "Creature Passive: ";
           passive.appendChild(passiveLabel);
           passive.appendChild(document.createTextNode(passiveDescription));
           body.appendChild(passive);
