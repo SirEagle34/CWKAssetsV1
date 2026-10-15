@@ -31,7 +31,7 @@
     ? ["UITexture", "Icon", "IconPath", "IconName", "Portrait", "Image", "Texture", "CardIcon"]
     : ["UITexture", "Icon", "IconPath", "IconName", "Portrait", "Image", "Texture", "CardPortrait", "ActionPortrait"];
   const descriptionKeys = ["Description", "description", "Effect", "EffectText", "Text", "RulesText", "FlavorText"];
-  const metaKeys = ["Rarity", "Faction", "Cost", "EnergyCost", "Type", "CardType", "Attack", "Health", "HP", "Level"];
+  const metaKeys = ["Rarity", "Faction", "Cost", "EnergyCost", "Type", "CardType", "Attack", "Health", "Level", "HP", "STR", "INT", "DEX", "DEF", "RES"];
 
   let allItems = [];
 
