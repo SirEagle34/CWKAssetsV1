@@ -11,6 +11,16 @@ public class StoreBuyCardBackScript : MonoBehaviour
     private StoreBuyCardBackData mData;
 
     // =====================================================
+    // DISABLE / HIDE ENTRY
+    // =====================================================
+
+    public void Disable()
+    {
+        mData = null;
+        gameObject.SetActive(false);
+    }
+
+    // =====================================================
     // BUY COUNT
     // =====================================================
 
@@ -90,6 +100,7 @@ public class StoreBuyCardBackScript : MonoBehaviour
                 "StoreBuyCardBackScript: data is NULL."
             );
 
+            Disable();
             return;
         }
 
@@ -105,6 +116,7 @@ public class StoreBuyCardBackScript : MonoBehaviour
                 data.CardBackID
             );
 
+            Disable();
             return;
         }
 
@@ -117,6 +129,8 @@ public class StoreBuyCardBackScript : MonoBehaviour
                 " | Set: " +
                 data.Set
             );
+
+            Disable();
             return;
         }
 
@@ -153,6 +167,7 @@ public class StoreBuyCardBackScript : MonoBehaviour
                 "CardBackTexture is NULL."
             );
 
+            Disable();
             return;
         }
 
