@@ -28,8 +28,8 @@
   const titleKeys = ["Name", "name", "DisplayName", "Title", "title", "ID", "Id", "id"];
   const idKeys = ["ID", "Id", "id", "Name", "name"];
   const imageKeys = kind === "creatures"
-    ? ["UITexture", "Icon", "IconPath", "IconName", "Portrait", "Image", "Texture", "CardIcon"]
-    : ["UITexture", "Icon", "IconPath", "IconName", "Portrait", "Image", "Texture", "CardPortrait", "ActionPortrait"];
+    ? ["UITexture", "PortraitTexture", "SpriteName", "Icon", "IconPath", "IconName", "Portrait", "Image", "Texture", "CardIcon", "ID"]
+    : ["UITexture", "PortraitTexture", "SpriteName", "Icon", "IconPath", "IconName", "Portrait", "Image", "Texture", "CardPortrait", "ActionPortrait", "ID"];
   const descriptionKeys = ["Description", "description", "Effect", "EffectText", "Text", "RulesText", "FlavorText"];
   const metaKeys = ["Rarity", "Faction", "Cost", "EnergyCost", "Type", "CardType", "Attack", "Health", "Level", "HP", "STR", "INT", "DEX", "DEF", "RES"];
 
@@ -62,16 +62,27 @@
       card.className = "wiki-entry";
       const title = textValue(firstValue(item, titleKeys)) || "Unnamed entry";
       const id = textValue(firstValue(item, idKeys));
-      const image = textValue(firstValue(item, imageKeys));
+      const imageCandidates = [...new Set(imageKeys
+        .map(key => textValue(item && item[key]).trim())
+        .filter(Boolean))];
       const description = textValue(firstValue(item, descriptionKeys));
 
-      if (image) {
+      if (imageCandidates.length) {
         const img = document.createElement("img");
         img.className = "wiki-entry-image";
         img.loading = "lazy";
         img.alt = title;
-        img.src = assetUrl(image);
-        img.addEventListener("error", () => { img.hidden = true; });
+        let imageIndex = 0;
+        const tryNextImage = () => {
+          imageIndex += 1;
+          if (imageIndex >= imageCandidates.length) {
+            img.hidden = true;
+            return;
+          }
+          img.src = assetUrl(imageCandidates[imageIndex]);
+        };
+        img.addEventListener("error", tryNextImage);
+        img.src = assetUrl(imageCandidates[imageIndex]);
         card.appendChild(img);
       }
 
