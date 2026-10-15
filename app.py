@@ -387,6 +387,62 @@ def _level50_creature_stats(items):
     return adjusted_items
 
 
+
+def _load_content_json(filename):
+    """Read optional shared JSON data from the repository's content directory."""
+    path = BASE_DIR / "content" / filename
+    if not path.is_file():
+        app.logger.info("Optional content file is not installed: %s", path)
+        return []
+
+    try:
+        value = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        app.logger.exception("Could not read content JSON: %s", path)
+        return []
+
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        for key in ("items", "data", "passives", "results"):
+            if isinstance(value.get(key), list):
+                return value[key]
+        return [value]
+    return []
+
+
+def _attach_creature_passives(edition, creatures):
+    """Attach localized passive descriptions to creatures with matching IDs."""
+    passives = _load_content_json("db_CreaturePassives.json")
+    if not passives or not isinstance(creatures, list):
+        return creatures
+
+    passives = _localize_items(edition, passives)
+    descriptions = {}
+    for passive in passives:
+        if not isinstance(passive, dict):
+            continue
+        passive_id = str(passive.get("ID", "")).strip()
+        description = passive.get("Description")
+        if passive_id and isinstance(description, str) and description.strip():
+            descriptions[passive_id] = description.strip()
+
+    if not descriptions:
+        return creatures
+
+    result = []
+    for original in creatures:
+        if not isinstance(original, dict):
+            result.append(original)
+            continue
+        item = dict(original)
+        creature_id = str(item.get("ID", "")).strip()
+        description = descriptions.get(creature_id)
+        if description:
+            item["Passives"] = description
+        result.append(item)
+    return result
+
 def _asset_url(edition, value):
     if not isinstance(value, str) or not value.strip():
         return None
@@ -415,6 +471,7 @@ def catalogue_api(edition, kind):
     items = _localize_items(edition, items)
     if kind == "creatures":
         items = _level50_creature_stats(items)
+        items = _attach_creature_passives(edition, items)
     return jsonify({"edition": edition, "kind": kind, "count": len(items), "items": items})
 
 
