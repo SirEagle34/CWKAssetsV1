@@ -77,11 +77,20 @@ def _find_member(edition, filename):
     for member in members:
         if _normalized(member).endswith("/" + wanted):
             return member
-    # JSON and localization files can safely be located by basename.
-    if "/" not in wanted:
-        matches = [m for m in members if _normalized(m).rsplit("/", 1)[-1] == wanted]
-        if matches:
-            return matches[0]
+    # Resource paths in the game JSON may omit extensions or use Unity Resources paths.
+    wanted_base = wanted.rsplit("/", 1)[-1]
+    wanted_stem = wanted_base.rsplit(".", 1)[0]
+    matches = []
+    for member in members:
+        member_base = _normalized(member).rsplit("/", 1)[-1]
+        member_stem = member_base.rsplit(".", 1)[0]
+        if member_base == wanted_base or member_stem == wanted_stem:
+            matches.append(member)
+    if matches:
+        # Prefer image files when the source path has no extension.
+        preferred = (".png", ".jpg", ".jpeg", ".webp", ".tga", ".json", ".txt", ".xml")
+        matches.sort(key=lambda m: (preferred.index(Path(m).suffix.lower()) if Path(m).suffix.lower() in preferred else len(preferred), len(m)))
+        return matches[0]
     return None
 
 
