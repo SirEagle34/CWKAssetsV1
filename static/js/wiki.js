@@ -41,6 +41,7 @@
     White: "Icylands",
     Purple: "Spookyland",
     Orange: "Magmalands",
+    Yellow: "Buildings",
     Rainbow: "Rainbow/Special",
     Colorless: "Rainbow/Special"
   };
