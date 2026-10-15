@@ -62,10 +62,19 @@
       card.className = "wiki-entry";
       const title = textValue(firstValue(item, titleKeys)) || "Unnamed entry";
       const id = textValue(firstValue(item, idKeys));
+      const number = textValue(item && item.Number).trim();
       const imageCandidates = [...new Set(imageKeys
         .map(key => textValue(item && item[key]).trim())
         .filter(Boolean))];
       const description = textValue(firstValue(item, descriptionKeys));
+
+      if (number) {
+        const numberBadge = document.createElement("span");
+        numberBadge.className = "wiki-entry-number";
+        numberBadge.textContent = "#" + number.replace(/^#/, "");
+        numberBadge.setAttribute("aria-label", "Number " + number.replace(/^#/, ""));
+        card.appendChild(numberBadge);
+      }
 
       if (imageCandidates.length) {
         const img = document.createElement("img");
