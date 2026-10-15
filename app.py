@@ -324,6 +324,69 @@ def _localize_items(edition, items):
     return localize(items)
 
 
+def _level50_creature_stats(items):
+    """Add in-game stat values at level 50 (or the creature's lower max level)."""
+    if not isinstance(items, list):
+        return items
+
+    stat_names = ("HP", "STR", "INT", "DEX", "DEF", "RES")
+    adjusted_items = []
+
+    for original in items:
+        if not isinstance(original, dict):
+            adjusted_items.append(original)
+            continue
+
+        item = dict(original)
+        try:
+            total_max_level = int(float(item.get("MaxLevel", 1)))
+        except (TypeError, ValueError):
+            adjusted_items.append(item)
+            continue
+
+        # Only recalculate entries with a usable level and all min/max stat pairs.
+        if total_max_level < 1 or not all(
+            f"Min{name}" in item and f"Max{name}" in item for name in stat_names
+        ):
+            adjusted_items.append(item)
+            continue
+
+        try:
+            growth_factor = float(item.get("GrowthFactor", 0) or 0)
+            target_level = min(50, total_max_level)
+
+            if total_max_level <= 1:
+                level_growth = 1.0
+            else:
+                level_pct = (target_level - 1.0) / (total_max_level - 1.0)
+                exp_curve = (2.0 ** level_pct) - 1.0
+                level_growth = exp_curve + (level_pct - exp_curve) * growth_factor
+
+            item["Level"] = str(target_level)
+            for name in stat_names:
+                # Match CreatureItem: min/max are cast to int before interpolation.
+                min_stat = int(float(item[f"Min{name}"]))
+                max_stat = int(float(item[f"Max{name}"]))
+                value = min_stat + int((max_stat - min_stat) * level_growth)
+
+                # CreatureItem caps DEF, RES, and DEX at their defined maxima.
+                if name in ("DEF", "RES", "DEX"):
+                    value = min(value, max_stat)
+
+                item[name] = str(max(0, value) if name in ("DEF", "RES", "DEX") else value)
+
+            # Keep the original source MaxLevel and Max* values intact.
+            item["StatsLevel"] = str(target_level)
+        except (TypeError, ValueError, OverflowError):
+            # Malformed rows remain available as raw data rather than breaking the API.
+            adjusted_items.append(original)
+            continue
+
+        adjusted_items.append(item)
+
+    return adjusted_items
+
+
 def _asset_url(edition, value):
     if not isinstance(value, str) or not value.strip():
         return None
@@ -350,6 +413,8 @@ def catalogue_api(edition, kind):
     filename = "db_Creatures.json" if kind == "creatures" else "db_ActionCards.json"
     items = _load_json(edition, filename)
     items = _localize_items(edition, items)
+    if kind == "creatures":
+        items = _level50_creature_stats(items)
     return jsonify({"edition": edition, "kind": kind, "count": len(items), "items": items})
 
 
