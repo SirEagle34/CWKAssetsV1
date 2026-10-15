@@ -429,7 +429,7 @@ def faction_icon(edition, faction):
         abort(404)
 
     # Keep the small faction icons on the PythonAnywhere instance after first use.
-    icon_dir = BASE_DIR / "static" / "images" / "factions"
+    icon_dir = BASE_DIR / "static" / "icons_items"
     icon_path = icon_dir / f"Icon_Faction_{faction}.png"
     if icon_path.is_file():
         data = icon_path.read_bytes()
