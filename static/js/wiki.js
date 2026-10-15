@@ -132,10 +132,19 @@
           ? (factionNames[rawValue.trim()] || rawValue)
           : rawValue;
         const chip = document.createElement("span");
-        chip.textContent = key + ": " + value;
         if (key === "Faction") {
-          chip.classList.add("wiki-faction", "wiki-faction-" + rawValue.trim().toLowerCase());
+          const faction = rawValue.trim();
+          chip.classList.add("wiki-faction", "wiki-faction-" + faction.toLowerCase());
+          const factionIcon = document.createElement("img");
+          factionIcon.className = "wiki-faction-icon";
+          factionIcon.alt = "";
+          factionIcon.width = 16;
+          factionIcon.height = 16;
+          factionIcon.src = "/faction-icon/" + encodeURIComponent(edition) + "/" + encodeURIComponent(faction) + ".png";
+          factionIcon.addEventListener("error", () => factionIcon.remove());
+          chip.appendChild(factionIcon);
         }
+        chip.appendChild(document.createTextNode(key + ": " + value));
         metadata.appendChild(chip);
       }
       if (metadata.childElementCount) body.appendChild(metadata);
