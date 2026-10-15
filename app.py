@@ -483,7 +483,7 @@ def faction_icon(edition, faction):
     if edition not in EDITIONS:
         abort(404)
 
-    allowed_factions = ("Blue", "Red", "Light", "Green", "Dark", "White", "Purple", "Orange", "Rainbow", "Colorless", "Yellow")
+    allowed_factions = ("Blue", "Red", "Light", "Green", "Dark", "White", "Purple", "Orange", "Rainbow", "Colorless", "Yellow", "Black")
     faction = next((name for name in allowed_factions if name.lower() == faction.lower()), None)
     if not faction:
         abort(404)
