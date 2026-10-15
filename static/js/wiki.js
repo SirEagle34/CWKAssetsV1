@@ -1,17 +1,139 @@
 (() => {
   "use strict";
+
   const search = document.querySelector("[data-search-input]");
   const count = document.querySelector("[data-result-count]");
   const empty = document.querySelector("[data-empty-state]");
   const catalogue = document.querySelector("[data-catalogue]");
   if (!search || !count || !empty || !catalogue) return;
 
-  // Catalogue entries will be populated from edition-specific API data in a later step.
-  // Until then, keep the empty state honest rather than displaying invented game data.
-  search.addEventListener("input", () => {
-    const hasQuery = search.value.trim().length > 0;
-    count.textContent = hasQuery ? "No connected entries to search" : "Catalogue preview";
-    empty.hidden = false;
+  const page = document.body.dataset;
+  const edition = page.edition;
+  const kind = page.kind;
+  if (!edition || !kind) return;
+
+  const firstValue = (item, keys) => {
+    for (const key of keys) {
+      const value = item && item[key];
+      if (value !== undefined && value !== null && String(value).trim() !== "") return value;
+    }
+    return "";
+  };
+
+  const textValue = value => {
+    if (typeof value === "string" || typeof value === "number") return String(value);
+    return "";
+  };
+
+  const titleKeys = ["Name", "name", "DisplayName", "Title", "title", "ID", "Id", "id"];
+  const idKeys = ["ID", "Id", "id", "Name", "name"];
+  const imageKeys = kind === "creatures"
+    ? ["UITexture", "Icon", "IconPath", "IconName", "Portrait", "Image", "Texture", "CardIcon"]
+    : ["UITexture", "Icon", "IconPath", "IconName", "Portrait", "Image", "Texture", "CardPortrait", "ActionPortrait"];
+  const descriptionKeys = ["Description", "description", "Effect", "EffectText", "Text", "RulesText", "FlavorText"];
+  const metaKeys = ["Rarity", "Faction", "Cost", "EnergyCost", "Type", "CardType", "Attack", "Health", "HP", "Level"];
+
+  let allItems = [];
+
+  function assetUrl(value) {
+    if (!value) return "";
+    const raw = String(value).replace(/\\/g, "/").replace(/^\/+/, "");
+    return "/wiki-asset/" + encodeURIComponent(edition) + "/" +
+      raw.split("/").map(encodeURIComponent).join("/");
+  }
+
+  function render() {
+    const query = search.value.trim().toLocaleLowerCase();
+    const filtered = allItems.filter(item => {
+      const haystack = JSON.stringify(item).toLocaleLowerCase();
+      return !query || haystack.includes(query);
+    });
+
     catalogue.replaceChildren();
-  });
+    empty.hidden = filtered.length > 0;
+    if (allItems.length === 0) {
+      count.textContent = "0 entries";
+      return;
+    }
+    count.textContent = filtered.length + " / " + allItems.length + " entries";
+
+    for (const item of filtered) {
+      const card = document.createElement("article");
+      card.className = "wiki-entry";
+      const title = textValue(firstValue(item, titleKeys)) || "Unnamed entry";
+      const id = textValue(firstValue(item, idKeys));
+      const image = textValue(firstValue(item, imageKeys));
+      const description = textValue(firstValue(item, descriptionKeys));
+
+      if (image) {
+        const img = document.createElement("img");
+        img.className = "wiki-entry-image";
+        img.loading = "lazy";
+        img.alt = title;
+        img.src = assetUrl(image);
+        img.addEventListener("error", () => { img.hidden = true; });
+        card.appendChild(img);
+      }
+
+      const body = document.createElement("div");
+      body.className = "wiki-entry-body";
+      const heading = document.createElement("h2");
+      heading.textContent = title;
+      body.appendChild(heading);
+
+      if (id && id !== title) {
+        const idText = document.createElement("p");
+        idText.className = "wiki-entry-id";
+        idText.textContent = id;
+        body.appendChild(idText);
+      }
+
+      if (description) {
+        const desc = document.createElement("p");
+        desc.className = "wiki-entry-description";
+        desc.textContent = description;
+        body.appendChild(desc);
+      }
+
+      const metadata = document.createElement("div");
+      metadata.className = "wiki-entry-meta";
+      for (const key of metaKeys) {
+        const value = textValue(item && item[key]);
+        if (!value) continue;
+        const chip = document.createElement("span");
+        chip.textContent = key + ": " + value;
+        metadata.appendChild(chip);
+      }
+      if (metadata.childElementCount) body.appendChild(metadata);
+      card.appendChild(body);
+      catalogue.appendChild(card);
+    }
+  }
+
+  search.addEventListener("input", render);
+
+  fetch("/api/catalogue/" + encodeURIComponent(edition) + "/" + encodeURIComponent(kind))
+    .then(response => {
+      if (!response.ok) throw new Error(response.status === 503
+        ? "The edition ZIP archive is not installed or its data files are missing."
+        : "Could not load the catalogue.");
+      return response.json();
+    })
+    .then(data => {
+      allItems = Array.isArray(data.items) ? data.items : [];
+      empty.querySelector("h2").textContent = allItems.length
+        ? "No matching entries"
+        : "No catalogue entries found";
+      empty.querySelector("p").textContent = allItems.length
+        ? "Try another search term."
+        : "The JSON file was read, but it did not contain a list of entries.";
+      render();
+    })
+    .catch(error => {
+      count.textContent = "Data unavailable";
+      empty.hidden = false;
+      empty.querySelector("h2").textContent = "Catalogue could not load";
+      empty.querySelector("p").textContent = error.message;
+      console.error(error);
+    });
 })();
