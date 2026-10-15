@@ -131,6 +131,19 @@
         body.appendChild(desc);
       }
 
+      if (kind === "creatures") {
+        const passiveDescription = textValue(item && item.Passives).trim();
+        if (passiveDescription) {
+          const passive = document.createElement("p");
+          passive.className = "wiki-entry-passives";
+          const passiveLabel = document.createElement("strong");
+          passiveLabel.textContent = "Passives: ";
+          passive.appendChild(passiveLabel);
+          passive.appendChild(document.createTextNode(passiveDescription));
+          body.appendChild(passive);
+        }
+      }
+
       const metadata = document.createElement("div");
       metadata.className = "wiki-entry-meta";
       for (const key of metaKeys) {
