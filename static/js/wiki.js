@@ -38,7 +38,15 @@
     Light: "Nicelands",
     Green: "Sandlands",
     Dark: "Useless Swamp",
-    White: "Icylands"
+    White: "Icylands",
+    Purple: "Spookyland",
+    Orange: "Magmalands",
+    Rainbow: "Rainbow/Special",
+    Colorless: "Rainbow/Special"
+  };
+  const factionIconNames = {
+    Colorless: "Rainbow",
+    Rainbow: "Rainbow"
   };
 
   let allItems = [];
@@ -134,13 +142,14 @@
         const chip = document.createElement("span");
         if (key === "Faction") {
           const faction = rawValue.trim();
+          const iconFaction = factionIconNames[faction] || faction;
           chip.classList.add("wiki-faction", "wiki-faction-" + faction.toLowerCase());
           const factionIcon = document.createElement("img");
           factionIcon.className = "wiki-faction-icon";
           factionIcon.alt = "";
           factionIcon.width = 16;
           factionIcon.height = 16;
-          factionIcon.src = "/faction-icon/" + encodeURIComponent(edition) + "/" + encodeURIComponent(faction) + ".png";
+          factionIcon.src = "/faction-icon/" + encodeURIComponent(edition) + "/" + encodeURIComponent(iconFaction) + ".png";
           factionIcon.addEventListener("error", () => factionIcon.remove());
           chip.appendChild(factionIcon);
         }
