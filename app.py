@@ -1,3 +1,4 @@
+import html
 import io
 import json
 import os
@@ -5,6 +6,7 @@ import threading
 import urllib.error
 import urllib.request
 import zipfile
+import xml.etree.ElementTree as ET
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
@@ -72,8 +74,7 @@ class HTTPRangeReader:
                         "The wiki requires partial-content support."
                     )
                 content_range = response.headers.get("Content-Range", "")
-                expected_prefix = f"bytes {start}-"
-                if not content_range.startswith(expected_prefix):
+                if not content_range.startswith(f"bytes {start}-"):
                     raise OSError(f"Unexpected Content-Range header: {content_range!r}")
                 data = response.read()
         except (urllib.error.URLError, TimeoutError) as exc:
@@ -231,6 +232,55 @@ def _load_json(edition, filename):
     return []
 
 
+@lru_cache(maxsize=2)
+def _localization(edition):
+    """Load <entry name="KEY">Value</entry> records from En_Sheet1.txt."""
+    member = _find_member(edition, "En_Sheet1.txt")
+    if not member:
+        app.logger.warning("En_Sheet1.txt was not found in the %s archive", edition)
+        return {}
+    raw = _read_member(edition, member)
+    try:
+        root = ET.fromstring(raw.decode("utf-8-sig"))
+    except (UnicodeDecodeError, ET.ParseError):
+        app.logger.exception("Could not parse En_Sheet1.txt for %s", edition)
+        return {}
+
+    translations = {}
+    for entry in root.iter():
+        key = entry.attrib.get("name") or entry.attrib.get("Name") or entry.attrib.get("key")
+        if not key:
+            continue
+        value = "".join(entry.itertext()).strip()
+        if value:
+            translations[key.strip()] = html.unescape(value)
+    return translations
+
+
+def _resolve_localized_value(value, translations):
+    if not isinstance(value, str):
+        return value
+    key = value.strip()
+    if key.startswith("!!"):
+        return translations.get(key, value)
+    return value
+
+
+def _localize_items(edition, items):
+    translations = _localization(edition)
+    if not translations:
+        return items
+
+    def localize(value):
+        if isinstance(value, dict):
+            return {key: localize(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [localize(item) for item in value]
+        return _resolve_localized_value(value, translations)
+
+    return localize(items)
+
+
 def _asset_url(edition, value):
     if not isinstance(value, str) or not value.strip():
         return None
@@ -256,6 +306,7 @@ def catalogue_api(edition, kind):
         abort(404)
     filename = "db_Creatures.json" if kind == "creatures" else "db_ActionCards.json"
     items = _load_json(edition, filename)
+    items = _localize_items(edition, items)
     return jsonify({"edition": edition, "kind": kind, "count": len(items), "items": items})
 
 
