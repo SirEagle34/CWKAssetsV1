@@ -304,8 +304,27 @@ def _resolve_localized_value(value, translations):
     if not isinstance(value, str):
         return value
     key = value.strip()
-    if key.startswith("!!"):
-        return translations.get(key, value)
+    if not key.startswith("!!"):
+        return value
+
+    # Localization keys can differ in capitalization or contain invisible
+    # Unicode spacing characters between the source JSON and language XML.
+    translated = translations.get(key)
+    if translated:
+        return translated
+
+    normalized_key = "".join(
+        char for char in key.casefold()
+        if not char.isspace() and char not in ("\\u200b", "\\ufeff", "\\u200e", "\\u200f")
+    )
+    for translation_key, translation_value in translations.items():
+        normalized_translation_key = "".join(
+            char for char in translation_key.casefold()
+            if not char.isspace() and char not in ("\\u200b", "\\ufeff", "\\u200e", "\\u200f")
+        )
+        if normalized_translation_key == normalized_key and translation_value:
+            return translation_value
+
     return value
 
 
