@@ -7142,7 +7142,7 @@ def UserAction2():
 							fields["reason"] = "INVENTORY_CONFIG_ERROR"
 				elif not item_id or count < 1 or count > 99:
 					fields["reason"] = "INVALID_PURCHASE"
-				elif kind in ("leader", "hero"):
+				elif kind in ("leader", "hero", "skin"):
 					filename, match_keys = "db_Leaders.json", ()
 					path = os.path.join(app.root_path, "data", "persist", "blueprints", filename)
 					try:
@@ -7170,7 +7170,7 @@ def UserAction2():
 									skin_cost = item_data.get("SkinBuyCost")
 									price = int(float(skin_cost)) if skin_cost is not None and str(skin_cost).strip() else 0
 									# Skins use SocialCurrency/PvpCurrency.
-									purchase_currency = "social"
+									purchase_currency = "hard_free"
 							else:
 								buy_cost = item_data.get("BuyCost")
 								price = int(float(buy_cost)) if buy_cost is not None and str(buy_cost).strip() else 0
