@@ -7394,35 +7394,47 @@ def UserAction2():
 									app.logger.exception("[user_action2] Gacha SoftCurrency save failed")
 									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
 
-					elif purchase_currency == "social":
-						# SocialCurrency is stored as PvpCurrency in the player save.
-						# Persist the deduction and return the fields consumed by Purchase().
-						try:
-							game_text = db_user.game
-							if isinstance(game_text, bytes):
-								game_text = game_text.decode("utf-8", errors="strict")
-							server_save, save_format = _decode_game_save_for_name_change(game_text)
-							server_pvp = int(server_save.get("PvpCurrency", 0) or 0)
-							if server_pvp < price:
-								fields["reason"] = "INSUFFICIENT_CURRENCY"
-							else:
-								server_save["PvpCurrency"] = server_pvp - price
-								db_user.game = _encode_game_save_with_name(
-									game_text, server_save, save_format
-								)
-								fields["cc"] = price
-								fields["cb"] = "PvpCurrency"
-								fields["level1"] = int(server_save.get("PaidHardCurrency", 0) or 0)
-								fields["level2"] = int(server_save.get("FreeHardCurrency", 0) or 0)
-								db.session.commit()
-						except (TypeError, ValueError, KeyError, UnicodeDecodeError):
-							db.session.rollback()
-							app.logger.exception("[user_action2] Gacha PvpCurrency save failed")
-							fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
-						except Exception:
-							db.session.rollback()
-							app.logger.exception("[user_action2] Gacha PvpCurrency save failed")
-							fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
+							elif purchase_currency == "social":
+								# PvpCurrency is stored in the player's saved game data.
+								try:
+									game_text = db_user.game
+									if isinstance(game_text, bytes):
+										game_text = game_text.decode("utf-8", errors="strict")
+
+									server_save, save_format = _decode_game_save_for_name_change(game_text)
+									server_pvp = int(server_save.get("PvpCurrency", 0) or 0)
+
+									if server_pvp < price:
+										fields["reason"] = "INSUFFICIENT_CURRENCY"
+									else:
+										server_save["PvpCurrency"] = server_pvp - price
+										db_user.game = _encode_game_save_with_name(
+											game_text, server_save, save_format
+										)
+
+										# These fields are consumed by Purchase().
+										fields["cc"] = price
+										fields["cb"] = "PvpCurrency"
+										fields["level1"] = int(
+											server_save.get("PaidHardCurrency", 0) or 0
+										)
+										fields["level2"] = int(
+											server_save.get("FreeHardCurrency", 0) or 0
+										)
+										db.session.commit()
+
+								except (TypeError, ValueError, KeyError, UnicodeDecodeError):
+									db.session.rollback()
+									app.logger.exception(
+										"[user_action2] Gacha PvpCurrency save failed"
+									)
+									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
+								except Exception:
+									db.session.rollback()
+									app.logger.exception(
+										"[user_action2] Gacha PvpCurrency save failed"
+									)
+									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
 
 			return jsonify({"success": True, "data": json.dumps({"fields": fields}, separators=(",", ":"))})
 
