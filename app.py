@@ -6934,37 +6934,81 @@ def GetCountryCode():
 
 @app.route("/multiplayer/new_player/", methods=['POST'])
 def MultiplayerNewPlayer():
-	clientData = parse_qs(request.get_data().decode('utf-8'))
+	# Accept form-encoded requests safely, including blank values.
+	clientData = parse_qs(
+		request.get_data(as_text=True),
+		keep_blank_values=True
+	)
 	clientData = {k: v[0] if len(v) == 1 else v for k, v in clientData.items()}
 
-	#Make sure username is valid
-	if InvalidUsername(clientData["name"]):
-		return make_response("Invalid username!", 400)
+	player_id = clientData.get("player_id")
+	if not isinstance(player_id, str) or not player_id.strip():
+		app.logger.warning(
+			"[MultiplayerNewPlayer] Missing player_id; received fields: %s",
+			", ".join(sorted(clientData.keys()))
+		)
+		return jsonify({
+			"success": False,
+			"error": "Missing required field: player_id"
+		}), 400
+	player_id = player_id.strip()
 
-	db_user = Player.query.filter_by(username=clientData["player_id"]).first()
+	# Validate name only when supplied. Partial edits must not crash or
+	# overwrite fields that were not included in the request.
+	if "name" in clientData:
+		name = clientData["name"]
+		if not isinstance(name, str) or not name.strip() or InvalidUsername(name):
+			return make_response("Invalid username!", 400)
+
+	db_user = Player.query.filter_by(username=player_id).first()
 	if db_user is None:
 		return make_response("No player found!", 404)
 
-	db_user.multiplayer_name = clientData["name"]
-	db_user.icon = clientData["icon"]
-	db_user.deck_rank = clientData["deck_rank"]
-	db_user.landscapes = clientData["landscapes"]
-	db_user.helper_creature = clientData["helper_creature"]
-	db_user.leader = clientData["leader"]
-	db_user.leader_level = clientData["leader_level"]
-	db_user.allyboxspace = clientData["allyboxspace"]
-	db_user.level = clientData["level"]
-	db.session.commit()
+	field_map = {
+		"name": "multiplayer_name",
+		"icon": "icon",
+		"deck_rank": "deck_rank",
+		"landscapes": "landscapes",
+		"helper_creature": "helper_creature",
+		"leader": "leader",
+		"leader_level": "leader_level",
+		"allyboxspace": "allyboxspace",
+		"level": "level",
+	}
+	for request_field, model_field in field_map.items():
+		if request_field not in clientData:
+			continue
+		value = clientData[request_field]
+		if not isinstance(value, str):
+			return jsonify({
+				"success": False,
+				"error": "Invalid field value",
+				"field": request_field
+			}), 400
+		setattr(db_user, model_field, value)
 
-	PlayerLog(IPFromRequest(request), clientData["player_id"], "Updated player data")
+	try:
+		db.session.commit()
+	except Exception:
+		db.session.rollback()
+		app.logger.exception(
+			"[MultiplayerNewPlayer] Failed to update player %s",
+			player_id
+		)
+		return jsonify({
+			"success": False,
+			"error": "Failed to update player data"
+		}), 500
+
+	PlayerLog(IPFromRequest(request), player_id, "Updated player data")
 
 	return jsonify({
 		"success": True,
 		"data": {
-			"name": clientData["name"],
-			"icon": clientData["icon"],
-			"leader": clientData["leader"],
-			"level": str(clientData["leader_level"]),
+			"name": db_user.multiplayer_name or "",
+			"icon": db_user.icon or "",
+			"leader": db_user.leader or "",
+			"level": str(db_user.leader_level or ""),
 			"trophies": "0" #Unused
 		}
 	})
