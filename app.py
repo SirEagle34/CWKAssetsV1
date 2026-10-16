@@ -296,43 +296,36 @@ def _find_local_art(filename):
     if not stem:
         return None
 
-    if "actionportrait" in wanted or "action_portrait" in wanted or stem.lower().startswith(("spell_", "action_")):
-        folders = (
-            BASE_DIR / "extras" / "icons_actionportraits",
-            BASE_DIR / "extras" / "icons_action_portraits",
-            BASE_DIR / "icons_actionportraits",
-            BASE_DIR / "icons_action_portraits",
-        )
-    elif "creature" in wanted or stem.lower().startswith("creature_"):
-        folders = (
-            BASE_DIR / "extras" / "icons_creatures",
-            BASE_DIR / "extras" / "icon_creatures",
-            BASE_DIR / "icons_creatures",
-            BASE_DIR / "icon_creatures",
-        )
-    else:
-        return None
-
+    folders = (
+        BASE_DIR / "extras" / "icons_actionportraits",
+        BASE_DIR / "extras" / "icons_action_portraits",
+        BASE_DIR / "extras" / "icons_creatures",
+        BASE_DIR / "extras" / "icon_creatures",
+        BASE_DIR / "icons_actionportraits",
+        BASE_DIR / "icons_action_portraits",
+        BASE_DIR / "icons_creatures",
+        BASE_DIR / "icon_creatures",
+    )
     extensions = ("", ".png", ".jpg", ".jpeg", ".webp", ".tga")
     names = [stem]
     if stem.lower().startswith("creature_"):
         names.append(stem[len("creature_"):])
     else:
         names.append("Creature_" + stem)
+
     for folder in folders:
         for name in dict.fromkeys(names):
             for ext in extensions:
                 candidate = folder / (name + ext)
                 if candidate.is_file():
                     return candidate
-        # Case-insensitive fallback for Linux hosts when the requested casing differs.
+        # Case-insensitive fallback for Linux hosts when requested casing differs.
         if folder.is_dir():
             wanted_names = {name.lower() + ext for name in names for ext in extensions}
             for candidate in folder.iterdir():
                 if candidate.is_file() and candidate.name.lower() in wanted_names:
                     return candidate
     return None
-
 
 def _read_member(edition, member):
     with ZIP_LOCK, _open_archive(edition) as archive:
