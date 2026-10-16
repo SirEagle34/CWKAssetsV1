@@ -35,7 +35,8 @@
             Do not change the save's outer format unless you know the client supports it.
         </div>
         <form action="/admin/players/{{ player_id }}/game/edit" method="post" onsubmit="return confirm('Save changes to this player data?');">
-            <label for="player_game"><strong>Save data (JSON)</strong></label>
+            <label for="player_game"><strong>Decoded save data (JSON)</strong></label>
+            <p class="muted">The stored Base64/GZIP payload is decoded automatically when this page opens and re-encoded when you save. Edit the JSON only; do not paste the compressed payload here.</p>
             <textarea id="player_game" name="player_game" spellcheck="false" autocapitalize="off" autocomplete="off" required>{{ game }}</textarea>
             <div class="actions">
                 <button class="button save" type="submit">Save changes</button>
