@@ -288,6 +288,52 @@ def _find_member(edition, filename):
         return alias_matches[0]
     return None
 
+def _find_local_art(filename):
+    """Find locally deployed backup/new artwork before falling back to the release ZIP."""
+    wanted = _normalized(filename)
+    base = wanted.rsplit("/", 1)[-1]
+    stem = base.rsplit(".", 1)[0]
+    if not stem:
+        return None
+
+    if "actionportrait" in wanted or "action_portrait" in wanted or stem.lower().startswith(("spell_", "action_")):
+        folders = (
+            BASE_DIR / "extras" / "icons_actionportraits",
+            BASE_DIR / "extras" / "icons_action_portraits",
+            BASE_DIR / "icons_actionportraits",
+            BASE_DIR / "icons_action_portraits",
+        )
+    elif "creature" in wanted or stem.lower().startswith("creature_"):
+        folders = (
+            BASE_DIR / "extras" / "icons_creatures",
+            BASE_DIR / "extras" / "icon_creatures",
+            BASE_DIR / "icons_creatures",
+            BASE_DIR / "icon_creatures",
+        )
+    else:
+        return None
+
+    extensions = ("", ".png", ".jpg", ".jpeg", ".webp", ".tga")
+    names = [stem]
+    if stem.lower().startswith("creature_"):
+        names.append(stem[len("creature_"):])
+    else:
+        names.append("Creature_" + stem)
+    for folder in folders:
+        for name in dict.fromkeys(names):
+            for ext in extensions:
+                candidate = folder / (name + ext)
+                if candidate.is_file():
+                    return candidate
+        # Case-insensitive fallback for Linux hosts when the requested casing differs.
+        if folder.is_dir():
+            wanted_names = {name.lower() + ext for name in names for ext in extensions}
+            for candidate in folder.iterdir():
+                if candidate.is_file() and candidate.name.lower() in wanted_names:
+                    return candidate
+    return None
+
+
 def _read_member(edition, member):
     with ZIP_LOCK, _open_archive(edition) as archive:
         return archive.read(member)
@@ -570,9 +616,22 @@ def faction_icon(edition, faction):
 def wiki_asset(edition, filename):
     if edition not in EDITIONS:
         abort(404)
+
+    # Newly deployed or backup art in the repository should work even when the
+    # published wiki ZIP has not been rebuilt yet.
+    local_art = _find_local_art(filename)
+    if local_art:
+        response = app.response_class(
+            local_art.read_bytes(),
+            mimetype=guess_type(local_art.name)[0] or "application/octet-stream",
+        )
+        response.headers["Cache-Control"] = "public, max-age=86400"
+        return response
+
     member = _find_member(edition, filename)
     if not member:
-        abort(404)
+        app.logger.warning("Wiki artwork not found: edition=%s requested=%r", edition, filename)
+        abort(404, description=f"Artwork '{filename}' was not found in local extras folders or the {edition} ZIP archive.")
     data = _read_member(edition, member)
     response = app.response_class(
         data,
