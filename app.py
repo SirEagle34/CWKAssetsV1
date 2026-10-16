@@ -7329,33 +7329,62 @@ def UserAction2():
 									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
 
 							elif purchase_currency == "hard":
-								# Gacha HardCurrency: önce ücretsiz,
-								# sonra ücretli HardCurrency kullan.
-								server_free = int(
-									save_data.get("FreeHardCurrency", 0) or 0
-								)
-								server_paid = int(
-									save_data.get("PaidHardCurrency", 0) or 0
-								)
-
-								if server_free + server_paid < price:
-									fields["reason"] = "INSUFFICIENT_CURRENCY"
-								else:
-									free_spent = min(server_free, price)
-									paid_spent = price - free_spent
-
-									fields["level2"] = server_free - free_spent
-									fields["level1"] = server_paid - paid_spent
+								# Deduct gacha HardCurrency from the authoritative save
+								# and commit it, rather than only changing response fields.
+								try:
+									game_text = db_user.game
+									if isinstance(game_text, bytes):
+										game_text = game_text.decode("utf-8", errors="strict")
+									server_save, save_format = _decode_game_save_for_name_change(game_text)
+									server_free = int(server_save.get("FreeHardCurrency", 0) or 0)
+									server_paid = int(server_save.get("PaidHardCurrency", 0) or 0)
+									if server_free + server_paid < price:
+										fields["reason"] = "INSUFFICIENT_CURRENCY"
+									else:
+										free_spent = min(server_free, price)
+										paid_spent = price - free_spent
+										server_save["FreeHardCurrency"] = server_free - free_spent
+										server_save["PaidHardCurrency"] = server_paid - paid_spent
+										db_user.game = _encode_game_save_with_name(game_text, server_save, save_format)
+										fields["level2"] = server_free - free_spent
+										fields["level1"] = server_paid - paid_spent
+										fields["cc"] = price
+										fields["cb"] = "HardCurrency"
+										db.session.commit()
+								except (TypeError, ValueError, KeyError, UnicodeDecodeError):
+									db.session.rollback()
+									app.logger.exception("[user_action2] Gacha HardCurrency save failed")
+									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
+								except Exception:
+									db.session.rollback()
+									app.logger.exception("[user_action2] Gacha HardCurrency save failed")
+									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
 
 							elif purchase_currency == "soft":
-								server_soft = int(
-									save_data.get("SoftCurrency", 0) or 0
-								)
-
-								if server_soft < price:
-									fields["reason"] = "INSUFFICIENT_CURRENCY"
-								else:
-									fields["gs"] = -price
+								# Persist SoftCurrency server-side before returning success.
+								try:
+									game_text = db_user.game
+									if isinstance(game_text, bytes):
+										game_text = game_text.decode("utf-8", errors="strict")
+									server_save, save_format = _decode_game_save_for_name_change(game_text)
+									server_soft = int(server_save.get("SoftCurrency", 0) or 0)
+									if server_soft < price:
+										fields["reason"] = "INSUFFICIENT_CURRENCY"
+									else:
+										server_save["SoftCurrency"] = server_soft - price
+										db_user.game = _encode_game_save_with_name(game_text, server_save, save_format)
+										fields["gs"] = -price
+										fields["level1"] = int(server_save.get("PaidHardCurrency", 0) or 0)
+										fields["level2"] = int(server_save.get("FreeHardCurrency", 0) or 0)
+										db.session.commit()
+								except (TypeError, ValueError, KeyError, UnicodeDecodeError):
+									db.session.rollback()
+									app.logger.exception("[user_action2] Gacha SoftCurrency save failed")
+									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
+								except Exception:
+									db.session.rollback()
+									app.logger.exception("[user_action2] Gacha SoftCurrency save failed")
+									fields["reason"] = "PLAYER_SAVE_UNAVAILABLE"
 
 							elif purchase_currency == "social":
 								# SocialCurrency'nin sunucudaki gerçek
