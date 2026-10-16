@@ -7158,22 +7158,22 @@ def UserAction2():
 								None
 							)
 						if item_data:
-							# Base leaders use BuyCost. Skins use SkinBuyCost;
-							# an explicit BuyableSkin=False always blocks purchase.
-							buy_cost = item_data.get("BuyCost")
+							# Skins are identified by SkinOf and must use SkinBuyCost.
+							# Never allow a non-buyable skin to be purchased.
+							is_skin = bool(str(item_data.get("SkinOf", "") or "").strip())
 							buyable_skin = str(item_data.get("BuyableSkin", "")).strip().lower()
-							skin_cost = item_data.get("SkinBuyCost")
-							if buy_cost is not None and str(buy_cost).strip() != "":
-								price = int(float(buy_cost or 0))
-							elif (
-								str(item_data.get("SkinOf", "") or "").strip()
-								and buyable_skin != "false"
-								and skin_cost is not None
-								and str(skin_cost).strip() != ""
-							):
-								price = int(float(skin_cost or 0))
+							if is_skin:
+								if buyable_skin == "false":
+									price = 0
+									fields["reason"] = "SKIN_NOT_BUYABLE"
+								else:
+									skin_cost = item_data.get("SkinBuyCost")
+									price = int(float(skin_cost)) if skin_cost is not None and str(skin_cost).strip() else 0
+									# Skins use SocialCurrency/PvpCurrency.
+									purchase_currency = "social"
 							else:
-								price = 0
+								buy_cost = item_data.get("BuyCost")
+								price = int(float(buy_cost)) if buy_cost is not None and str(buy_cost).strip() else 0
 						else:
 							price = 0
 					except (OSError, ValueError, TypeError, json.JSONDecodeError):
