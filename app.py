@@ -7148,10 +7148,29 @@ def UserAction2():
 					try:
 						with open(path, "r", encoding="utf-8") as stream:
 							rows = json.load(stream)
-							item_data = next((row for row in rows if isinstance(row, dict) and str(row.get("ID", "")) == item_id), None)
-						price = int(float(item_data.get("BuyCost", 0) or 0)) if item_data else 0
+							requested_id = item_id.strip().casefold()
+							item_data = next(
+								(
+									row for row in rows
+									if isinstance(row, dict)
+									and str(row.get("ID", "") or "").strip().casefold() == requested_id
+								),
+								None
+							)
+						if item_data:
+							# Base leaders use BuyCost; purchasable skins use SkinBuyCost.
+							buy_cost = item_data.get("BuyCost")
+							if buy_cost is not None and str(buy_cost).strip() != "":
+								price = int(float(buy_cost or 0))
+							elif str(item_data.get("BuyableSkin", "")).strip().lower() == "true":
+								price = int(float(item_data.get("SkinBuyCost", 0) or 0))
+							else:
+								price = 0
+						else:
+							price = 0
 					except (OSError, ValueError, TypeError, json.JSONDecodeError):
 						app.logger.exception("[user_action2] Leader catalog read failed")
+						fields["reason"] = "LEADER_CATALOG_ERROR"
 					if count != 1:
 						fields["reason"] = "INVALID_PURCHASE"
 				elif kind == "gacha":
