@@ -2,6 +2,7 @@
   "use strict";
 
   const search = document.querySelector("[data-search-input]");
+  const factionFilter = document.querySelector("[data-faction-filter]");
   const count = document.querySelector("[data-result-count]");
   const empty = document.querySelector("[data-empty-state]");
   const catalogue = document.querySelector("[data-catalogue]");
@@ -62,9 +63,13 @@
 
   function render() {
     const query = search.value.trim().toLocaleLowerCase();
+    const selectedFaction = factionFilter ? factionFilter.value : "";
     const filtered = allItems.filter(item => {
       const haystack = JSON.stringify(item).toLocaleLowerCase();
-      return !query || haystack.includes(query);
+      const itemFaction = textValue(firstValue(item, ["Faction", "faction"])).trim();
+      const matchesSearch = !query || haystack.includes(query);
+      const matchesFaction = !selectedFaction || itemFaction.toLocaleLowerCase() === selectedFaction.toLocaleLowerCase();
+      return matchesSearch && matchesFaction;
     });
 
     catalogue.replaceChildren();
@@ -191,6 +196,7 @@
   }
 
   search.addEventListener("input", render);
+  if (factionFilter) factionFilter.addEventListener("change", render);
 
   fetch("/api/catalogue/" + encodeURIComponent(edition) + "/" + encodeURIComponent(kind))
     .then(response => {
@@ -201,6 +207,24 @@
     })
     .then(data => {
       allItems = Array.isArray(data.items) ? data.items : [];
+      if (factionFilter) {
+        const factions = [...new Set(allItems
+          .map(item => textValue(firstValue(item, ["Faction", "faction"])).trim())
+          .filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+        factionFilter.replaceChildren();
+        const allOption = document.createElement("option");
+        allOption.value = "";
+        allOption.textContent = "All Factions";
+        factionFilter.appendChild(allOption);
+        factions.forEach(faction => {
+          const option = document.createElement("option");
+          option.value = faction;
+          option.textContent = factionNames[faction] || faction;
+          factionFilter.appendChild(option);
+        });
+        factionFilter.disabled = factions.length === 0;
+      }
       empty.querySelector("h2").textContent = allItems.length
         ? "No matching entries"
         : "No catalogue entries found";
