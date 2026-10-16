@@ -184,23 +184,57 @@ def _find_member(edition, filename):
     wanted = _normalized(filename)
     members = _members(edition)
 
-    # Map Unity resource paths to the actual exported creature-icon directory.
-    # Example: UI/Icons_Creatures/Creature_Name -> icons_creatures/Creature_Name
+    # Unity resource paths and exported backup/new-art folders can use different
+    # prefixes and singular/plural spellings. Try exact relative paths first.
+    # Supported examples:
+    #   UI/Icons_Creatures/Creature_Name
+    #   extras/icons_creatures/Creature_Name.png
+    #   extras/icons_actionportraits/Spell_Name.png
     path_candidates = [wanted]
-    for prefix in ("ui/icons_creatures/", "icons_creatures/"):
-        if wanted.startswith(prefix):
-            relative = wanted[len(prefix):]
-            path_candidates.extend([
-                "icons_creatures/" + relative,
-                "icons_creatures/" + relative + ".png",
-                "icons_creatures/" + relative + ".jpg",
-                "icons_creatures/" + relative + ".jpeg",
-                "icons_creatures/" + relative + ".webp",
-            ])
+    icon_folders = {
+        "creatures": (
+            "ui/icons_creatures/",
+            "icons_creatures/",
+            "icon_creatures/",
+            "extras/icons_creatures/",
+            "extras/icon_creatures/",
+        ),
+        "actionportraits": (
+            "ui/icons_actionportraits/",
+            "icons_actionportraits/",
+            "icon_actionportraits/",
+            "extras/icons_actionportraits/",
+            "extras/icon_actionportraits/",
+            "ui/icons_action_portraits/",
+            "icons_action_portraits/",
+            "extras/icons_action_portraits/",
+        ),
+    }
+    extensions = ("", ".png", ".jpg", ".jpeg", ".webp", ".tga")
+
+    for folders in icon_folders.values():
+        for prefix in folders:
+            if wanted.startswith(prefix):
+                relative = wanted[len(prefix):]
+                for folder in folders:
+                    path_candidates.extend(folder + relative + ext for ext in extensions)
+                break
+
+    # If a full Unity resource path was supplied, also try its basename in each
+    # known art folder. This supports backup/new artwork with a different layout.
+    wanted_base = wanted.rsplit("/", 1)[-1]
+    wanted_stem = wanted_base.rsplit(".", 1)[0]
+    matching_group = None
+    for group, folders in icon_folders.items():
+        if any(wanted.startswith(prefix) for prefix in folders):
+            matching_group = folders
             break
+    if matching_group:
+        for folder in matching_group:
+            path_candidates.extend(folder + wanted_base.rsplit(".", 1)[0] + ext for ext in extensions)
 
     normalized_members = [(_normalized(member), member) for member in members]
-    for candidate in path_candidates:
+    for candidate in dict.fromkeys(path_candidates):
         for normalized_member, member in normalized_members:
             if normalized_member == candidate:
                 return member
@@ -208,8 +242,7 @@ def _find_member(edition, filename):
             if normalized_member.endswith("/" + candidate):
                 return member
 
-    wanted_base = wanted.rsplit("/", 1)[-1]
-    wanted_stem = wanted_base.rsplit(".", 1)[0]
+    # Prefer a direct basename/stem match before trying aliases.
     matches = []
     for member in members:
         member_base = _normalized(member).rsplit("/", 1)[-1]
@@ -225,16 +258,20 @@ def _find_member(edition, filename):
         ))
         return matches[0]
 
-    # Creature database UITexture values may use the Unity resource path
-    # "UI/Icons_Creatures/Creature_Name", while the exported archive can store
-    # the same artwork as "icon_creatures/Name.png" (without "Creature_").
-    # Try common filename aliases only after exact matches have failed.
+    # Database IDs and exported icon names sometimes differ by a common prefix.
     aliases = {wanted_base, wanted_stem}
-    for prefix in ("creature_", "icons_creatures_", "icon_creatures_"):
+    for prefix in (
+        "creature_", "icons_creatures_", "icon_creatures_",
+        "icons_actionportraits_", "icon_actionportraits_",
+        "actionportrait_", "action_portrait_",
+    ):
         if wanted_stem.startswith(prefix):
             aliases.add(wanted_stem[len(prefix):])
+
+    # A creature UITexture may be Creature_Name while artwork is named Name.
     if wanted_stem.startswith("creature_"):
         aliases.add(wanted_stem[len("creature_"):])
+
     alias_matches = []
     for member in members:
         member_base = _normalized(member).rsplit("/", 1)[-1]
@@ -250,7 +287,6 @@ def _find_member(edition, filename):
         ))
         return alias_matches[0]
     return None
-
 
 def _read_member(edition, member):
     with ZIP_LOCK, _open_archive(edition) as archive:
