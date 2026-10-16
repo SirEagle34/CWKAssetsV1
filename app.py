@@ -1865,29 +1865,16 @@ def AdminPlayerGame(player):
     player = player_obj.as_dict()
 
     try:
-        game = DecryptGameData(player["game"])
-    except Exception:
-        # save is most likely not encrypted
-        game = player["game"]
+        # Supports both raw JSON saves and the legacy data=Base64(GZIP(JSON)) format.
+        game, _save_format = _decode_game_save_for_name_change(player_obj.game)
+    except Exception as decode_error:
+        Log("admin", "Failed to decode game data for player " + player_obj.username + ": " + str(decode_error))
+        return make_response("Player game data is invalid or unsupported. Original data was not changed.", 422)
 
-    if game is None:
-        return make_response("No game found!", 404)
-
-    # Convert game object to JSON
-    game_json = json.dumps(
-        game,
-        ensure_ascii=False,
-        default=lambda x:
-            x.decode("utf-8", errors="ignore")
-            if isinstance(x, bytes)
-            else str(x)
+    # Render a real JSON object in the editor; do not stringify the save twice.
+    game_json = json.dumps(game, ensure_ascii=False, indent=2, default=lambda x:
+        x.decode("utf-8", errors="ignore") if isinstance(x, bytes) else str(x)
     )
-
-    # Remove unnecessary escaping if present
-    if game_json.startswith('"') and game_json.endswith('"'):
-        game_json = game_json[1:-1]
-
-    game_json = game_json.replace('\\"', '"')
 
     return render_template(
         'admin_player_game.html',
@@ -1907,68 +1894,69 @@ def AdminPlayerGameEdit(player):
     if player is None:
         return make_response("No player found!", 404)
 
-    # Get game data from POST request
-    game = request.form.get('player_game')
-    if game is None:
+    # Accept only a JSON object and preserve the player's existing storage format.
+    submitted_game = request.form.get("player_game")
+    if submitted_game is None or not submitted_game.strip():
         return make_response("No game data provided!", 400)
 
-    print("Received game data:", game)
-
     try:
-        # Update game data
-        player.game = game
+        save_data = _loads_legacy_player_json(submitted_game)
+        if not isinstance(save_data, dict):
+            return make_response("Game data must be a JSON object.", 400)
+
+        # Keep raw JSON saves as JSON and encoded persistence saves encoded.
+        try:
+            _existing_data, save_format = _decode_game_save_for_name_change(player.game)
+        except Exception as decode_error:
+            # Do not overwrite an unreadable save unless its storage format is clear.
+            existing_text = player.game.decode("utf-8", errors="strict") if isinstance(player.game, (bytes, bytearray)) else str(player.game or "")
+            if existing_text.lstrip().startswith("{"):
+                save_format = "json"
+            elif "data=" in existing_text:
+                save_format = ("encoded", existing_text.find("data="), len("data="))
+            else:
+                return make_response("Existing game data format is invalid; original data was not changed.", 422)
+
+        updated_game = _encode_game_save_with_name(player.game, save_data, save_format)
+        # Verify the generated save can be decoded before committing it.
+        verified_data, _verified_format = _decode_game_save_for_name_change(updated_game)
+        if not isinstance(verified_data, dict):
+            return make_response("Game data validation failed; original data was not changed.", 400)
+
+        player.game = updated_game
         db.session.commit()
-        print("Game data updated successfully.")
+    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as e:
+        db.session.rollback()
+        return make_response("Invalid game JSON; original data was not changed. " + str(e), 400)
     except Exception as e:
-        db.session.rollback()  # Rollback if something goes wrong
-        print("Error updating game data:", str(e))
-        return make_response("Failed to update game data.", 500)
+        db.session.rollback()
+        Log("admin", "Failed to update game data for player " + player.username + ": " + str(e))
+        return make_response("Failed to update game data; original data was not changed.", 500)
 
     Log("admin", current_user.username + " edited game data for player: " + player.username)
     return redirect("/admin/players/" + player.username)
 
 
-def DecryptGameData(game:str):
+def DecryptGameData(game: str):
+    """Decode either a raw JSON save or the legacy data=Base64(GZIP(JSON)) payload."""
+    if game is None or game == b"" or game == b" ":
+        return None
 
-	if game is None or game == b"" or game == b" ":
+    try:
+        input_str = game.decode("utf-8") if isinstance(game, (bytes, bytearray)) else str(game)
+        stripped = input_str.strip()
 
-		return None
+        # Admin/API writes may store the save as plain JSON.
+        if stripped.startswith("{"):
+            data = _loads_legacy_player_json(stripped)
+            return data if isinstance(data, dict) else None
 
-	# Decrypt
-
-	input_data = game
-
-	# if input_data is bytes, decode safely later
-
-	try:
-
-		input_str = input_data.decode('utf-8') if isinstance(input_data, (bytes, bytearray)) else str(input_data)
-
-		index = input_str.find("&data=")
-
-		if index == -1:
-
-			return None
-
-		encoded_data = input_str[index + 6:]
-
-		array = base64.b64decode(encoded_data)
-
-		with gzip.GzipFile(fileobj=BytesIO(array), mode='rb') as gz:
-
-			decoded_data = gz.read().decode('utf-8')
-
-	except Exception:
-
-		Log("admin", "Failed to decrypt game data")
-
-		return None
-
-	# attempt to clean json
-
-	decoded_data = decoded_data.replace(',}', '}').replace(',],', '],').replace(',]', ']').replace(',,', ',')
-
-	return json.loads(decoded_data)
+        # Reuse the persistence decoder for both legacy prefixes and URL-safe Base64.
+        data, _save_format = _decode_game_save_for_name_change(input_str)
+        return data if isinstance(data, dict) else None
+    except Exception as exc:
+        Log("admin", "Failed to decode game data: " + str(exc))
+        return None
 
 @app.route("/admin/pvp_leaderboard")
 @login_required
