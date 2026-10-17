@@ -557,6 +557,22 @@ def home():
     return render_template(PAGES["index"])
 
 
+@app.get("/resurrected")
+@app.get("/resurrected/")
+def resurrected_home():
+    return render_template(PAGES["cwk_obsidian"])
+
+
+@app.get("/resurrected/creatures")
+def resurrected_creatures():
+    return render_template(PAGES["cwk_obsidian_creatures"])
+
+
+@app.get("/resurrected/actionscards")
+def resurrected_actionscards():
+    return render_template(PAGES["cwk_obsidian_actionscards"])
+
+
 @app.get("/<page>.html")
 def html_page(page):
     template = PAGES.get(page)
