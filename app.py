@@ -573,6 +573,22 @@ def resurrected_actionscards():
     return render_template(PAGES["cwk_obsidian_actionscards"])
 
 
+@app.get("/darkmagic")
+@app.get("/darkmagic/")
+def darkmagic_home():
+    return render_template(PAGES["cwk_darkmagic"])
+
+
+@app.get("/darkmagic/creatures")
+def darkmagic_creatures():
+    return render_template(PAGES["cwk_darkmagic_creatures"])
+
+
+@app.get("/darkmagic/actionscards")
+def darkmagic_actionscards():
+    return render_template(PAGES["cwk_darkmagic_actionscards"])
+
+
 @app.get("/<page>.html")
 def html_page(page):
     template = PAGES.get(page)
