@@ -7366,9 +7366,9 @@ def UserAction2():
 					try:
 						with open(path, "r", encoding="utf-8") as stream:
 							rows = json.load(stream)
-						if filename.lower() == CREATURE_STORE_BLUEPRINT.lower():
-							rows = filter_weekly_creature_store(rows)
-						requested_id = item_id.strip().casefold()
+							if filename.lower() == CREATURE_STORE_BLUEPRINT.lower():
+								rows = filter_weekly_creature_store(rows)
+							requested_id = item_id.strip().casefold()
 							item_data = next(
 								(
 									row for row in rows
