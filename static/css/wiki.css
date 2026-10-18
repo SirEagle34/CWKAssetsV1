@@ -13,3 +13,9 @@
 
 .wiki-entry-passives{margin:12px 0 0;color:var(--muted);font-size:.8rem;white-space:pre-wrap;overflow-wrap:anywhere}.wiki-entry-passives strong{color:var(--accent)}
 .wiki-entry-spell-cards{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);min-width:0}.wiki-entry-spell-heading{color:var(--accent);font-size:.76rem}.wiki-entry-spell-card{margin:0;padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:rgba(0,0,0,.12);color:var(--muted);font-size:.72rem;line-height:1.45;overflow-wrap:anywhere;white-space:normal}
+
+.wiki-entry-spell-card{display:flex;align-items:flex-start;gap:10px;margin:0;padding:7px 8px;border:1px solid var(--line);border-radius:4px;background:rgba(0,0,0,.12);min-width:0}
+.wiki-entry-spell-portrait{width:45px;height:45px;min-width:45px;object-fit:cover;border-radius:4px;border:1px solid var(--line);background:var(--surface)}
+.wiki-entry-spell-details{flex:1;min-width:0}
+.wiki-entry-spell-name{margin:0;color:var(--text);font-size:.75rem;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+.wiki-entry-spell-description{margin:3px 0 0;color:var(--muted);font-size:.66rem;line-height:1.4;overflow-wrap:anywhere}
