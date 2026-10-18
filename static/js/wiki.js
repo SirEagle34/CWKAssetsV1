@@ -3,6 +3,7 @@
 
   const search = document.querySelector("[data-search-input]");
   const factionFilter = document.querySelector("[data-faction-filter]");
+  const amadeusFilter = document.querySelector("[data-amadeus-filter]");
   const count = document.querySelector("[data-result-count]");
   const empty = document.querySelector("[data-empty-state]");
   const catalogue = document.querySelector("[data-catalogue]");
@@ -54,6 +55,8 @@
 
   let allItems = [];
   let actionCardsById = new Map();
+  let amadeusNames = new Set();
+  let amadeusOnly = false;
 
   function assetUrl(value) {
     if (!value) return "";
@@ -65,12 +68,20 @@
   function render() {
     const query = search.value.trim().toLocaleLowerCase();
     const selectedFaction = factionFilter ? factionFilter.value : "";
+    const normalizeTierName = value => String(value || "").toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
+    const isAmadeus = item => {
+      const candidates = ["ID", "Id", "id", "Name", "name", "DisplayName", "Title", "title"]
+        .map(key => normalizeTierName(item && item[key])).filter(Boolean);
+      return candidates.some(value => amadeusNames.has(value) ||
+        [...amadeusNames].some(name => value.includes(name) || name.includes(value)));
+    };
     const filtered = allItems.filter(item => {
       const haystack = JSON.stringify(item).toLocaleLowerCase();
       const itemFaction = textValue(firstValue(item, ["Faction", "faction"])).trim();
       const matchesSearch = !query || haystack.includes(query);
       const matchesFaction = !selectedFaction || itemFaction.toLocaleLowerCase() === selectedFaction.toLocaleLowerCase();
-      return matchesSearch && matchesFaction;
+      const matchesAmadeus = !amadeusOnly || isAmadeus(item);
+      return matchesSearch && matchesFaction && matchesAmadeus;
     });
 
     catalogue.replaceChildren();
@@ -91,6 +102,24 @@
         .map(key => textValue(item && item[key]).trim())
         .filter(Boolean))];
       const description = textValue(firstValue(item, descriptionKeys));
+
+      const normalizeTierName = value => String(value || "").toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
+      const itemNames = ["ID", "Id", "id", "Name", "name", "DisplayName", "Title", "title"]
+        .map(key => normalizeTierName(item && item[key])).filter(Boolean);
+      const isAmadeus = itemNames.some(value => amadeusNames.has(value) ||
+        [...amadeusNames].some(name => value.includes(name) || name.includes(value)));
+      if (isAmadeus) {
+        const badge = document.createElement("span");
+        badge.className = "amadeus-creature-badge";
+        badge.title = "Amadeus Creature";
+        badge.setAttribute("aria-label", "Amadeus Creature");
+        const emblem = document.createElement("img");
+        emblem.alt = "";
+        emblem.src = "https://raw.githubusercontent.com/shishkabob27/CardWarsKingdom/main/Assets/Resources/ui/icons_leagues/Rank01_Amadeus.png";
+        emblem.addEventListener("error", () => { emblem.hidden = true; });
+        badge.appendChild(emblem);
+        card.appendChild(badge);
+      }
 
       if (number) {
         const numberBadge = document.createElement("span");
@@ -276,10 +305,20 @@
 
   search.addEventListener("input", render);
   if (factionFilter) factionFilter.addEventListener("change", render);
+  if (amadeusFilter && kind === "creatures") {
+    amadeusFilter.addEventListener("click", () => {
+      amadeusOnly = !amadeusOnly;
+      amadeusFilter.setAttribute("aria-pressed", String(amadeusOnly));
+      amadeusFilter.textContent = amadeusOnly ? "Show All Creatures" : "Amadeus Creatures";
+      amadeusFilter.classList.toggle("is-active", amadeusOnly);
+      render();
+    });
+  }
 
   const catalogueRequests = [
     fetch("/api/catalogue/" + encodeURIComponent(edition) + "/" + encodeURIComponent(kind)),
   ];
+  if (kind === "creatures") catalogueRequests.push(fetch("/api/amadeus-tierlist/" + encodeURIComponent(edition)));
   if (kind === "creatures") catalogueRequests.push(fetch("/api/catalogue/" + encodeURIComponent(edition) + "/actioncards"));
 
   Promise.all(catalogueRequests)
@@ -291,7 +330,13 @@
       }
       const data = await responses[0].json();
       if (kind === "creatures" && responses[1]) {
-        const actionCardData = await responses[1].json();
+        const tierData = await responses[1].json();
+        const normalizeTierName = value => String(value || "").toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
+        amadeusNames = new Set((Array.isArray(tierData.items) ? tierData.items : [])
+          .map(normalizeTierName).filter(Boolean));
+      }
+      if (kind === "creatures" && responses[2]) {
+        const actionCardData = await responses[2].json();
         actionCardsById = new Map((Array.isArray(actionCardData.items) ? actionCardData.items : [])
           .filter(card => card && card.ID)
           .map(card => [String(card.ID).trim(), card]));
