@@ -197,7 +197,10 @@
           if (!cardId || cardId.toLowerCase() === "none" || cardId === "0") continue;
           const actionCard = actionCardsById.get(cardId);
           const cardName = actionCard ? textValue(firstValue(actionCard, titleKeys)) : cardId;
-          spellCards.push({ slot, cardId, cardName });
+          const cardDescription = actionCard
+            ? textValue(firstValue(actionCard, descriptionKeys)).trim()
+            : "";
+          spellCards.push({ slot, cardId, cardName, cardDescription });
         }
 
         if (spellCards.length) {
@@ -213,6 +216,12 @@
             row.className = "wiki-entry-spell-card";
             row.textContent = ordinals[spell.slot - 1] + " Spell Card: " + spell.cardName + " / " + spell.cardId;
             spellSection.appendChild(row);
+            if (spell.cardDescription) {
+              const description = document.createElement("p");
+              description.className = "wiki-entry-spell-description";
+              description.textContent = "Description: " + spell.cardDescription;
+              spellSection.appendChild(description);
+            }
           });
           body.appendChild(spellSection);
         }
