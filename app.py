@@ -614,6 +614,22 @@ def catalogue_api(edition, kind):
     return jsonify({"edition": edition, "kind": kind, "count": len(items), "items": items})
 
 
+@app.get("/api/amadeus-tierlist/<edition>")
+def amadeus_tierlist_api(edition):
+    if edition not in EDITIONS:
+        abort(404)
+    values = _load_content_json(edition, "db_AmadeusTierlist.json")
+    names = []
+    for item in values:
+        if isinstance(item, str) and item.strip():
+            names.append(item.strip())
+        elif isinstance(item, dict):
+            for key, value in item.items():
+                if str(key).lower().startswith("index") and isinstance(value, str) and value.strip():
+                    names.append(value.strip())
+    return jsonify({"edition": edition, "count": len(names), "items": names})
+
+
 @app.get("/faction-icon/<edition>/<faction>.png")
 def faction_icon(edition, faction):
     if edition not in EDITIONS:
