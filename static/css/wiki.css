@@ -19,3 +19,9 @@
 .wiki-entry-spell-details{flex:1;min-width:0}
 .wiki-entry-spell-name{margin:0;color:var(--text);font-size:.75rem;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
 .wiki-entry-spell-description{margin:3px 0 0;color:var(--muted);font-size:.66rem;line-height:1.4;overflow-wrap:anywhere}
+
+/* Amadeus Creature badge and filter */
+.amadeus-creature-badge{position:absolute;z-index:4;top:10px;right:10px;width:48px;height:48px;display:grid;place-items:center;background-image:url("https://png.pngtree.com/recommend-works/png-clipart/20240521/ourmid/pngtree-red-round-zigzag-label-png-image_12495389.png");background-position:center;background-size:contain;background-repeat:no-repeat;filter:drop-shadow(0 2px 5px rgba(0,0,0,.55));pointer-events:none}
+.amadeus-creature-badge img{width:25px;height:25px;object-fit:contain}
+.amadeus-filter-button{height:48px;padding:0 15px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);font:inherit;font-size:.78rem;font-weight:700;white-space:nowrap;cursor:pointer;transition:background .2s,border-color .2s}
+.amadeus-filter-button:hover,.amadeus-filter-button.is-active{border-color:#ff5964;background:rgba(190,28,49,.2);color:#ff9da5}
