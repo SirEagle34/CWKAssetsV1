@@ -3487,6 +3487,89 @@ def filter_monthly_cardback_store(blueprint_data):
     return result
 
 
+CREATURE_STORE_BLUEPRINT = "db_StoreBuyCreatures.json"
+CREATURE_STORE_WEEKLY_COUNTS = {1: 3, 2: 2, 3: 2}
+
+
+def filter_weekly_creature_store(blueprint_data):
+    """Return the same deterministic seven creature offers to every player each ISO week."""
+    if isinstance(blueprint_data, dict):
+        entries = blueprint_data.get("data", [])
+    elif isinstance(blueprint_data, list):
+        entries = blueprint_data
+    else:
+        return blueprint_data
+
+    if not isinstance(entries, list):
+        return blueprint_data
+
+    pool = [entry for entry in entries if isinstance(entry, dict)]
+    if not pool:
+        return [] if isinstance(blueprint_data, list) else {**blueprint_data, "data": []}
+
+    creature_path = os.path.join(
+        app.root_path, "data", "persist", "blueprints", "db_Creatures.json"
+    )
+    try:
+        with open(creature_path, "r", encoding="utf-8") as stream:
+            creature_rows = json.load(stream)
+    except (OSError, ValueError, TypeError):
+        app.logger.exception("[Creature Store] Could not read db_Creatures.json")
+        # Fail closed: do not accidentally expose the entire store if rarity data is unavailable.
+        return [] if isinstance(blueprint_data, list) else {**blueprint_data, "data": []}
+
+    rarity_by_id = {}
+    if isinstance(creature_rows, list):
+        for creature in creature_rows:
+            if not isinstance(creature, dict):
+                continue
+            creature_id = str(creature.get("ID", "") or "").strip()
+            try:
+                rarity = int(str(creature.get("Rarity", "") or "").strip())
+            except (TypeError, ValueError):
+                continue
+            if creature_id:
+                rarity_by_id[creature_id.casefold()] = rarity
+
+    by_rarity = {rarity: [] for rarity in CREATURE_STORE_WEEKLY_COUNTS}
+    for offer in pool:
+        creature_id = str(offer.get("CreatureID", "") or "").strip()
+        # The store is intended for base creatures only; awaken variants are not eligible.
+        if not creature_id.casefold().endswith("_base"):
+            continue
+        rarity = rarity_by_id.get(creature_id.casefold())
+        if rarity in by_rarity:
+            by_rarity[rarity].append(offer)
+
+    week_key = datetime.now(timezone.utc).strftime("%G-%V")
+    selected = []
+    for rarity, required_count in CREATURE_STORE_WEEKLY_COUNTS.items():
+        candidates = sorted(
+            by_rarity[rarity],
+            key=lambda offer: (
+                str(offer.get("CreatureID", "")).casefold(),
+                str(offer.get("ID", "")).casefold()
+            )
+        )
+        if len(candidates) < required_count:
+            app.logger.error(
+                "[Creature Store] Weekly rotation needs %s rarity-%s offers; only %s available",
+                required_count, rarity, len(candidates)
+            )
+            return [] if isinstance(blueprint_data, list) else {**blueprint_data, "data": []}
+
+        seed_text = "creature-store-weekly-v1:%s:rarity-%s" % (week_key, rarity)
+        seed = int(hashlib.sha256(seed_text.encode("utf-8")).hexdigest()[:16], 16)
+        selected.extend(random.Random(seed).sample(candidates, required_count))
+
+    selected.sort(key=lambda offer: str(offer.get("ID", "")).casefold())
+    if isinstance(blueprint_data, dict):
+        filtered = dict(blueprint_data)
+        filtered["data"] = selected
+        return filtered
+    return selected
+
+
 @app.route("/persist/static/Blueprints/<path:filename>", methods=['GET'])
 def get_blueprints(filename):
     file_path = os.path.join("data/persist/blueprints", filename)
@@ -3494,13 +3577,23 @@ def get_blueprints(filename):
     with open(file_path, "r", encoding="utf-8") as file:
         content = file.read()
 
-    if os.path.basename(filename).lower() == CARD_BACK_STORE_BLUEPRINT.lower():
+    basename = os.path.basename(filename).lower()
+    if basename == CARD_BACK_STORE_BLUEPRINT.lower():
         content = json.dumps(
             filter_monthly_cardback_store(json.loads(content)),
             ensure_ascii=False
         )
+    elif basename == CREATURE_STORE_BLUEPRINT.lower():
+        content = json.dumps(
+            filter_weekly_creature_store(json.loads(content)),
+            ensure_ascii=False
+        )
 
-    return content
+    response = make_response(content)
+    response.headers["Content-Type"] = "application/json; charset=utf-8"
+    # The offers are stable for a week; avoid stale CDN/browser copies across rotation.
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response
 
 
 #only works in v1.18.0
@@ -3514,6 +3607,11 @@ def Blueprints():
             if file.lower() == CARD_BACK_STORE_BLUEPRINT.lower():
                 blueprint_data = json.dumps(
                     filter_monthly_cardback_store(json.loads(blueprint_data)),
+                    ensure_ascii=False
+                )
+            elif file.lower() == CREATURE_STORE_BLUEPRINT.lower():
+                blueprint_data = json.dumps(
+                    filter_weekly_creature_store(json.loads(blueprint_data)),
                     ensure_ascii=False
                 )
             data.append({
@@ -7268,7 +7366,9 @@ def UserAction2():
 					try:
 						with open(path, "r", encoding="utf-8") as stream:
 							rows = json.load(stream)
-							requested_id = item_id.strip().casefold()
+						if filename.lower() == CREATURE_STORE_BLUEPRINT.lower():
+							rows = filter_weekly_creature_store(rows)
+						requested_id = item_id.strip().casefold()
 							item_data = next(
 								(
 									row for row in rows
