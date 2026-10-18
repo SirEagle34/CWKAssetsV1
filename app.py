@@ -3570,6 +3570,7 @@ def filter_weekly_creature_store(blueprint_data):
     return selected
 
 
+@app.route("/persist/static/blueprints/<path:filename>", methods=['GET'])
 @app.route("/persist/static/Blueprints/<path:filename>", methods=['GET'])
 def get_blueprints(filename):
     file_path = os.path.join("data/persist/blueprints", filename)
