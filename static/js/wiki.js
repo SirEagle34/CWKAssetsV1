@@ -200,7 +200,10 @@
           const cardDescription = actionCard
             ? textValue(firstValue(actionCard, descriptionKeys)).trim()
             : "";
-          spellCards.push({ slot, cardId, cardName, cardDescription });
+          const cardImage = actionCard
+            ? textValue(firstValue(actionCard, imageKeys)).trim()
+            : "";
+          spellCards.push({ slot, cardId, cardName, cardDescription, cardImage });
         }
 
         if (spellCards.length) {
@@ -212,16 +215,37 @@
           spellSection.appendChild(spellHeading);
           const ordinals = ["1st", "2nd", "3rd", "4th", "5th"];
           spellCards.forEach(spell => {
-            const row = document.createElement("p");
+            const row = document.createElement("div");
             row.className = "wiki-entry-spell-card";
-            row.textContent = ordinals[spell.slot - 1] + " Spell Card: " + spell.cardName + " / " + spell.cardId;
-            spellSection.appendChild(row);
+
+            if (spell.cardImage) {
+              const portrait = document.createElement("img");
+              portrait.className = "wiki-entry-spell-portrait";
+              portrait.alt = "";
+              portrait.width = 45;
+              portrait.height = 45;
+              portrait.loading = "lazy";
+              portrait.src = assetUrl(spell.cardImage);
+              portrait.addEventListener("error", () => { portrait.hidden = true; });
+              row.appendChild(portrait);
+            }
+
+            const details = document.createElement("div");
+            details.className = "wiki-entry-spell-details";
+            const name = document.createElement("p");
+            name.className = "wiki-entry-spell-name";
+            name.textContent = ordinals[spell.slot - 1] + " Spell Card: " + spell.cardName + " / " + spell.cardId;
+            details.appendChild(name);
+
             if (spell.cardDescription) {
               const description = document.createElement("p");
               description.className = "wiki-entry-spell-description";
               description.textContent = "Description: " + spell.cardDescription;
-              spellSection.appendChild(description);
+              details.appendChild(description);
             }
+
+            row.appendChild(details);
+            spellSection.appendChild(row);
           });
           body.appendChild(spellSection);
         }
