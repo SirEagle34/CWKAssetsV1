@@ -213,6 +213,25 @@
           spellHeading.className = "wiki-entry-spell-heading";
           spellHeading.textContent = "Spell Cards";
           spellSection.appendChild(spellHeading);
+
+          const toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "wiki-entry-spell-toggle";
+          toggle.textContent = "Show Spell Cards";
+          toggle.setAttribute("aria-expanded", "false");
+
+          const spellContent = document.createElement("div");
+          spellContent.className = "wiki-entry-spell-content";
+          spellContent.style.display = "none";
+          toggle.addEventListener("click", () => {
+            const expanded = toggle.getAttribute("aria-expanded") === "true";
+            toggle.setAttribute("aria-expanded", String(!expanded));
+            spellContent.style.display = expanded ? "none" : "";
+            toggle.textContent = expanded ? "Show Spell Cards" : "Hide Spell Cards";
+          });
+          spellSection.appendChild(toggle);
+          spellSection.appendChild(spellContent);
+
           const ordinals = ["1st", "2nd", "3rd", "4th", "5th"];
           spellCards.forEach(spell => {
             const row = document.createElement("div");
@@ -245,7 +264,7 @@
             }
 
             row.appendChild(details);
-            spellSection.appendChild(row);
+            spellContent.appendChild(row);
           });
           body.appendChild(spellSection);
         }
