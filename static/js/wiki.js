@@ -53,6 +53,7 @@
   };
 
   let allItems = [];
+  let actionCardsById = new Map();
 
   function assetUrl(value) {
     if (!value) return "";
@@ -189,6 +190,32 @@
           passive.appendChild(document.createTextNode(passiveDescription));
           body.appendChild(passive);
         }
+
+        const spellCards = [];
+        for (let slot = 1; slot <= 5; slot += 1) {
+          const cardId = textValue(firstValue(item, ["ActionCard" + slot, "SpellCard" + slot])).trim();
+          if (!cardId || cardId.toLowerCase() === "none" || cardId === "0") continue;
+          const actionCard = actionCardsById.get(cardId);
+          const cardName = actionCard ? textValue(firstValue(actionCard, titleKeys)) : cardId;
+          spellCards.push({ slot, cardId, cardName });
+        }
+
+        if (spellCards.length) {
+          const spellSection = document.createElement("div");
+          spellSection.className = "wiki-entry-spell-cards";
+          const spellHeading = document.createElement("strong");
+          spellHeading.className = "wiki-entry-spell-heading";
+          spellHeading.textContent = "Spell Cards";
+          spellSection.appendChild(spellHeading);
+          const ordinals = ["1st", "2nd", "3rd", "4th", "5th"];
+          spellCards.forEach(spell => {
+            const row = document.createElement("p");
+            row.className = "wiki-entry-spell-card";
+            row.textContent = ordinals[spell.slot - 1] + " Spell Card: " + spell.cardName + " / " + spell.cardId;
+            spellSection.appendChild(row);
+          });
+          body.appendChild(spellSection);
+        }
       }
       card.appendChild(body);
       catalogue.appendChild(card);
@@ -198,12 +225,26 @@
   search.addEventListener("input", render);
   if (factionFilter) factionFilter.addEventListener("change", render);
 
-  fetch("/api/catalogue/" + encodeURIComponent(edition) + "/" + encodeURIComponent(kind))
-    .then(response => {
-      if (!response.ok) throw new Error(response.status === 503
-        ? "The edition ZIP archive is not installed or its data files are missing."
-        : "Could not load the catalogue.");
-      return response.json();
+  const catalogueRequests = [
+    fetch("/api/catalogue/" + encodeURIComponent(edition) + "/" + encodeURIComponent(kind)),
+  ];
+  if (kind === "creatures") catalogueRequests.push(fetch("/api/catalogue/" + encodeURIComponent(edition) + "/actioncards"));
+
+  Promise.all(catalogueRequests)
+    .then(async responses => {
+      for (const response of responses) {
+        if (!response.ok) throw new Error(response.status === 503
+          ? "The edition ZIP archive is not installed or its data files are missing."
+          : "Could not load the catalogue.");
+      }
+      const data = await responses[0].json();
+      if (kind === "creatures" && responses[1]) {
+        const actionCardData = await responses[1].json();
+        actionCardsById = new Map((Array.isArray(actionCardData.items) ? actionCardData.items : [])
+          .filter(card => card && card.ID)
+          .map(card => [String(card.ID).trim(), card]));
+      }
+      return data;
     })
     .then(data => {
       allItems = Array.isArray(data.items) ? data.items : [];
