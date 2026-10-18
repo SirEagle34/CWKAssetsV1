@@ -70,10 +70,8 @@
     const selectedFaction = factionFilter ? factionFilter.value : "";
     const normalizeTierName = value => String(value || "").toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
     const isAmadeus = item => {
-      const candidates = ["ID", "Id", "id", "Name", "name", "DisplayName", "Title", "title"]
-        .map(key => normalizeTierName(item && item[key])).filter(Boolean);
-      return candidates.some(value => amadeusNames.has(value) ||
-        [...amadeusNames].some(name => value.includes(name) || name.includes(value)));
+      const creatureId = normalizeTierName(firstValue(item, ["ID", "Id", "id"]));
+      return Boolean(creatureId) && amadeusNames.has(creatureId);
     };
     const filtered = allItems.filter(item => {
       const haystack = JSON.stringify(item).toLocaleLowerCase();
@@ -104,10 +102,8 @@
       const description = textValue(firstValue(item, descriptionKeys));
 
       const normalizeTierName = value => String(value || "").toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
-      const itemNames = ["ID", "Id", "id", "Name", "name", "DisplayName", "Title", "title"]
-        .map(key => normalizeTierName(item && item[key])).filter(Boolean);
-      const isAmadeus = itemNames.some(value => amadeusNames.has(value) ||
-        [...amadeusNames].some(name => value.includes(name) || name.includes(value)));
+      const creatureId = normalizeTierName(firstValue(item, ["ID", "Id", "id"]));
+      const isAmadeus = Boolean(creatureId) && amadeusNames.has(creatureId);
       if (isAmadeus) {
         const badge = document.createElement("span");
         badge.className = "amadeus-creature-badge";
