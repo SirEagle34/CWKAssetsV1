@@ -32,23 +32,6 @@ public class CWKGameModeSelectButton : MonoBehaviour
 
         Debug.Log("[CWKGameModeSelectButton] NGUI click received. Requested mode: " + id);
         manager.SelectModeAndLoadConnect(id);
-<<<<<<< HEAD
-    }
-
-    private CWKGameModeManager GetManager()
-    {
-        if (CWKGameModeManager.Instance != null)
-            return CWKGameModeManager.Instance;
-
-        // Defensive fallback in case the runtime initializer has not created the singleton.
-        CWKGameModeManager existing = FindObjectOfType<CWKGameModeManager>();
-        if (existing != null)
-            return existing;
-
-        GameObject managerObject = new GameObject("CWKGameModeManager");
-        return managerObject.AddComponent<CWKGameModeManager>();
-=======
->>>>>>> ab1e8e11 (Fix SQSettings server mode integration)
     }
 
     private CWKGameModeManager GetManager()
