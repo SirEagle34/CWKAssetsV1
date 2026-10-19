@@ -1,1 +1,0 @@
-# CWKAssetsV1
