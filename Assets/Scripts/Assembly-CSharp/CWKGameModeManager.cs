@@ -11,6 +11,7 @@ public class CWKGameModeManager : MonoBehaviour
     public const string Mode002 = "cwk_0002";
     private const string PrefKey = "CWK_GAME_MODE";
     private static CWKGameModeManager instance;
+    private static bool hasSelectedModeThisSession;
     private Dictionary<string, object> rootSettings;
 
     public static string CurrentModeId
@@ -19,6 +20,17 @@ public class CWKGameModeManager : MonoBehaviour
     }
 
     public static CWKGameModeManager Instance { get { return instance; } }
+    public static bool HasSelectedModeThisSession { get { return hasSelectedModeThisSession; } }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void CreateInstanceBeforeSceneLoad()
+    {
+        if (instance == null)
+        {
+            GameObject managerObject = new GameObject("CWKGameModeManager");
+            managerObject.AddComponent<CWKGameModeManager>();
+        }
+    }
 
     private void Awake()
     {
@@ -40,9 +52,13 @@ public class CWKGameModeManager : MonoBehaviour
             return false;
         }
 
+        if (!SQSettings.SelectGameMode(modeId))
+            return false;
+
         PlayerPrefs.SetString(PrefKey, modeId);
         PlayerPrefs.Save();
-        return SQSettings.SelectGameMode(modeId);
+        hasSelectedModeThisSession = true;
+        return true;
     }
 
     public void SelectModeAndLoadConnect(string modeId)
@@ -50,16 +66,19 @@ public class CWKGameModeManager : MonoBehaviour
         if (!SelectMode(modeId))
             return;
 
-        string sceneName = GetSceneName("connect");
+        // The mode must pass its own version check before entering Connect/Login.
+        LoadModeScene("version_check");
+    }
+
+    public void LoadChooseGameScene()
+    {
+        string sceneName = GetSceneName("choose_game");
         if (string.IsNullOrEmpty(sceneName))
-        {
-            Debug.LogError("[CWKGameModeManager] Connect scene is not configured for " + modeId);
-            return;
-        }
+            sceneName = "ChooseGame";
 
         if (!Application.CanStreamedLevelBeLoaded(sceneName))
         {
-            Debug.LogError("[CWKGameModeManager] Scene '" + sceneName + "' is not included in Build Settings yet.");
+            Debug.LogError("[CWKGameModeManager] ChooseGame scene '" + sceneName + "' is not included in Build Settings.");
             return;
         }
 
