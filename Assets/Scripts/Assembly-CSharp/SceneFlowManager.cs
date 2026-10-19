@@ -56,6 +56,7 @@ public class SceneFlowManager : DetachedSingleton<SceneFlowManager>
 
 		// Apply the selected game's scene names while preserving legacy fallback scenes.
 		mSceneMap[0] = SQSettings.GetConfiguredSceneName("loading", mSceneMap[0]);
+		mSceneMap[2] = SQSettings.GetConfiguredSceneName("version_check", mSceneMap[2]);
 		mSceneMap[4] = SQSettings.GetConfiguredSceneName("connect", mSceneMap[4]);
 		mSceneMap[5] = SQSettings.GetConfiguredSceneName("frontend", mSceneMap[5]);
 		mSceneMap[6] = SQSettings.GetConfiguredSceneName("battle", mSceneMap[6]);
@@ -64,6 +65,7 @@ public class SceneFlowManager : DetachedSingleton<SceneFlowManager>
 		if (SQSettings.GAME_MODE_ID != "cwk_0001")
 		{
 			mLowResSceneMap[0] = string.Empty;
+			mLowResSceneMap[2] = string.Empty;
 			mLowResSceneMap[4] = string.Empty;
 			mLowResSceneMap[5] = string.Empty;
 			mLowResSceneMap[6] = string.Empty;
