@@ -15,7 +15,8 @@ public class SceneFlowManager : DetachedSingleton<SceneFlowManager>
 		FrontEnd = 5,
 		Battle = 6,
 		SceneCount = 7,
-		None = 8
+		None = 8,
+		ChooseGame = 9
 	}
 
 	public enum ReturnLocation
@@ -27,9 +28,9 @@ public class SceneFlowManager : DetachedSingleton<SceneFlowManager>
 		Pvp = 4
 	}
 
-	private string[] mSceneMap = new string[7];
+	private string[] mSceneMap = new string[10];
 
-	private string[] mLowResSceneMap = new string[7];
+	private string[] mLowResSceneMap = new string[10];
 
 	private Scene mPreviousScene = Scene.None;
 
@@ -46,6 +47,7 @@ public class SceneFlowManager : DetachedSingleton<SceneFlowManager>
 		mSceneMap[4] = "ConnectScene";
 		mSceneMap[5] = "FrontEndScene";
 		mSceneMap[6] = "BattleScene";
+		mSceneMap[9] = "ChooseGame";
 		mLowResSceneMap[0] = "low_LoadingScreen";
 		mLowResSceneMap[1] = string.Empty;
 		mLowResSceneMap[2] = "low_VersionCheckScene";
@@ -53,6 +55,9 @@ public class SceneFlowManager : DetachedSingleton<SceneFlowManager>
 		mLowResSceneMap[4] = "low_ConnectScene";
 		mLowResSceneMap[5] = "low_FrontEndScene";
 		mLowResSceneMap[6] = "low_BattleScene";
+		mLowResSceneMap[7] = string.Empty;
+		mLowResSceneMap[8] = string.Empty;
+		mLowResSceneMap[9] = string.Empty;
 
 		// Apply the selected game's scene names while preserving legacy fallback scenes.
 		mSceneMap[0] = SQSettings.GetConfiguredSceneName("loading", mSceneMap[0]);
@@ -164,10 +169,43 @@ public class SceneFlowManager : DetachedSingleton<SceneFlowManager>
 		{
 			return null;
 		}
-		string result = mSceneMap[(int)scene];
-		if (KFFLODManager.IsLowEndDevice() && !string.IsNullOrEmpty(mLowResSceneMap[(int)scene]))
+
+		int index = (int)scene;
+		if (index < 0 || index >= mSceneMap.Length)
 		{
-			result = mLowResSceneMap[(int)scene];
+			return null;
+		}
+
+		string result = mSceneMap[index];
+		string sceneKey = null;
+		switch (scene)
+		{
+		case Scene.Loading: sceneKey = "loading"; break;
+		case Scene.VersionCheck: sceneKey = "version_check"; break;
+		case Scene.Connect: sceneKey = "connect"; break;
+		case Scene.FrontEnd: sceneKey = "frontend"; break;
+		case Scene.Battle: sceneKey = "battle"; break;
+		}
+
+		// Resolve configurable scenes at load time so changing modes cannot leave stale scene names.
+		if (!string.IsNullOrEmpty(sceneKey))
+		{
+			result = SQSettings.GetConfiguredSceneName(sceneKey, result);
+		}
+
+		if (scene == Scene.ChooseGame)
+		{
+			result = "ChooseGame";
+		}
+
+		if (SQSettings.GAME_MODE_ID != "cwk_0001" || scene == Scene.ChooseGame)
+		{
+			return result;
+		}
+
+		if (KFFLODManager.IsLowEndDevice() && !string.IsNullOrEmpty(mLowResSceneMap[index]))
+		{
+			result = mLowResSceneMap[index];
 		}
 		return result;
 	}
