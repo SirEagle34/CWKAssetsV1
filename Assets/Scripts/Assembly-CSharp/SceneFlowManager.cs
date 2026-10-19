@@ -55,9 +55,13 @@ public class SceneFlowManager : DetachedSingleton<SceneFlowManager>
 		mLowResSceneMap[4] = "low_ConnectScene";
 		mLowResSceneMap[5] = "low_FrontEndScene";
 		mLowResSceneMap[6] = "low_BattleScene";
+<<<<<<< HEAD
 		mLowResSceneMap[7] = string.Empty;
 		mLowResSceneMap[8] = string.Empty;
 		mLowResSceneMap[9] = string.Empty;
+=======
+
+>>>>>>> ab1e8e11 (Fix SQSettings server mode integration)
 
 		// Apply the selected game's scene names while preserving legacy fallback scenes.
 		mSceneMap[0] = SQSettings.GetConfiguredSceneName("loading", mSceneMap[0]);
@@ -66,6 +70,10 @@ public class SceneFlowManager : DetachedSingleton<SceneFlowManager>
 		mSceneMap[5] = SQSettings.GetConfiguredSceneName("frontend", mSceneMap[5]);
 		mSceneMap[6] = SQSettings.GetConfiguredSceneName("battle", mSceneMap[6]);
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ab1e8e11 (Fix SQSettings server mode integration)
 		// CWK 002 does not use the legacy low-resolution scene names.
 		if (SQSettings.GAME_MODE_ID != "cwk_0001")
 		{
@@ -193,12 +201,17 @@ public class SceneFlowManager : DetachedSingleton<SceneFlowManager>
 			result = SQSettings.GetConfiguredSceneName(sceneKey, result);
 		}
 
+<<<<<<< HEAD
 		if (scene == Scene.ChooseGame)
 		{
 			result = "ChooseGame";
 		}
 
 		if (SQSettings.GAME_MODE_ID != "cwk_0001" || scene == Scene.ChooseGame)
+=======
+
+		if (SQSettings.GAME_MODE_ID != "cwk_0001")
+>>>>>>> ab1e8e11 (Fix SQSettings server mode integration)
 		{
 			return result;
 		}

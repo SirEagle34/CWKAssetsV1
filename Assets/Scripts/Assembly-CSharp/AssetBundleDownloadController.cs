@@ -1,4 +1,5 @@
 using System.Collections;
+using UnityEngine.SceneManagement;
 using UnityEngine;
 
 public class AssetBundleDownloadController : MonoBehaviour
@@ -19,7 +20,7 @@ public class AssetBundleDownloadController : MonoBehaviour
 		yield return null;
 		yield return StartCoroutine(Singleton<SLOTResourceManager>.Instance.LoadPrimaryBundlesCouroutine());
 		Singleton<FontManager>.Instance.LoadLanguages();
-		DetachedSingleton<SceneFlowManager>.Instance.LoadConnectSceneDirect();
+		SceneManager.LoadScene("ChooseGame");
 	}
 
 	private void OnDestroy()

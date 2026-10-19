@@ -131,8 +131,10 @@ public class ConnectScreenController : MonoBehaviour
 		}
 	}
 
+	
 	private void Start()
 	{
+<<<<<<< HEAD
 		if (!CWKGameModeManager.HasSelectedModeThisSession)
 		{
 			mWaitingForGameSelection = true;
@@ -150,8 +152,51 @@ public class ConnectScreenController : MonoBehaviour
 
 		if (ChinaScreenTexture != null)
 			ChinaScreenTexture.gameObject.SetActive(true);
+=======
+		Debug.Log(
+			"[ConnectScreenController] Start. HasSelectedModeThisSession=" +
+			CWKGameModeManager.HasSelectedModeThisSession
+		);
+
+		if (!CWKGameModeManager.HasSelectedModeThisSession)
+		{
+			mWaitingForGameSelection = true;
+
+			Debug.Log(
+				"[ConnectScreenController] Waiting for game selection."
+			);
+
+			CWKGameModeManager manager = CWKGameModeManager.Instance;
+
+			if (manager != null)
+			{
+				Debug.Log(
+					"[ConnectScreenController] Manager found. " +
+					"Requesting ChooseGame scene."
+				);
+
+			}
+			else
+			{
+				Debug.LogError(
+					"[ConnectScreenController] CWKGameModeManager is null."
+				);
+			}
+
+			return;
+		}
+
+		Debug.Log(
+			"[ConnectScreenController] Game mode already selected this session."
+		);
+
+		if (ChinaScreenTexture != null)
+			ChinaScreenTexture.gameObject.SetActive(true);
+
+>>>>>>> ab1e8e11 (Fix SQSettings server mode integration)
 		LoadingScreenController.LoadLoadingScreenLogo(LoadingLogo);
 	}
+
 
 	private void Update()
 	{

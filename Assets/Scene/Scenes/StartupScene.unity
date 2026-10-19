@@ -2821,7 +2821,7 @@ MonoBehaviour:
     y: 0
     width: 1
     height: 1
-  mTexture: {fileID: 2800000, guid: e3befb4c8838f5b418f132f748721fad, type: 3}
+  mTexture: {fileID: 2800000, guid: 507997f8e30cd7041b10af0d8144353e, type: 3}
   mMat: {fileID: 0}
   mShader: {fileID: 4800000, guid: f4099eded63aae846b452e1aebd58178, type: 3}
   mBorder: {x: 0, y: 0, z: 0, w: 0}

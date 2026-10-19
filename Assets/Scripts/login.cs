@@ -126,7 +126,23 @@ public class login : MonoBehaviour
         PlayerPrefs.SetInt("SkipLogin", 1);
         PlayerPrefs.Save();
 
-        SceneManager.LoadScene("BootVideoScene");
+        LoadBootVideoScene();
+    }
+
+    private void LoadBootVideoScene()
+    {
+        const string sceneName = "BootVideoScene";
+
+        if (Application.CanStreamedLevelBeLoaded(sceneName))
+        {
+            SceneManager.LoadScene(sceneName);
+        }
+        else
+        {
+            Debug.LogError(
+                "[Login] BootVideoScene is missing from Build Settings."
+            );
+        }
     }
 
     public void SignInWithGoogle()
@@ -226,7 +242,7 @@ public class login : MonoBehaviour
                 PlayerPrefs.SetInt("SkipLogin", 0);
                 PlayerPrefs.Save();
 
-                SceneManager.LoadScene("BootVideoScene");
+                LoadBootVideoScene();
             },
             error =>
             {
@@ -752,7 +768,7 @@ public class login : MonoBehaviour
                         PlayerPrefs.SetInt("AfterLogin", 1);
                         PlayerPrefs.Save();
 
-                        SceneManager.LoadScene("BootVideoScene");
+                        LoadBootVideoScene();
                     },
                     error =>
                     {
