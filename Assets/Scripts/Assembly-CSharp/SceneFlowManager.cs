@@ -53,6 +53,22 @@ public class SceneFlowManager : DetachedSingleton<SceneFlowManager>
 		mLowResSceneMap[4] = "low_ConnectScene";
 		mLowResSceneMap[5] = "low_FrontEndScene";
 		mLowResSceneMap[6] = "low_BattleScene";
+
+		// Apply the selected game's scene names while preserving legacy fallback scenes.
+		mSceneMap[0] = SQSettings.GetConfiguredSceneName("loading", mSceneMap[0]);
+		mSceneMap[4] = SQSettings.GetConfiguredSceneName("connect", mSceneMap[4]);
+		mSceneMap[5] = SQSettings.GetConfiguredSceneName("frontend", mSceneMap[5]);
+		mSceneMap[6] = SQSettings.GetConfiguredSceneName("battle", mSceneMap[6]);
+
+		// CWK 002 does not use the legacy low-resolution scene names.
+		if (SQSettings.GAME_MODE_ID != "cwk_0001")
+		{
+			mLowResSceneMap[0] = string.Empty;
+			mLowResSceneMap[4] = string.Empty;
+			mLowResSceneMap[5] = string.Empty;
+			mLowResSceneMap[6] = string.Empty;
+		}
+
 		mCurrentScene = GetSceneFromName(SceneManager.GetActiveScene().name);
 	}
 
