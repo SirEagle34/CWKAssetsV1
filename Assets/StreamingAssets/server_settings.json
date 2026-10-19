@@ -1,10 +1,35 @@
 {
-    "type" : "server_settings",
-    "server_url" : "https://cardwarskingdomobsidianedition.pythonanywhere.com/",
-    "local_server_url" : "http://127.0.0.1:8089/",
+  "type": "server_settings",
+  "cwk_0001": {
+    "server_url": "https://cardwarskingdomobsidianedition.pythonanywhere.com/",
+    "local_server_url": "http://127.0.0.1:8089/",
     "photon_chat_app_id": "c310d39d-f3f1-4a29-8188-93f9113a598f",
-    "photon_pun_app_id": "6bc707ec-39ed-494a-bd6b-7e2d1b269e6f"
+    "photon_pun_app_id": "6bc707ec-39ed-494a-bd6b-7e2d1b269e6f",
     "use_relay": false,
     "relay_host": "",
-    "relay_port": 9090
+    "relay_port": 9090,
+    "scenes": {
+      "loading": "LoadingScreen",
+      "connect": "ConnectScene",
+      "login": "login",
+      "frontend": "FrontEndScene",
+      "battle": "BattleScene"
+    }
+  },
+  "cwk_0002": {
+    "server_url": "https://cardwarskingdomobsidianedition.pythonanywhere.com/",
+    "local_server_url": "http://127.0.0.1:8089/",
+    "photon_chat_app_id": "",
+    "photon_pun_app_id": "",
+    "use_relay": false,
+    "relay_host": "",
+    "relay_port": 9090,
+    "scenes": {
+      "loading": "CWK_002_LoadingScreen",
+      "connect": "CWK_002_ConnectScreen",
+      "login": "CWK_002_Login",
+      "frontend": "CWK_002_FrontEndScene",
+      "battle": "CWK_002_BattleScene"
+    }
+  }
 }
