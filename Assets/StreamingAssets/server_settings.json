@@ -17,8 +17,8 @@
     }
   },
   "cwk_0002": {
-    "server_url": "https://cardwarskingdomobsidianedition.pythonanywhere.com/",
-    "local_server_url": "http://127.0.0.1:8089/",
+    "server_url": "https://cardwarskingdomepicdarkmagic.pythonanywhere.com/",
+    "local_server_url": "http://127.0.0.1:8099/",
     "photon_chat_app_id": "bda1d7c3-52a5-4286-bc72-6babde83e32a",
     "photon_pun_app_id": "ca7eccd8-6d74-4c62-bb70-98b414df1eac",
     "use_relay": false,
