@@ -25,6 +25,7 @@ public class CWKGameModeManager : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void CreateInstanceBeforeSceneLoad()
     {
+        hasSelectedModeThisSession = false;
         if (instance == null)
         {
             GameObject managerObject = new GameObject("CWKGameModeManager");
