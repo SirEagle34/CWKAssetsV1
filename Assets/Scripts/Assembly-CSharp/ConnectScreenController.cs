@@ -134,69 +134,34 @@ public class ConnectScreenController : MonoBehaviour
 	
 	private void Start()
 	{
-<<<<<<< HEAD
 		if (!CWKGameModeManager.HasSelectedModeThisSession)
 		{
 			mWaitingForGameSelection = true;
+			Debug.Log("[ConnectScreenController] No mode selected; requesting ChooseGame scene.");
+
 			CWKGameModeManager manager = CWKGameModeManager.Instance;
-			if (manager != null)
+			if (manager == null)
 			{
-				manager.LoadChooseGameScene();
+				Debug.LogError("[ConnectScreenController] CWKGameModeManager is null. Continuing with saved/default mode.");
+				mWaitingForGameSelection = false;
+			}
+			else if (manager.LoadChooseGameScene())
+			{
+				return;
 			}
 			else
 			{
-				Debug.LogError("[ConnectScreenController] CWKGameModeManager could not be initialized.");
+				// A missing ChooseGame scene must not permanently freeze the login screen.
+				Debug.LogWarning("[ConnectScreenController] ChooseGame is unavailable; continuing with saved/default mode.");
+				mWaitingForGameSelection = false;
 			}
-			return;
 		}
 
 		if (ChinaScreenTexture != null)
 			ChinaScreenTexture.gameObject.SetActive(true);
-=======
-		Debug.Log(
-			"[ConnectScreenController] Start. HasSelectedModeThisSession=" +
-			CWKGameModeManager.HasSelectedModeThisSession
-		);
 
-		if (!CWKGameModeManager.HasSelectedModeThisSession)
-		{
-			mWaitingForGameSelection = true;
-
-			Debug.Log(
-				"[ConnectScreenController] Waiting for game selection."
-			);
-
-			CWKGameModeManager manager = CWKGameModeManager.Instance;
-
-			if (manager != null)
-			{
-				Debug.Log(
-					"[ConnectScreenController] Manager found. " +
-					"Requesting ChooseGame scene."
-				);
-
-			}
-			else
-			{
-				Debug.LogError(
-					"[ConnectScreenController] CWKGameModeManager is null."
-				);
-			}
-
-			return;
-		}
-
-		Debug.Log(
-			"[ConnectScreenController] Game mode already selected this session."
-		);
-
-		if (ChinaScreenTexture != null)
-			ChinaScreenTexture.gameObject.SetActive(true);
-
->>>>>>> ab1e8e11 (Fix SQSettings server mode integration)
 		LoadingScreenController.LoadLoadingScreenLogo(LoadingLogo);
 	}
-
 
 	private void Update()
 	{
