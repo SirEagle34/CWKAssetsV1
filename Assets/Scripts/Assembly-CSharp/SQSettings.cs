@@ -18,6 +18,8 @@ public class SQSettings
     private static bool useRelay;
     private static string relayHost = string.Empty;
     private static int relayPort = 9090;
+    private static Dictionary<string, object> selectedModeSettings;
+    private static bool initialized;
 
     public static bool useLocalServer;
     public static bool USE_RELAY => useRelay;
@@ -62,6 +64,7 @@ public class SQSettings
         }
 
         selectedModeId = modeId;
+        initialized = false;
         PlayerPrefs.SetString(GameModePlayerPrefsKey, modeId);
         PlayerPrefs.Save();
         return true;
@@ -85,6 +88,7 @@ public class SQSettings
             if (settings == null)
                 throw new InvalidDataException("server_settings.json entry '" + selectedModeId + "' must be an object.");
         }
+        selectedModeSettings = settings;
 
         string urlKey = useLocalServer ? "local_server_url" : "server_url";
         serverUrl = ReadString(settings, urlKey, string.Empty);
@@ -102,6 +106,41 @@ public class SQSettings
         Dictionary<string, object> global = ReadSettings("global_settings.json");
         saveInterval = ReadInt(global, "save_interval", 300);
         patchingFileLimit = ReadInt(global, "patching_file_limit", 10);
+        initialized = true;
+    }
+
+    public static string GetConfiguredSceneName(string sceneKey, string fallback = null)
+    {
+        if (string.IsNullOrEmpty(sceneKey))
+            return fallback ?? string.Empty;
+
+        if (!initialized || selectedModeSettings == null)
+        {
+            try
+            {
+                Init();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("[SQSettings] Could not load scene configuration: " + ex.Message);
+                return fallback ?? string.Empty;
+            }
+        }
+
+        object scenesValue;
+        Dictionary<string, object> scenes;
+        object sceneValue;
+        if (selectedModeSettings != null &&
+            selectedModeSettings.TryGetValue("scenes", out scenesValue) &&
+            (scenes = scenesValue as Dictionary<string, object>) != null &&
+            scenes.TryGetValue(sceneKey, out sceneValue) &&
+            sceneValue != null &&
+            !string.IsNullOrEmpty(Convert.ToString(sceneValue)))
+        {
+            return Convert.ToString(sceneValue);
+        }
+
+        return fallback ?? string.Empty;
     }
 
     private static Dictionary<string, object> ReadSettings(string fileName)
