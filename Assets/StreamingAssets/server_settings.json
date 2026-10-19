@@ -11,6 +11,7 @@
     "scenes": {
       "loading": "LoadingScreen",
       "connect": "ConnectScene",
+      "version_check": "VersionCheckScene",
       "login": "login",
       "frontend": "FrontEndScene",
       "battle": "BattleScene"
@@ -27,6 +28,7 @@
     "scenes": {
       "loading": "CWK_002_LoadingScreen",
       "connect": "CWK_002_ConnectScreen",
+      "version_check": "CWK_002_VersionCheckScene",
       "login": "CWK_002_Login",
       "frontend": "CWK_002_FrontEndScene",
       "battle": "CWK_002_BattleScene"
