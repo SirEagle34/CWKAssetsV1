@@ -16,6 +16,8 @@ public class ConnectScreenController : MonoBehaviour
 
 	private bool IsComplete;
 
+	private bool mWaitingForGameSelection;
+
 	private bool mPlayerInfoLoading;
 
 	private bool mFirstStepGuestLoginStarted;
@@ -131,12 +133,32 @@ public class ConnectScreenController : MonoBehaviour
 
 	private void Start()
 	{
-		ChinaScreenTexture.gameObject.SetActive(value: true);
+		if (!CWKGameModeManager.HasSelectedModeThisSession)
+		{
+			mWaitingForGameSelection = true;
+			CWKGameModeManager manager = CWKGameModeManager.Instance;
+			if (manager != null)
+			{
+				manager.LoadChooseGameScene();
+			}
+			else
+			{
+				Debug.LogError("[ConnectScreenController] CWKGameModeManager could not be initialized.");
+			}
+			return;
+		}
+
+		if (ChinaScreenTexture != null)
+			ChinaScreenTexture.gameObject.SetActive(true);
 		LoadingScreenController.LoadLoadingScreenLogo(LoadingLogo);
 	}
 
 	private void Update()
 	{
+		if (mWaitingForGameSelection)
+		{
+			return;
+		}
 		if (IsComplete)
 		{
 			return;
