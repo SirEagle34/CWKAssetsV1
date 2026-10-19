@@ -112,7 +112,19 @@ public class TBPvPManager : Singleton<TBPvPManager>
 	{
 		Application.runInBackground = true;
 
-		// SQSettings must be initialized after ChooseGame has selected a mode.
+		// The selected mode must be loaded before the networking client is created.
+		if (string.IsNullOrEmpty(SQSettings.PHOTON_PUN_APP_ID))
+		{
+			try
+			{
+				SQSettings.Init();
+			}
+			catch (Exception ex)
+			{
+				Debug.LogError("[TBPvPManager] Could not initialize SQSettings: " + ex.Message);
+			}
+		}
+
 		if (string.IsNullOrEmpty(SQSettings.PHOTON_PUN_APP_ID))
 		{
 			Debug.LogError("[TBPvPManager] Photon PUN App ID is empty for mode " + SQSettings.GAME_MODE_ID + ".");
