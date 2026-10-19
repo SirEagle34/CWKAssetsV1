@@ -1,0 +1,28 @@
+public enum GameState
+{
+	LoadingData = 0,
+	LoadingLevel = 1,
+	WaitForLevelLoad = 2,
+	Intro = 3,
+	WaitForIntro = 4,
+	Waiting = 5,
+	WaitingResultSequence = 6,
+	FirstTurnCoinFlip = 7,
+	DealCreatureCards = 8,
+	DealCreatureCardsWait = 9,
+	P1StartTurn = 10,
+	P1Turn = 11,
+	P1EndTurn = 12,
+	P2StartTurn = 13,
+	P2Turn = 14,
+	P2EndTurn = 15,
+	LootCollect = 16,
+	EndGameWait = 17,
+	P1Defeated = 18,
+	P1DefeatedWaiting = 19,
+	P2Defeated = 20,
+	P2DefeatedWaiting = 21,
+	PlayerVictory = 22,
+	EnemyVictory = 23,
+	RevivePlayer = 24
+}

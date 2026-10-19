@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.cardwarskingdom.recordertest'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.cardwarskingdom.recordertest"
+        minSdk 24  // Android 7.0 - Balance entre compatibilidad y MediaProjection
+        targetSdk 35  // Android 15
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        
+        debug {
+            // Optimizar builds de debug para iteración rápida
+            minifyEnabled false
+            shrinkResources false
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    // Optimizaciones para compilación rápida
+    buildFeatures {
+        buildConfig = true
+    }
+
+    packagingOptions {
+        resources {
+            excludes += ['META-INF/NOTICE', 'META-INF/LICENSE']
+        }
+    }
+}
+
+dependencies {
+    // Solo dependencias mínimas necesarias
+    implementation 'androidx.core:core:1.12.0'
+}

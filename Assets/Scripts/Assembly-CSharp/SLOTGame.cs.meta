@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 71a2be2b62d4cd441a5ec777ff96dac2
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - busyIcon: {instanceID: 0}
+  - busyIconCamera: {instanceID: 0}
+  - errorPopupPrefab: {instanceID: 0}
+  - errorPopupPrefab_lowres: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

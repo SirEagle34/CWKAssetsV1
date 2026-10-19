@@ -1,0 +1,27 @@
+using System.Collections.Generic;
+
+namespace Multiplayer
+{
+	public class RewardData
+	{
+		public int tournamentId;
+
+		public int rank;
+
+		public RewardData(Dictionary<string, object> dict)
+		{
+			tournamentId = TFUtils.LoadInt(dict, "tournament_id");
+			rank = TFUtils.LoadInt(dict, "outcome");
+		}
+
+		public static List<RewardData> ProcessList(List<object> data)
+		{
+			List<RewardData> list = new List<RewardData>(data.Count);
+			foreach (Dictionary<string, object> datum in data)
+			{
+				list.Add(new RewardData(datum));
+			}
+			return list;
+		}
+	}
+}

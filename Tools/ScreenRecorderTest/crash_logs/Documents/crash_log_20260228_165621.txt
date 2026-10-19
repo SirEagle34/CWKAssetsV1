@@ -1,0 +1,7 @@
+Log creado: 2026-02-28 16:56:21
+[16:56:21] 📄 Log guardado en: /storage/emulated/0/Android/data/com.cardwarskingdom.recordertest/files/Documents/crash_log_20260228_165621.txt
+[16:56:43] 
+🎬 Iniciando proceso de grabación...
+[16:56:44] ✅ Permiso de grabación concedido
+[16:56:44] 📁 Archivo: /storage/emulated/0/Android/data/com.cardwarskingdom.recordertest/files/Movies/test_recording_20260228_165644.mp4
+[16:56:44] 🔴 Grabación iniciada (servicio)

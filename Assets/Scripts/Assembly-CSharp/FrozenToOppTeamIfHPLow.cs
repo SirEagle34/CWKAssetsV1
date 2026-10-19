@@ -1,0 +1,20 @@
+public class FrozenToOppTeamIfHPLow : OnAttacked
+{
+	public override bool OnEnable()
+	{
+		bool result = false;
+		if (base.Owner.HPPct < base.Val1Pct)
+		{
+			foreach (LaneState lane in base.Owner.Owner.Opponent.Lanes)
+			{
+				if (lane.Creature != null)
+				{
+					ApplyStatus(lane.Creature, StatusEnum.Frozen, base.Val1);
+					result = true;
+				}
+			}
+			return result;
+		}
+		return result;
+	}
+}

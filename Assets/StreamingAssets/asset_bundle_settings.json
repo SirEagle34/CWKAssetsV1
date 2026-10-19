@@ -1,0 +1,5 @@
+{
+	"type" : "asset_bundle_server_settings",
+	"asset_bundle_url" : "https://github.com/SirEagle34/CWKAssetsV1/releases/download/bundles-v1-{PLATFORM}/",
+	"use_asset_bundles" : true
+}

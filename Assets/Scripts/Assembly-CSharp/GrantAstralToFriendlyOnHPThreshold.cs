@@ -1,0 +1,24 @@
+using UnityEngine;
+
+public class GrantAstralToFriendlyOnHPThreshold : OnFriendlyDamaged
+{
+    public override bool OnEnable()
+    {
+        float num = (float)(Attacked.HP + (int)Damage) / (float)Attacked.MaxHP;
+
+        if (Attacked != base.Owner &&
+            Attacked.HPPct < base.Val1Pct &&
+            num >= base.Val1Pct)
+        {
+            ApplyStatus(
+                Attacked,
+                StatusEnum.Astral,
+                base.Val2
+            );
+
+            return true;
+        }
+
+        return false;
+    }
+}

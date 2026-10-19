@@ -1,0 +1,23 @@
+public enum EffectMultiplier
+{
+	None,
+	PerLivingAlly,
+	PerLivingEnemy,
+	PerDeadAlly,
+	PerDeadEnemy,
+	PerRed,
+	PerGreen,
+	PerBlue,
+	PerLight,
+	PerDark,
+	PerWhite,
+	PerOrange,
+	PerYellow,
+	PerBlack,
+	PerPurple,
+	PerCardInHand,
+	PerCardPlayed,
+	PerCardDrawn,
+	PerBuff,
+	PerDebuff
+}

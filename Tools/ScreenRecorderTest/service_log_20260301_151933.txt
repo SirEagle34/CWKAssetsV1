@@ -1,0 +1,6 @@
+[2026-03-01 15:19:33] Service created: 20260301_151933
+[2026-03-01 15:19:33] MediaProjection obtenido en servicio
+[2026-03-01 15:19:33] Iniciando grabador en: /storage/emulated/0/Android/data/com.cardwarskingdom.recordertest/files/Movies/test_recording_20260301_151933.mp4
+[2026-03-01 15:19:33] Grabación iniciada correctamente
+[2026-03-01 15:19:43] Deteniendo motor de grabación...
+[2026-03-01 15:19:43] Grabación finalizada: /storage/emulated/0/Android/data/com.cardwarskingdom.recordertest/files/Movies/test_recording_20260301_151933.mp4

@@ -1,0 +1,2 @@
+Log creado: 2026-02-28 18:56:03
+[18:56:03] 📄 Log guardado en: /storage/emulated/0/Android/data/com.cardwarskingdom.recordertest/files/Documents/crash_log_20260228_185603.txt

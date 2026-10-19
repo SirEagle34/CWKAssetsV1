@@ -1,0 +1,53 @@
+public static class StatusEnumExtensions
+{
+	public static string Name(this StatusEnum status)
+	{
+		return status switch
+		{
+			StatusEnum.AttackBoost => StatusEnum.EnhanceSTR.Name(), 
+			StatusEnum.AttackSpike => StatusEnum.BurstSTR.Name(), 
+			StatusEnum.MagicBoost => StatusEnum.EnhanceINT.Name(), 
+			StatusEnum.MagicSpike => StatusEnum.BurstINT.Name(), 
+			StatusEnum.DefenseBoost => StatusEnum.FortifyDEF.Name(), 
+			StatusEnum.ResistanceBoost => StatusEnum.FortifyRES.Name(), 
+			StatusEnum.IgnoreDefense => StatusEnum.Defiance.Name(), 
+			StatusEnum.IgnoreResistance => StatusEnum.Wisdom.Name(), 
+			StatusEnum.Evasion => StatusEnum.Stealth.Name(), 
+			StatusEnum.FrostArmor => StatusEnum.Chilled.Name(), 
+			StatusEnum.FlameArmor => StatusEnum.Flaming.Name(), 
+			StatusEnum.ParisiticArmor => StatusEnum.Parisitic.Name(), 
+			StatusEnum.RadiantArmor => StatusEnum.Brilliant.Name(), 
+			StatusEnum.VoidArmor => StatusEnum.Deranged.Name(), 
+			StatusEnum.Siphon => StatusEnum.APSiphon.Name(), 
+			StatusEnum.FloopSiphon => StatusEnum.FMSiphon.Name(), 
+			StatusEnum.Frosthit => StatusEnum.Frostbite.Name(), 
+			StatusEnum.Paralyhit => StatusEnum.Palsy.Name(), 
+			StatusEnum.Toxsulfuric => StatusEnum.Sulfide.Name(), 
+			StatusEnum.Dangermogrify => StatusEnum.Bunnying.Name(), 
+			StatusEnum.CardBlocker => StatusEnum.NervBlock.Name(), 
+			StatusEnum.Bonehurt => StatusEnum.Bonebreaker.Name(), 
+			StatusEnum.Transformed => StatusEnum.Joker.Name(), 
+			StatusEnum.UselessTransform => StatusEnum.UselessDeform.Name(), 
+			StatusEnum.Counterattack => StatusEnum.StrengthCounter.Name(), 
+			StatusEnum.MagicCounterattack => StatusEnum.MagicCounter.Name(), 
+			StatusEnum.WeakenStrength => StatusEnum.WeakenSTR.Name(), 
+			StatusEnum.WeakenMagic => StatusEnum.WeakenINT.Name(), 
+			StatusEnum.BreakDefense => StatusEnum.BreakDEF.Name(), 
+			StatusEnum.BreakResistance => StatusEnum.BreakRES.Name(), 
+			StatusEnum.Burn => StatusEnum.Burned.Name(), 
+			StatusEnum.Freeze => StatusEnum.Frozen.Name(), 
+			StatusEnum.Transmorph => StatusEnum.Transmogrify.Name(), 
+			StatusEnum.ManaLeak => StatusEnum.APLeak.Name(), 
+			StatusEnum.EnergyBleed => StatusEnum.APPoison.Name(), 
+			StatusEnum.EnergyPlant => StatusEnum.APFlower.Name(), 
+			StatusEnum.EnergyVitriol => StatusEnum.APVeba.Name(), 
+			StatusEnum.InsanityArmor => StatusEnum.Madness.Name(), 
+			StatusEnum.PowerArmor => StatusEnum.Astral.Name(), 
+			StatusEnum.DebilitatingArmor => StatusEnum.Debilitating.Name(), 
+			StatusEnum.ClumsyArmor => StatusEnum.Clumsily.Name(), 
+			StatusEnum.DarknessArmor => StatusEnum.Dullness.Name(), 
+			StatusEnum.NapalmArmor => StatusEnum.Napalming.Name(), 
+			_ => status.ToString(), 
+		};
+	}
+}
