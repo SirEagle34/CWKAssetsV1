@@ -9,6 +9,7 @@
     "relay_host": "",
     "relay_port": 9090,
     "scenes": {
+      "choose_game": "ChooseGame",
       "loading": "LoadingScreen",
       "connect": "ConnectScene",
       "version_check": "VersionCheckScene",
@@ -26,6 +27,7 @@
     "relay_host": "",
     "relay_port": 9090,
     "scenes": {
+      "choose_game": "ChooseGame",
       "loading": "CWK_002_LoadingScreen",
       "connect": "CWK_002_ConnectScreen",
       "version_check": "CWK_002_VersionCheckScene",
