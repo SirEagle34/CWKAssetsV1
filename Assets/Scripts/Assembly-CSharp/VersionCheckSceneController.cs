@@ -123,7 +123,17 @@ public class VersionCheckSceneController : MonoBehaviour
 		}
 		else
 		{
-			DetachedSingleton<SceneFlowManager>.Instance.LoadAssetBundleSceneDirect();
+			// Primary bundles were loaded before the initial Connect scene.
+			// After mode selection, continue to that mode's Connect scene instead of looping back.
+			CWKGameModeManager manager = CWKGameModeManager.Instance;
+			if (manager != null)
+			{
+				manager.LoadModeScene("connect");
+			}
+			else
+			{
+				Debug.LogError("[VersionCheckSceneController] CWKGameModeManager is unavailable.");
+			}
 		}
 	}
 
