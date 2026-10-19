@@ -86,7 +86,7 @@ public class CWKGameModeManager : MonoBehaviour
         LoadModeScene("version_check");
     }
 
-    public void LoadChooseGameScene()
+    public bool LoadChooseGameScene()
     {
         string sceneName = GetSceneName("choose_game");
         if (string.IsNullOrEmpty(sceneName))
@@ -95,11 +95,13 @@ public class CWKGameModeManager : MonoBehaviour
         if (!Application.CanStreamedLevelBeLoaded(sceneName))
         {
             Debug.LogError("[CWKGameModeManager] ChooseGame scene '" + sceneName +
-                "' is not included in Build Settings. Add the scene or call this method only when that scene exists.");
-            return;
+                "' is not included in Build Settings. Continuing with the saved/default mode.");
+            return false;
         }
 
+        Debug.Log("[CWKGameModeManager] Loading game mode selection scene: " + sceneName);
         SceneManager.LoadScene(sceneName);
+        return true;
     }
 
     public string GetSceneName(string sceneKey)
