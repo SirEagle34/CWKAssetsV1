@@ -236,9 +236,19 @@ public class TBPvPManager : Singleton<TBPvPManager>
 		FriendMatch = false;
 		Visible = false;
 		CurrentState = GameState.Login;
-		GameClientInstance.Disconnect();
-		PhotonInterface gameClientInstance = GameClientInstance;
-		gameClientInstance.OnStateChangeAction = (Action<ClientState>)Delegate.Remove(gameClientInstance.OnStateChangeAction, new Action<ClientState>(OnStateChanged));
+
+		if (UseRelay)
+		{
+			RelayInstance.Disconnect();
+		}
+		else if (GameClientInstance != null)
+		{
+			GameClientInstance.Disconnect();
+			GameClientInstance.OnStateChangeAction = (Action<ClientState>)Delegate.Remove(
+				GameClientInstance.OnStateChangeAction,
+				new Action<ClientState>(OnStateChanged));
+		}
+
 		Screen.sleepTimeout = -2;
 	}
 
