@@ -111,6 +111,14 @@ public class TBPvPManager : Singleton<TBPvPManager>
 	public void Awake()
 	{
 		Application.runInBackground = true;
+
+		// SQSettings must be initialized after ChooseGame has selected a mode.
+		if (string.IsNullOrEmpty(SQSettings.PHOTON_PUN_APP_ID))
+		{
+			Debug.LogError("[TBPvPManager] Photon PUN App ID is empty for mode " + SQSettings.GAME_MODE_ID + ".");
+			return;
+		}
+
 		if (SQSettings.USE_RELAY)
 		{
 			RelayInstance = new RelayClient();
@@ -157,7 +165,7 @@ public class TBPvPManager : Singleton<TBPvPManager>
 
 	public string GetCountryCode(int side)
 	{
-		if (UseRelay)
+		if (UseRelay || GameClientInstance == null)
 		{
 			return string.Empty;
 		}
@@ -183,6 +191,11 @@ public class TBPvPManager : Singleton<TBPvPManager>
 			RelayInstance.pvpEventCallback = callback;
 			RelayInstance.ConnectToRegionMaster("US");
 			Screen.sleepTimeout = -1;
+		}
+		else if (GameClientInstance == null)
+		{
+			Debug.LogError("[TBPvPManager] Photon client is not initialized. Check SQSettings.Init() and the selected game mode.");
+			callback?.Invoke(tbPvPEventCode.ErrorDisconnected, null);
 		}
 		else if (GameClientInstance.IsConnected)
 		{
@@ -270,7 +283,8 @@ public class TBPvPManager : Singleton<TBPvPManager>
 
 	private void onPushNotificationsReceived(string payload)
 	{
-		if (!UseRelay && GameClientInstance.Server == LoadBalancingClient.ServerConnection.MasterServer)
+		if (!UseRelay && GameClientInstance != null &&
+			GameClientInstance.Server == LoadBalancingClient.ServerConnection.MasterServer)
 		{
 			GetRoomsList();
 		}
@@ -297,9 +311,12 @@ public class TBPvPManager : Singleton<TBPvPManager>
 	{
 		if (UseRelay)
 		{
-			RelayInstance.Service();
+			if (RelayInstance != null)
+			{
+				RelayInstance.Service();
+			}
 		}
-		else
+		else if (GameClientInstance != null && GameClientInstance.loadBalancingPeer != null)
 		{
 			GameClientInstance.Service(GameClientInstance.loadBalancingPeer);
 		}
@@ -307,6 +324,9 @@ public class TBPvPManager : Singleton<TBPvPManager>
 
 	private void GetRoomsList()
 	{
+		if (GameClientInstance == null)
+			return;
+
 		savegameListStartIndex = 0;
 		GameClientInstance.OpWebRpc("GetGameList", null);
 	}
@@ -336,7 +356,7 @@ public class TBPvPManager : Singleton<TBPvPManager>
 		{
 			RelayInstance.OpLeaveRoom(!doAbandon);
 		}
-		else
+		else if (GameClientInstance != null)
 		{
 			GameClientInstance.OpLeaveRoom(!doAbandon);
 		}
@@ -352,9 +372,14 @@ public class TBPvPManager : Singleton<TBPvPManager>
 		{
 			RelayInstance.JoinRandomRoom(mylevel, range, range2nd, range3rd);
 		}
-		else
+		else if (GameClientInstance != null)
 		{
 			GameClientInstance.JoinRandomRoom(mylevel, range, range2nd, range3rd);
+		}
+		else
+		{
+			CurrentState = GameState.Login;
+			Debug.LogError("[TBPvPManager] Cannot search for a match before the Photon client is initialized.");
 		}
 	}
 
@@ -366,9 +391,14 @@ public class TBPvPManager : Singleton<TBPvPManager>
 		{
 			RelayInstance.JoinTheGame(targetname);
 		}
-		else
+		else if (GameClientInstance != null)
 		{
 			GameClientInstance.JoinTheGame(targetname);
+		}
+		else
+		{
+			CurrentState = GameState.Login;
+			Debug.LogError("[TBPvPManager] Cannot join a room before the Photon client is initialized.");
 		}
 	}
 
@@ -382,9 +412,14 @@ public class TBPvPManager : Singleton<TBPvPManager>
 		{
 			RelayInstance.OpJoinRoom(roomName, actorNumber);
 		}
-		else
+		else if (GameClientInstance != null)
 		{
 			GameClientInstance.OpJoinRoom(roomName, actorNumber);
+		}
+		else
+		{
+			CurrentState = GameState.Login;
+			Debug.LogError("[TBPvPManager] Cannot load a room before the Photon client is initialized.");
 		}
 	}
 
@@ -396,9 +431,14 @@ public class TBPvPManager : Singleton<TBPvPManager>
 		{
 			RelayInstance.OpCreateRoom(playerId);
 		}
-		else
+		else if (GameClientInstance != null)
 		{
 			GameClientInstance.OpCreateRoom(playerId);
+		}
+		else
+		{
+			CurrentState = GameState.Login;
+			Debug.LogError("[TBPvPManager] Cannot create a room before the Photon client is initialized.");
 		}
 	}
 
@@ -409,6 +449,12 @@ public class TBPvPManager : Singleton<TBPvPManager>
 			RelayInstance.SendGameMessage(messagetype, messagebody);
 			return;
 		}
+		if (GameClientInstance == null || GameClientInstance.loadBalancingPeer == null)
+		{
+			Debug.LogWarning("[TBPvPManager] Message not sent because the Photon client is not ready.");
+			return;
+		}
+
 		Hashtable hashtable = new Hashtable();
 		hashtable[messagetype] = messagebody;
 		GameClientInstance.loadBalancingPeer.OpRaiseEvent(1, hashtable, sendReliable: true, null);
