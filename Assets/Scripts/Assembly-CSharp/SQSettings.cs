@@ -65,6 +65,10 @@ public class SQSettings
 
         selectedModeId = modeId;
         initialized = false;
+        selectedModeSettings = null;
+        serverUrl = null;
+        photonChatAppID = null;
+        photonPUNAppID = null;
         PlayerPrefs.SetString(GameModePlayerPrefsKey, modeId);
         PlayerPrefs.Save();
         return true;
