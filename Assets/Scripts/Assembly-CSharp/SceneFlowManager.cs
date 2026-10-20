@@ -200,8 +200,7 @@ public class SceneFlowManager : DetachedSingleton<SceneFlowManager>
 			result = "ChooseGame";
 		}
 
-		if (SQSettings.GAME_MODE_ID != "cwk_0001" || scene == Scene.ChooseGame)
-
+		// CWK 002 uses its configured scene names and must not use CWK 001 low-res scenes.
 		if (SQSettings.GAME_MODE_ID != "cwk_0001")
 		{
 			return result;
