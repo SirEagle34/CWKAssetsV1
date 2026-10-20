@@ -65,6 +65,17 @@ public class CWKGameModeManager : MonoBehaviour
             return false;
         }
 
+        // A live session caches player-specific URLs for the currently selected server.
+        // Do not switch servers until that session has been logged out and cleared.
+        SessionManager sessionManager = SessionManager.Instance;
+        if (sessionManager != null &&
+            sessionManager.theSession != null &&
+            SQSettings.GAME_MODE_ID != modeId)
+        {
+            Debug.LogWarning("[CWKGameModeManager] Cannot change game mode while a session is active. Log out first.");
+            return false;
+        }
+
         // SelectGameMode also persists the selected mode and invalidates cached settings.
         if (!SQSettings.SelectGameMode(modeId))
             return false;
