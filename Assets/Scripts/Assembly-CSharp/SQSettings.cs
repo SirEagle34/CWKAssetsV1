@@ -164,18 +164,20 @@ public class SQSettings
             if (!string.IsNullOrEmpty(configuredName) && Application.CanStreamedLevelBeLoaded(configuredName))
                 return configuredName;
 
-            Debug.LogWarning("[SQSettings] Configured scene '" + configuredName + "' for key '" +
-                sceneKey + "' is not in Build Settings. Checking fallback.");
+            // An explicit mode-specific scene must not fall back to the other mode's scene.
+            Debug.LogError("[SQSettings] Configured scene '" + configuredName + "' for key '" +
+                sceneKey + "' is missing from Build Settings for mode '" + selectedModeId + "'.");
+            return string.Empty;
         }
 
+        // Keys absent from the mode configuration may intentionally use shared legacy scenes
+        // (for example BootVideoScene, AssetBundleDownloadScene, and ChooseGame).
         if (!string.IsNullOrEmpty(fallback) && Application.CanStreamedLevelBeLoaded(fallback))
             return fallback;
 
-        // Do not silently route one game mode into the other mode's scene.
-        // The shared ChooseGame scene is resolved explicitly by CWKGameModeManager.
         Debug.LogError("[SQSettings] No valid scene is configured for key '" + sceneKey +
             "' in mode '" + selectedModeId + "'.");
-        return fallback ?? string.Empty;
+        return string.Empty;
     }
 
     private static Dictionary<string, object> ReadSettings(string fileName)
