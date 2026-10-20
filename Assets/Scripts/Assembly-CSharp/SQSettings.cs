@@ -171,38 +171,10 @@ public class SQSettings
         if (!string.IsNullOrEmpty(fallback) && Application.CanStreamedLevelBeLoaded(fallback))
             return fallback;
 
-        // Use the shared cwk_0001 scene only if it exists in Build Settings.
-        try
-        {
-            Dictionary<string, object> root = ReadSettings("server_settings.json");
-            object baseModeValue;
-            if (root.TryGetValue("cwk_0001", out baseModeValue))
-            {
-                Dictionary<string, object> baseMode = baseModeValue as Dictionary<string, object>;
-                object baseScenesValue;
-                if (baseMode != null && baseMode.TryGetValue("scenes", out baseScenesValue))
-                {
-                    Dictionary<string, object> baseScenes = baseScenesValue as Dictionary<string, object>;
-                    object baseSceneValue;
-                    if (baseScenes != null && baseScenes.TryGetValue(sceneKey, out baseSceneValue) &&
-                        baseSceneValue != null)
-                    {
-                        string baseScene = Convert.ToString(baseSceneValue);
-                        if (!string.IsNullOrEmpty(baseScene) && Application.CanStreamedLevelBeLoaded(baseScene))
-                        {
-                            Debug.LogWarning("[SQSettings] Using shared scene '" + baseScene +
-                                "' for key '" + sceneKey + "' while mode '" + selectedModeId + "' is active.");
-                            return baseScene;
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("[SQSettings] Could not resolve scene fallback: " + ex.Message);
-        }
-
+        // Do not silently route one game mode into the other mode's scene.
+        // The shared ChooseGame scene is resolved explicitly by CWKGameModeManager.
+        Debug.LogError("[SQSettings] No valid scene is configured for key '" + sceneKey +
+            "' in mode '" + selectedModeId + "'.");
         return fallback ?? string.Empty;
     }
 
