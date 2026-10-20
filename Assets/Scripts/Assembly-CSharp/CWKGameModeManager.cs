@@ -150,20 +150,11 @@ public class CWKGameModeManager : MonoBehaviour
             return;
         }
 
-        // Mode-specific scene assets may not have been added to this combined project yet.
-        // Use the cwk_0001 scene mapping only when that scene is actually in Build Settings.
-        string fallbackScene = GetSceneNameForMode(Mode001, sceneKey);
-        if (!string.IsNullOrEmpty(fallbackScene) && Application.CanStreamedLevelBeLoaded(fallbackScene))
-        {
-            Debug.LogWarning("[CWKGameModeManager] Scene '" + sceneName + "' for " + CurrentModeId +
-                " is unavailable. Falling back to shared scene '" + fallbackScene + "'.");
-            SceneManager.LoadScene(fallbackScene);
-            return;
-        }
-
+        // Do not silently load a cwk_0001 scene when a cwk_0002 scene is missing.
+        // ChooseGame is handled separately by LoadChooseGameScene because it is shared.
         Debug.LogError("[CWKGameModeManager] Cannot load scene key '" + sceneKey + "' for " +
             CurrentModeId + ". Configured scene: '" + sceneName +
-            "'. No valid fallback scene is included in Build Settings.");
+            "'. Ensure this mode's scene is included in Build Settings.");
     }
 
     private string GetSceneNameForMode(string modeId, string sceneKey)
