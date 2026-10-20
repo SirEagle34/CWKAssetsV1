@@ -134,19 +134,22 @@ public class SceneFlowManager : DetachedSingleton<SceneFlowManager>
 
 	private void LoadScene(Scene scene, bool bypass = false)
 	{
+		// Resolve and validate the destination before changing flow state.
+		string targetScene = GetNameFromScene(bypass ? scene : Scene.Loading);
+		if (string.IsNullOrEmpty(targetScene) || !Application.CanStreamedLevelBeLoaded(targetScene))
+		{
+			Debug.LogError("[SceneFlowManager] Refusing to load an invalid scene for " +
+				scene + " in mode " + SQSettings.GAME_MODE_ID + ". Resolved scene: '" +
+				(targetScene ?? string.Empty) + "'. Check server_settings.json and Build Settings.");
+			return;
+		}
+
 		mPreviousScene = mCurrentScene;
 		mCurrentScene = scene;
 		MenuStackManager.ClearStack();
 		UICamera.ForceUnlockInput();
 		DoManualAnimationCleanup();
-		if (!bypass)
-		{
-			SceneManager.LoadScene(GetNameFromScene(Scene.Loading));
-		}
-		else
-		{
-			SceneManager.LoadScene(GetNameFromScene(mCurrentScene));
-		}
+		SceneManager.LoadScene(targetScene);
 	}
 
 	public void OnLoadingScreenLoaded()
