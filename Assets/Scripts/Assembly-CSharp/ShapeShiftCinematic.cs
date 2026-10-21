@@ -5,8 +5,6 @@ using UnityEngine;
 
 public class ShapeShiftCinematic : MonoBehaviour
 {
-	// Override point for independent cinematic references such as CloneCinematic.
-	protected virtual bool UsesCloneReferences => false;
 	private static ShapeShiftCinematic sInstance;
 
 	protected const float PickTimeout = 20f;

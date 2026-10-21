@@ -8,11 +8,6 @@ using UnityEngine.SceneManagement;
 
 public class ShapeShiftShots : MonoBehaviour
 {
-	// Keeps clone-shot selection separate from the existing ShapeShift diagnostic flow.
-	public static bool UsesCloneShotReference(CardData card)
-	{
-		return card != null && card.Clone;
-	}
 	private const string CardId = "SPOOKY_0050";
 
 	private string mDir;
