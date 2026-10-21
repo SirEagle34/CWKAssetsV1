@@ -382,13 +382,15 @@ public class CardData : ILoadableData
 		Graveyard = TFUtils.LoadBool(dict, "Graveyard", defaultValue: false);
 		ShapeShift = TFUtils.LoadBool(dict, "ShapeShift", defaultValue: false);
 		ShapeShiftPool = new List<string>();
-		Clone = TFUtils.LoadBool(dict, "Clone", defaultValue: false);
-		CloneCreatureID = TFUtils.LoadString(dict, "CloneCreatureID", string.Empty);
-		int cloneCountValue;
+		// Clone references are intentionally restricted to TeleportGuy_Obsidian.
+		bool cloneReferenceAllowed = string.Equals(ID, "TeleportGuy_Obsidian", StringComparison.OrdinalIgnoreCase);
+		Clone = cloneReferenceAllowed && TFUtils.LoadBool(dict, "Clone", defaultValue: false);
+		CloneCreatureID = Clone ? TFUtils.LoadString(dict, "CloneCreatureID", string.Empty) : string.Empty;
+		int cloneCountValue = 1;
 		int.TryParse(TFUtils.LoadString(dict, "CloneCount", "1"), out cloneCountValue);
-		CloneCount = Mathf.Clamp(cloneCountValue, 1, 10);
-		CloneCopiesStats = TFUtils.LoadBool(dict, "CloneCopiesStats", defaultValue: true);
-		CloneCopiesEffects = TFUtils.LoadBool(dict, "CloneCopiesEffects", defaultValue: false);
+		CloneCount = Clone ? Mathf.Clamp(cloneCountValue, 1, 10) : 1;
+		CloneCopiesStats = Clone ? TFUtils.LoadBool(dict, "CloneCopiesStats", defaultValue: true) : true;
+		CloneCopiesEffects = Clone && TFUtils.LoadBool(dict, "CloneCopiesEffects", defaultValue: false);
 		string[] array = TFUtils.LoadString(dict, "ShapeShiftPool", "").Split(',');
 		foreach (string text4 in array)
 		{
