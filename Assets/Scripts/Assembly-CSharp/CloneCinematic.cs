@@ -2,13 +2,11 @@ using UnityEngine;
 
 /// <summary>
 /// Independent entry point for clone transformation cinematics.
-/// Reuses the established cinematic implementation to preserve camera and cleanup behavior.
+/// Reuses the established cinematic implementation without modifying ShapeShift code.
 /// </summary>
 public sealed class CloneCinematic : ShapeShiftCinematic
 {
     private static CloneCinematic sCloneInstance;
-
-    protected override bool UsesCloneReferences => true;
 
     public static CloneCinematic CloneInstance
     {
