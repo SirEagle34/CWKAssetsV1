@@ -32,6 +32,9 @@ public class PlayerState
 
 	public List<CreatureState> DeploymentList = new List<CreatureState>();
 
+	// Tracks clone references without replacing the authoritative lane/graveyard collections.
+	public List<CreatureState> CloneCreatures = new List<CreatureState>();
+
 	public List<CardData> DrawPile = new List<CardData>();
 
 	public List<CardData> DrawQueue = new List<CardData>();
@@ -182,6 +185,17 @@ public class PlayerState
 		{
 			Target = Lanes[Source.Target.Lane.Index].Creature;
 		}
+		foreach (CreatureState sourceClone in Source.CloneCreatures)
+		{
+			if (sourceClone != null && sourceClone.Lane != null && sourceClone.Lane.Index >= 0 && sourceClone.Lane.Index < Lanes.Count)
+			{
+				CreatureState copiedClone = Lanes[sourceClone.Lane.Index].Creature;
+				if (copiedClone != null && !CloneCreatures.Contains(copiedClone))
+				{
+					CloneCreatures.Add(copiedClone);
+				}
+			}
+		}
 		foreach (CreatureState item in Source.Graveyard)
 		{
 			CreatureState creatureState = item.DeepCopy();
@@ -233,6 +247,7 @@ public class PlayerState
 			CreatureState.Destroy(deployment);
 		}
 		DeploymentList.Clear();
+		CloneCreatures.Clear();
 		foreach (LaneState lane in Lanes)
 		{
 			LaneState.Destroy(lane);
@@ -243,6 +258,22 @@ public class PlayerState
 	public PlayerState DeepCopy()
 	{
 		return Create(this);
+	}
+
+	public void RegisterClone(CreatureState clone)
+	{
+		if (clone != null && !CloneCreatures.Contains(clone))
+		{
+			CloneCreatures.Add(clone);
+		}
+	}
+
+	public void UnregisterClone(CreatureState clone)
+	{
+		if (clone != null)
+		{
+			CloneCreatures.Remove(clone);
+		}
 	}
 
 	public void UpdateStatistics()

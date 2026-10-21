@@ -216,6 +216,17 @@ public class CardData : ILoadableData
 
 	public List<string> ShapeShiftPool { get; private set; }
 
+	// Clone configuration is independent from ShapeShift.
+	public bool Clone { get; private set; }
+
+	public string CloneCreatureID { get; private set; }
+
+	public int CloneCount { get; private set; }
+
+	public bool CloneCopiesStats { get; private set; }
+
+	public bool CloneCopiesEffects { get; private set; }
+
 	public int MinTurn { get; private set; }
 
 	public int MinTargetTeamCreatures { get; private set; }
@@ -371,6 +382,13 @@ public class CardData : ILoadableData
 		Graveyard = TFUtils.LoadBool(dict, "Graveyard", defaultValue: false);
 		ShapeShift = TFUtils.LoadBool(dict, "ShapeShift", defaultValue: false);
 		ShapeShiftPool = new List<string>();
+		Clone = TFUtils.LoadBool(dict, "Clone", defaultValue: false);
+		CloneCreatureID = TFUtils.LoadString(dict, "CloneCreatureID", string.Empty);
+		int cloneCountValue;
+		int.TryParse(TFUtils.LoadString(dict, "CloneCount", "1"), out cloneCountValue);
+		CloneCount = Mathf.Clamp(cloneCountValue, 1, 10);
+		CloneCopiesStats = TFUtils.LoadBool(dict, "CloneCopiesStats", defaultValue: true);
+		CloneCopiesEffects = TFUtils.LoadBool(dict, "CloneCopiesEffects", defaultValue: false);
 		string[] array = TFUtils.LoadString(dict, "ShapeShiftPool", "").Split(',');
 		foreach (string text4 in array)
 		{
