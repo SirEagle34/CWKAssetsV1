@@ -33,6 +33,13 @@ EDITIONS = {
         "url": "https://github.com/SirEagle34/CWKAssetsV1/releases/download/cwk-wiki/cwk_darkmagic_wiki_data.zip",
         "label": "Dark Magic",
     },
+    # Work-in-progress edition: JSON comes from content/fionaandcake_cwk;
+    # artwork can be supplied in the existing local extras/icon folders.
+    "fionaandcake": {
+        "archive": ARCHIVE_DIR / "cwk_fionaandcake_wiki_data.zip",
+        "url": "",
+        "label": "Fiona & Cake",
+    },
 }
 
 PAGES = {
@@ -43,6 +50,9 @@ PAGES = {
     "cwk_obsidian_actionscards": "cwk_obsidian_actionscards.html",
     "cwk_darkmagic_creatures": "cwk_darkmagic_creatures.html",
     "cwk_darkmagic_actionscards": "cwk_darkmagic_actionscards.html",
+    "cwk_fionaandcake": "cwk_fionaandcake.html",
+    "cwk_fionaandcake_creatures": "cwk_fionaandcake_creatures.html",
+    "cwk_fionaandcake_actionscards": "cwk_fionaandcake_actionscards.html",
 }
 ZIP_LOCK = threading.RLock()
 
@@ -333,6 +343,9 @@ def _read_member(edition, member):
 
 
 def _load_json(edition, filename):
+    if not EDITIONS[edition].get("url") and not EDITIONS[edition]["archive"].is_file():
+        abort(404, description=f"Artwork '{filename}' is not installed locally for {edition}.")
+
     member = _find_member(edition, filename)
     if not member:
         abort(503, description=f"{filename} was not found inside the {edition} ZIP archive.")
@@ -490,7 +503,7 @@ def _level50_creature_stats(items):
 
 def _load_content_json(edition, filename):
     """Read optional edition-specific JSON data from its content directory."""
-    edition_dir = {"obsidian": "obsidian_cwk", "darkmagic": "darkmagic_cwk"}.get(edition)
+    edition_dir = {"obsidian": "obsidian_cwk", "darkmagic": "darkmagic_cwk", "fionaandcake": "fionaandcake_cwk"}.get(edition)
     if not edition_dir:
         return []
     path = BASE_DIR / "content" / edition_dir / filename
@@ -589,6 +602,22 @@ def darkmagic_actionscards():
     return render_template(PAGES["cwk_darkmagic_actionscards"])
 
 
+@app.get("/fionaandcake")
+@app.get("/fionaandcake/")
+def fionaandcake_home():
+    return render_template(PAGES["cwk_fionaandcake"])
+
+
+@app.get("/fionaandcake/creatures")
+def fionaandcake_creatures():
+    return render_template(PAGES["cwk_fionaandcake_creatures"])
+
+
+@app.get("/fionaandcake/actionscards")
+def fionaandcake_actionscards():
+    return render_template(PAGES["cwk_fionaandcake_actionscards"])
+
+
 @app.get("/<page>.html")
 def html_page(page):
     template = PAGES.get(page)
@@ -603,7 +632,7 @@ def catalogue_api(edition, kind):
         abort(404)
     filename = "db_Creatures.json" if kind == "creatures" else "db_ActionCards.json"
     items = _load_content_json(edition, filename)
-    edition_dir = {"obsidian": "obsidian_cwk", "darkmagic": "darkmagic_cwk"}[edition]
+    edition_dir = {"obsidian": "obsidian_cwk", "darkmagic": "darkmagic_cwk", "fionaandcake": "fionaandcake_cwk"}[edition]
     content_path = BASE_DIR / "content" / edition_dir / filename
     if not content_path.is_file():
         abort(503, description=f"Required catalogue file is missing: content/{edition_dir}/{filename}")
