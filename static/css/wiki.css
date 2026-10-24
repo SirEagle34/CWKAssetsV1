@@ -25,3 +25,40 @@
 .amadeus-creature-badge img{width:25px;height:25px;object-fit:contain}
 .amadeus-filter-button{height:48px;padding:0 15px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);font:inherit;font-size:.78rem;font-weight:700;white-space:nowrap;cursor:pointer;transition:background .2s,border-color .2s}
 .amadeus-filter-button:hover,.amadeus-filter-button.is-active{border-color:#ff5964;background:rgba(190,28,49,.2);color:#ff9da5}
+
+
+/* Fiona & Cake — light pink and rose edition theme */
+.theme-fionaandcake{
+  color-scheme:light;
+  --bg:#fff4f8;
+  --surface:#fffafd;
+  --surface2:#ffe8f0;
+  --text:#49313f;
+  --muted:#886b7a;
+  --accent:#d96c9d;
+  --accent2:#a94472;
+  --line:rgba(185,83,127,.22);
+  --glow:rgba(242,184,208,.45);
+  --display:'Playfair Display',serif;
+}
+.theme-fionaandcake .site-header{
+  background:rgba(255,249,252,.9);
+  border-bottom-color:var(--line);
+}
+.theme-fionaandcake .main-nav a:hover,
+.theme-fionaandcake .main-nav a.active{color:var(--accent2)}
+.theme-fionaandcake .button-primary{color:#fffafd}
+.theme-fionaandcake .button-quiet{color:var(--text)}
+.fionaandcake-hero{
+  background:
+    radial-gradient(ellipse at 86% 42%,rgba(242,184,208,.7),transparent 43%),
+    linear-gradient(120deg,#ffe5ef,#fff7fb);
+}
+.theme-fionaandcake .wiki-entry-image{background:rgba(242,184,208,.18)}
+.theme-fionaandcake .wiki-entry-number{box-shadow:0 2px 8px rgba(130,55,91,.12)}
+.theme-fionaandcake .amadeus-filter-button:hover,
+.theme-fionaandcake .amadeus-filter-button.is-active{
+  border-color:#d96c9d;
+  background:rgba(217,108,157,.12);
+  color:#a94472;
+}
