@@ -369,7 +369,24 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
     def _transaction():
         conn = _connect()
         conn.execute("BEGIN IMMEDIATE")
+        _expire_offers(conn)
         return conn
+
+    def _expire_offers(conn):
+        cutoff = int(time.time()) - (7 * 24 * 60 * 60)
+        rows = conn.execute("""
+            SELECT * FROM trade_offers
+            WHERE status='pending' AND created_at < ?
+        """, (cutoff,)).fetchall()
+        for row in rows:
+            for item in _safe_json(row["give_items"], []):
+                if isinstance(item, dict):
+                    _delta(conn, row["from_id"], item, "add")
+            _add_wallet(conn, row["from_id"], int(row["give_coins"]))
+            conn.execute(
+                "UPDATE trade_offers SET status='expired', updated_at=? WHERE offer_id=? AND status='pending'",
+                (int(time.time()), int(row["offer_id"]))
+            )
 
     _init_schema()
 
@@ -385,7 +402,7 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
         if requested and requested != player_id:
             return _error("player_id mismatch", 403)
         with _TRADE_LOCK:
-            conn = _connect()
+            conn = _transaction()
             try:
                 removes, adds = [], []
                 for row in conn.execute(
@@ -398,7 +415,12 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
                         item = _safe_json(row["creature_json"], None)
                         if isinstance(item, dict):
                             adds.append(item)
+                conn.commit()
                 return _response({"remove": removes, "add": adds})
+            except Exception:
+                conn.rollback()
+                app.logger.exception("[Trade] Sync failed")
+                return _error("internal: sync failed", 500)
             finally:
                 conn.close()
 
@@ -770,7 +792,7 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
         payload = _request_data()
         if _normal_id(payload.get("player_id")) not in ("", player_id):
             return _error("player_id mismatch", 403)
-        conn = _connect()
+        conn = _transaction()
         try:
             rows = conn.execute("""
                 SELECT * FROM trade_offers
@@ -795,7 +817,12 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
                         "coins": int(row["want_coins"]),
                     },
                 })
+            conn.commit()
             return _response(offers)
+        except Exception:
+            conn.rollback()
+            app.logger.exception("[Trade] Offer listing failed")
+            return _error("internal: offers failed", 500)
         finally:
             conn.close()
 
@@ -841,7 +868,7 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
                 if not _check_capacity(conn, recipient, len(give_items), len(requested_items)):
                     conn.rollback()
                     return _error("your inventory is full", 409)
-                if not _check_capacity(conn, sender, len(requested_items), len(give_items)):
+                if not _check_capacity(conn, sender, len(requested_items)):
                     conn.rollback()
                     return _error("their inventory is full", 409)
                 for item in requested_items:
