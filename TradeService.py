@@ -330,19 +330,32 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
         _set_wallet(conn, player_id, _wallet(conn, player_id) + int(amount))
 
     def _effective_inventory_count(conn, player):
-        items = {int(item.get("UniqueID")): item for item in _inventory(player["save"])
-                 if _int(item.get("UniqueID"), None, 1) is not None}
+        inventory = player["save"].get("Inventory", [])
+        if not isinstance(inventory, list):
+            raise ValueError("player inventory is invalid")
+        total = sum(
+            1 for item in inventory
+            if isinstance(item, dict) and item.get("_T") in ("CR", "CA", "EV", "XP")
+        )
+        creature_ids = {
+            _int(item.get("UniqueID"), None, 1)
+            for item in inventory
+            if isinstance(item, dict) and item.get("_T") == "CR"
+        }
+        creature_ids.discard(None)
         rows = conn.execute(
             "SELECT unique_id, action FROM trade_inventory_delta WHERE player_id=?",
             (player["username"],)
         ).fetchall()
         for row in rows:
             uid = int(row["unique_id"])
-            if row["action"] == "remove":
-                items.pop(uid, None)
-            else:
-                items[uid] = True
-        return len(items)
+            if row["action"] == "remove" and uid in creature_ids:
+                creature_ids.remove(uid)
+                total = max(0, total - 1)
+            elif row["action"] == "add" and uid not in creature_ids:
+                creature_ids.add(uid)
+                total += 1
+        return total
 
     def _inventory_capacity(player):
         return _int(player["save"].get("InventorySpace"), 0, 0, 100000)
