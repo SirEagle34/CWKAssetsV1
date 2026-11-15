@@ -25,6 +25,7 @@ from io import BytesIO
 from urllib.parse import parse_qs
 from typing import Optional
 from RemoveGameItems import remove_game_items, ENABLED as REMOVE_GAME_ITEMS_ENABLED, DATABASE_TARGET as REMOVE_GAME_ITEMS_DATABASE_TARGET
+from TradeService import register_trade_routes
 
 # Third-party library imports
 import schedule
@@ -8663,6 +8664,19 @@ with app.app_context():
         MigrateBanExpiration()
         MigratePlayerNameChangeCount()
         _ensure_google_account_tables()
+        register_trade_routes(
+            app,
+            db,
+            Player,
+            DecryptGameData,
+            _decode_game_save_for_name_change,
+            _encode_game_save_with_name,
+            _local_instance_has_player,
+            _local_instance_db_path,
+            IsUserBanned,
+            IsTestVersionBlocked,
+            IPFromRequest,
+        )
         RunRemoveGameItemsStartupCleanup()
 
 
