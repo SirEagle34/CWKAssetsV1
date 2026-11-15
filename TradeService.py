@@ -25,7 +25,9 @@ _TRADE_PACKS = {
 
 def register_trade_routes(app, db, Player, decrypt_game_data,
                           decode_game_save, encode_game_save,
-                          local_has_player, local_db_path):
+                          local_has_player, local_db_path,
+                          is_user_banned=None, is_test_version_blocked=None,
+                          ip_from_request=None):
     """Register the trade endpoints called by SQServer.cs."""
 
     def _trade_db_path():
@@ -37,11 +39,12 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
         conn = sqlite3.connect(_trade_db_path(), timeout=20, isolation_level=None)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout = 20000")
-        conn.execute("PRAGMA journal_mode = WAL")
         return conn
 
     def _init_schema():
-        with _connect() as conn:
+        conn = _connect()
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS trade_wallet (
                     player_id TEXT PRIMARY KEY,
@@ -89,6 +92,8 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
                     PRIMARY KEY(player_id, unique_id)
                 );
             """)
+        finally:
+            conn.close()
 
     def _normal_id(value):
         value = str(value or "").strip().replace("-", "_")
@@ -114,6 +119,12 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
         if app.config.get("TRADE_REQUIRE_GAME_HEADERS", True):
             if request.headers.get("User-Agent") != "Innertube Explorer v0.1":
                 return "", None, (jsonify({"success": False, "error": "invalid game client"}), 403)
+            if any(not request.headers.get(name) for name in ("Age", "Platform", "Version")):
+                return "", None, (jsonify({"success": False, "error": "missing required game headers"}), 400)
+        if is_user_banned and is_user_banned(player_id, ip_from_request(request) if ip_from_request else request.remote_addr):
+            return "", None, (jsonify({"success": False, "error": "user banned"}), 403)
+        if is_test_version_blocked and is_test_version_blocked(request.headers.get("Version"), player_id):
+            return "", None, (jsonify({"success": False, "error": "update the game"}), 403)
         return player_id, _load_player(player_id), None
 
     def _player_db_path(player_id):
@@ -336,8 +347,8 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
     def _inventory_capacity(player):
         return _int(player["save"].get("InventorySpace"), 0, 0, 100000)
 
-    def _check_capacity(conn, player, incoming):
-        current = _effective_inventory_count(conn, player)
+    def _check_capacity(conn, player, incoming, outgoing=0):
+        current = max(0, _effective_inventory_count(conn, player) - outgoing)
         capacity = _inventory_capacity(player)
         if capacity and current + incoming > capacity:
             return False
@@ -655,7 +666,12 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
                     conn.commit()
                 finally:
                     conn.close()
-            return _response({"coins": _wallet(_connect(), player_id), "spent": cost})
+            conn = _connect()
+            try:
+                current_balance = _wallet(conn, player_id)
+            finally:
+                conn.close()
+            return _response({"coins": current_balance, "spent": cost})
         except Exception:
             app.logger.exception("[Trade] Coin pack purchase failed")
             return _error("internal: coin purchase failed", 500)
@@ -842,10 +858,10 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
                 if _wallet(conn, to_id) < int(offer["want_coins"]):
                     conn.rollback()
                     return _error("not enough trade coins")
-                if not _check_capacity(conn, recipient, len(give_items)):
+                if not _check_capacity(conn, recipient, len(give_items), len(requested_items)):
                     conn.rollback()
                     return _error("your inventory is full", 409)
-                if not _check_capacity(conn, sender, len(requested_items)):
+                if not _check_capacity(conn, sender, len(requested_items), len(give_items)):
                     conn.rollback()
                     return _error("their inventory is full", 409)
                 for item in requested_items:
