@@ -490,26 +490,6 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
         conn = _connect()
         try:
             rows = conn.execute("""
-                SELECT l.*, p.multiplayer_name
-                FROM trade_listings l
-                LEFT JOIN (
-                    SELECT username, multiplayer_name FROM player
-                ) p ON p.username=l.seller_id
-                WHERE l.status='active'
-                ORDER BY l.listing_id DESC
-                LIMIT ? OFFSET ?
-            """, (end - start + 1, start - 1)).fetchall()
-            listings = [{
-                "listing_id": int(row["listing_id"]),
-                "seller_id": row["seller_id"],
-                "seller_name": row["multiplayer_name"] or row["seller_id"],
-                "creature_id": row["creature_id"],
-                "price": int(row["price"]),
-            } for row in rows]
-            return _response(listings)
-        except sqlite3.Error:
-            # LocalInstance sellers are not in Primary; still return their listings.
-            rows = conn.execute("""
                 SELECT * FROM trade_listings
                 WHERE status='active' ORDER BY listing_id DESC LIMIT ? OFFSET ?
             """, (end - start + 1, start - 1)).fetchall()
@@ -771,7 +751,7 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
                 uid = _int(item.get("UniqueID"), None, 1)
                 if uid is None:
                     continue
-                if target_id == requester_id and _reserved(conn, target_id, uid):
+                if _reserved(conn, target_id, uid):
                     continue
                 if _tradeable(target, uid) is None:
                     continue
