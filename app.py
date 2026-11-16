@@ -26,6 +26,10 @@ from urllib.parse import parse_qs
 from typing import Optional
 from RemoveGameItems import remove_game_items, ENABLED as REMOVE_GAME_ITEMS_ENABLED, DATABASE_TARGET as REMOVE_GAME_ITEMS_DATABASE_TARGET
 from TradeService import register_trade_routes
+from OlympicService import (
+    clear_pending_currency, has_pending_currency, matching_currency,
+    missing_locked_creatures, register_olympic_routes,
+)
 
 # Third-party library imports
 import schedule
@@ -7898,11 +7902,32 @@ def PersistGame(id):
 		if not data.startswith(b"username=") or data.startswith(b"{"):
 			DiscordWebhookMessage(username +" attempted to put game data without encryption. IP: " + IPFromRequest(request) + ". Data: " + data.decode("utf-8")[:50])
 
-		db_user = Player.query.filter_by(username=username).first()
-		if db_user is None:
-			return make_response("No game found!", 404)
-		db_user.game = data
-		db.session.commit()
+		with trade_access["lock"]:
+			db_user = Player.query.filter_by(username=username).first()
+			if db_user is None:
+				return make_response("No game found!", 404)
+			db.session.refresh(db_user, ["game"])
+			try:
+				missing = missing_locked_creatures(
+					trade_access, username, data, _decode_game_save_for_name_change)
+			except (ValueError, UnicodeDecodeError):
+				app.logger.exception("[Olympic] Could not validate player inventory")
+				return make_response("Unable to validate Olympic creature locks.", 400)
+			if missing:
+				app.logger.warning("[Olympic] Save rejected: locked creatures are missing for %s", username)
+				return make_response("An Olympic Dungeon creature cannot be removed.", 400)
+			pending_currency = has_pending_currency(trade_access, username)
+			if pending_currency:
+				try:
+					if not matching_currency(data, db_user.game, _decode_game_save_for_name_change):
+						return make_response("Olympic currency balance must be refreshed.", 400)
+				except (ValueError, UnicodeDecodeError, AttributeError):
+					app.logger.exception("[Olympic] Could not validate currency balance")
+					return make_response("Unable to validate Olympic currency balance.", 400)
+			db_user.game = data
+			db.session.commit()
+			if pending_currency:
+				clear_pending_currency(trade_access, username)
 		return make_response("OK", 200)
 
 
@@ -8664,18 +8689,21 @@ with app.app_context():
         MigrateBanExpiration()
         MigratePlayerNameChangeCount()
         _ensure_google_account_tables()
-        register_trade_routes(
+        trade_access = register_trade_routes(
             app,
             db,
             Player,
             DecryptGameData,
             _decode_game_save_for_name_change,
             _encode_game_save_with_name,
-            _local_instance_has_player,
             _local_instance_db_path,
             IsUserBanned,
             IsTestVersionBlocked,
             IPFromRequest,
+        )
+        register_olympic_routes(
+            app, trade_access, _decode_game_save_for_name_change,
+            _encode_game_save_with_name,
         )
         RunRemoveGameItemsStartupCleanup()
 

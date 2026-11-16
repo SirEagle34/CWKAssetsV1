@@ -487,6 +487,220 @@ public class SQServer
 		});
 	}
 
+	public void OlympicList(int offset, TFServer.JsonResponseHandler callback)
+	{
+		tfServer.PostToJSON(SQSettings.SERVER_URL + "persist/olympic_listDW/",
+			new Dictionary<string, object> { { "offset", offset } }, callback);
+	}
+
+	public void OlympicOwners(int offset, TFServer.JsonResponseHandler callback)
+	{
+		tfServer.PostToJSON(SQSettings.SERVER_URL + "persist/olympic_ownersDW/",
+			new Dictionary<string, object> { { "offset", offset } }, callback);
+	}
+
+	public void OlympicQuests(string ownerId, int offset, TFServer.JsonResponseHandler callback)
+	{
+		tfServer.PostToJSON(SQSettings.SERVER_URL + "persist/olympic_questsDW/",
+			new Dictionary<string, object> { { "owner_id", ownerId }, { "offset", offset } }, callback);
+	}
+
+	public void OlympicGet(int dungeonId, TFServer.JsonResponseHandler callback)
+	{
+		tfServer.PostToJSON(SQSettings.SERVER_URL + "persist/olympic_getDW/",
+			new Dictionary<string, object> { { "id", dungeonId } }, callback);
+	}
+
+	public void OlympicGetLocks(TFServer.JsonResponseHandler callback)
+	{
+		tfServer.PostToJSON(SQSettings.SERVER_URL + "persist/olympic_locksDW/",
+			new Dictionary<string, object>(), callback);
+	}
+
+	public void OlympicGetBalance(TFServer.JsonResponseHandler callback)
+	{
+		tfServer.PostToJSON(SQSettings.SERVER_URL + "persist/olympic_balanceDW/",
+			new Dictionary<string, object>(), delegate(Dictionary<string, object> response, HttpStatusCode status)
+		{
+			ApplyOlympicBalance(response, status, callback);
+		});
+	}
+
+	public void OlympicCreate(string requestId, string name, string leaderId, int expectedCost, List<int> creatures,
+		List<Dictionary<string, object>> rewards, TFServer.JsonResponseHandler callback)
+	{
+		OlympicSave("olympic_createDW", requestId, 0, name, leaderId, expectedCost, creatures, rewards, callback);
+	}
+
+	public void OlympicCreateStatus(string requestId, TFServer.JsonResponseHandler callback)
+	{
+		PlayerInfoScript player = Singleton<PlayerInfoScript>.Instance;
+		if (player == null || PlayerInfoScript.SaveBlocked || PlayerInfoScript.DeviceLocked || PlayerInfoScript.SessionMoved)
+		{
+			callback(new Dictionary<string, object> { { "success", false }, { "error", "Player save is unavailable." } }, HttpStatusCode.ServiceUnavailable);
+			return;
+		}
+		string playerCode = player.GetPlayerCode();
+		tfServer.PostToJSON(SQSettings.SERVER_URL + "persist/olympic_create_statusDW/",
+			new Dictionary<string, object> { { "request_id", requestId } },
+			delegate(Dictionary<string, object> response, HttpStatusCode status)
+		{
+			if (Singleton<PlayerInfoScript>.Instance != player || player.GetPlayerCode() != playerCode)
+			{
+				callback(new Dictionary<string, object> { { "success", false }, { "error", "Player session changed." } }, HttpStatusCode.ServiceUnavailable);
+				return;
+			}
+			object dataValue;
+			object found;
+			object success;
+			Dictionary<string, object> data = response != null && response.TryGetValue("data", out dataValue)
+				? dataValue as Dictionary<string, object> : null;
+			if (status != HttpStatusCode.OK || response == null || !response.TryGetValue("success", out success) ||
+				!(success is bool) || !(bool)success)
+			{
+				callback(response, status);
+				return;
+			}
+			if (data == null || !data.TryGetValue("found", out found) || !(found is bool))
+			{
+				Debug.LogError("[Olympic] Invalid create status response.");
+				callback(new Dictionary<string, object> { { "success", false }, { "error", "Invalid create status response." } }, HttpStatusCode.BadGateway);
+				return;
+			}
+			if (!(bool)found)
+			{
+				callback(response, status);
+				return;
+			}
+			ApplyOlympicBalance(response, status, delegate(Dictionary<string, object> result, HttpStatusCode resultStatus)
+			{
+				if (resultStatus != HttpStatusCode.OK)
+				{
+					callback(result, resultStatus);
+					return;
+				}
+				player.Save(delegate(bool saved)
+				{
+					if (!saved)
+					{
+						callback(new Dictionary<string, object> { { "success", false }, { "error", "Could not synchronize the Olympic balance." } }, HttpStatusCode.ServiceUnavailable);
+						return;
+					}
+					callback(result, resultStatus);
+				});
+			});
+		});
+	}
+
+	public void OlympicEdit(string requestId, int dungeonId, string name, List<int> creatures,
+		List<Dictionary<string, object>> rewards, TFServer.JsonResponseHandler callback)
+	{
+		OlympicSave("olympic_editDW", requestId, dungeonId, name, null, 0, creatures, rewards, callback);
+	}
+
+	private void OlympicSave(string endpoint, string requestId, int dungeonId, string name, string leaderId, int expectedCost,
+		List<int> creatures, List<Dictionary<string, object>> rewards, TFServer.JsonResponseHandler callback)
+	{
+		PlayerInfoScript player = Singleton<PlayerInfoScript>.Instance;
+		if (player == null || PlayerInfoScript.SaveBlocked || PlayerInfoScript.DeviceLocked || PlayerInfoScript.SessionMoved)
+		{
+			callback(new Dictionary<string, object> { { "success", false }, { "error", "Player save is unavailable." } }, HttpStatusCode.ServiceUnavailable);
+			return;
+		}
+		string playerCode = player.GetPlayerCode();
+		Dictionary<string, object> data = new Dictionary<string, object>
+		{
+			{ "request_id", requestId },
+			{ "name", name },
+			{ "creatures", MiniJSON.Json.Serialize(creatures) },
+			{ "rewards", MiniJSON.Json.Serialize(rewards) }
+		};
+		if (dungeonId > 0)
+		{
+			data["id"] = dungeonId;
+		}
+		else
+		{
+			data["leader_id"] = leaderId;
+			data["expected_cost"] = expectedCost;
+		}
+		player.Save(delegate(bool saved)
+		{
+			if (Singleton<PlayerInfoScript>.Instance != player || player.GetPlayerCode() != playerCode)
+			{
+				callback(new Dictionary<string, object> { { "success", false }, { "error", "Player session changed." } }, HttpStatusCode.ServiceUnavailable);
+				return;
+			}
+			if (!saved)
+			{
+				callback(new Dictionary<string, object> { { "success", false }, { "error", "Could not save player inventory." } }, HttpStatusCode.ServiceUnavailable);
+				return;
+			}
+			tfServer.PostToJSON(SQSettings.SERVER_URL + "persist/" + endpoint + "/", data,
+				delegate(Dictionary<string, object> response, HttpStatusCode status)
+				{
+					if (Singleton<PlayerInfoScript>.Instance != player || player.GetPlayerCode() != playerCode)
+					{
+						callback(new Dictionary<string, object> { { "success", false }, { "error", "Player session changed." } }, HttpStatusCode.ServiceUnavailable);
+						return;
+					}
+					ApplyOlympicBalance(response, status, delegate(Dictionary<string, object> result, HttpStatusCode resultStatus)
+					{
+						object success;
+						if (resultStatus != HttpStatusCode.OK || result == null ||
+							!result.TryGetValue("success", out success) || !(success is bool) || !(bool)success)
+						{
+							callback(result, resultStatus);
+							return;
+						}
+						player.Save(delegate(bool acknowledged)
+						{
+							if (!acknowledged)
+							{
+								Debug.LogError("[Olympic] Dungeon was saved, but the updated currency balance could not be acknowledged.");
+								callback(new Dictionary<string, object>
+								{
+									{ "success", false },
+									{ "error", "Dungeon saved and charged, but balance synchronization failed. Refresh the Olympic balance before retrying." },
+									{ "data", result["data"] }
+								}, HttpStatusCode.ServiceUnavailable);
+								return;
+							}
+							callback(result, resultStatus);
+						});
+					});
+				});
+		});
+	}
+
+	private static void ApplyOlympicBalance(Dictionary<string, object> response, HttpStatusCode status,
+		TFServer.JsonResponseHandler callback)
+	{
+		if (status == HttpStatusCode.OK && response != null &&
+			response.TryGetValue("success", out object success) && success is bool && (bool)success)
+		{
+			Dictionary<string, object> data = response.ContainsKey("data") ? response["data"] as Dictionary<string, object> : null;
+			int paid;
+			int free;
+			if (data == null || !data.ContainsKey("paid_hard_currency") || !data.ContainsKey("free_hard_currency") ||
+				!int.TryParse(Convert.ToString(data["paid_hard_currency"]), out paid) ||
+				!int.TryParse(Convert.ToString(data["free_hard_currency"]), out free) || paid < 0 || free < 0)
+			{
+				Debug.LogError("[Olympic] Server returned an invalid currency balance.");
+				callback(new Dictionary<string, object> { { "success", false }, { "error", "Invalid Olympic currency balance." } }, HttpStatusCode.BadGateway);
+				return;
+			}
+			Singleton<PlayerInfoScript>.Instance.SaveData.ManualSetHardCurrency(paid, free);
+		}
+		callback(response, status);
+	}
+
+	public void OlympicDelete(string requestId, int dungeonId, TFServer.JsonResponseHandler callback)
+	{
+		tfServer.PostToJSON(SQSettings.SERVER_URL + "persist/olympic_deleteDW/",
+			new Dictionary<string, object> { { "request_id", requestId }, { "id", dungeonId } }, callback);
+	}
+
 	public void TradeSync(TFServer.JsonResponseHandler callback)
 	{
 		Dictionary<string, object> dictionary = new Dictionary<string, object>();

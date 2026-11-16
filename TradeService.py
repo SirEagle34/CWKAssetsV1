@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""SQServer-compatible trade endpoints for Card Wars Kingdom.
-
-Trade state is kept in a dedicated SQLite database. Player saves remain in the
-existing Primary / LocalInstance databases and are changed by the game's
-trade_syncDW response, matching TradePanelController.SyncTradeChanges().
-"""
 import json
 import os
 import sqlite3
@@ -17,18 +10,33 @@ from flask import jsonify, request
 
 _TRADE_LOCK = threading.RLock()
 _TRADE_PACKS = {
-    100: {"gems": 7000, "coins": 700000},
-    500: {"gems": 21500, "coins": 2500000},
-    1000: {"gems": 40000, "coins": 4500000},
+    100: {"gems": 2500, "coins": 700000},
+    500: {"gems": 10000, "coins": 2500000},
+    1000: {"gems": 17500, "coins": 4500000},
 }
 
 
 def register_trade_routes(app, db, Player, decrypt_game_data,
                           decode_game_save, encode_game_save,
-                          local_has_player, local_db_path,
+                          local_db_path,
                           is_user_banned=None, is_test_version_blocked=None,
                           ip_from_request=None):
     """Register the trade endpoints called by SQServer.cs."""
+
+    blueprint_dir = os.path.join(app.root_path, "data", "persist", "blueprints")
+    with open(os.path.join(blueprint_dir, "db_PlayerRank.json"), encoding="utf-8") as file:
+        ranks = json.load(file)
+    trade_unlocks = [rank for rank in ranks
+                     if rank.get("Unlock") == "Building" and rank.get("UnlockId") == "TBuilding_Trade"]
+    if len(trade_unlocks) != 1:
+        raise ValueError("Expected exactly one TBuilding_Trade rank unlock")
+    trade_level = int(trade_unlocks[0]["Rank"])
+    with open(os.path.join(blueprint_dir, "db_XPTables.json"), encoding="utf-8") as file:
+        xp_table = json.load(file)
+    thresholds = [int(row["PlayerRank"]) for row in xp_table if int(row["Level"]) == trade_level]
+    if len(thresholds) != 1 or thresholds[0] < 0:
+        raise ValueError("Missing or invalid Trade unlock XP threshold")
+    trade_unlock_xp = thresholds[0]
 
     def _trade_db_path():
         path = os.path.join(app.root_path, "data", "persist", "trade.sqlite3")
@@ -91,6 +99,15 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
                     updated_at INTEGER NOT NULL,
                     PRIMARY KEY(player_id, unique_id)
                 );
+                CREATE TABLE IF NOT EXISTS olympic_creatures (
+                    dungeon_id INTEGER NOT NULL,
+                    owner_id TEXT NOT NULL,
+                    slot INTEGER NOT NULL,
+                    unique_id INTEGER NOT NULL,
+                    PRIMARY KEY(dungeon_id, slot)
+                );
+                CREATE INDEX IF NOT EXISTS idx_olympic_creature_owner
+                    ON olympic_creatures(owner_id, unique_id);
             """)
         finally:
             conn.close()
@@ -113,53 +130,76 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
                 for key, values in parsed.items()}
 
     def _current_player():
-        player_id = _normal_id(request.headers.get("Player-Id"))
+        raw_player_id = (request.headers.get("Player-Id") or "").strip()
+        player_id = _normal_id(raw_player_id)
         if not player_id:
             return "", None, (jsonify({"success": False, "error": "player_id required"}), 401)
         if app.config.get("TRADE_REQUIRE_GAME_HEADERS", True):
             if request.headers.get("User-Agent") != "Innertube Explorer v0.1":
                 return "", None, (jsonify({"success": False, "error": "invalid game client"}), 403)
-            if any(not request.headers.get(name) for name in ("Age", "Platform", "Version")):
+            if any(not request.headers.get(name) for name in ("Platform", "Version")):
                 return "", None, (jsonify({"success": False, "error": "missing required game headers"}), 400)
-        if is_user_banned and is_user_banned(player_id, ip_from_request(request) if ip_from_request else request.remote_addr):
+        if is_user_banned and is_user_banned(raw_player_id, ip_from_request(request) if ip_from_request else request.remote_addr):
             return "", None, (jsonify({"success": False, "error": "user banned"}), 403)
-        if is_test_version_blocked and is_test_version_blocked(request.headers.get("Version"), player_id):
+        if is_test_version_blocked and is_test_version_blocked(request.headers.get("Version"), raw_player_id):
             return "", None, (jsonify({"success": False, "error": "update the game"}), 403)
-        return player_id, _load_player(player_id), None
+        player = _load_player(player_id)
+        if player is not None and player["username"] != raw_player_id:
+            return "", None, (jsonify({"success": False, "error": "player not found"}), 404)
+        if player is not None and request.endpoint != "TradeSyncDW":
+            rank_xp = _int(player["save"].get("RankXP"), None, 0)
+            if rank_xp is None:
+                app.logger.warning("[Trade] Invalid RankXP for player %s", player_id)
+                return "", None, (jsonify({"success": False, "error": "invalid player rank"}), 403)
+            if rank_xp < trade_unlock_xp:
+                return "", None, (jsonify({"success": False, "error": "trade unlocks at level %s" % trade_level}), 403)
+        return player_id, player, None
 
-    def _player_db_path(player_id):
-        try:
-            if local_has_player(player_id):
-                path = local_db_path()
-                if path and os.path.isfile(path):
-                    return path
-        except Exception:
-            app.logger.exception("[Trade] LocalInstance lookup failed for %s", player_id)
+    class AmbiguousTradeIdentity(Exception):
+        pass
+
+    @app.errorhandler(AmbiguousTradeIdentity)
+    def _ambiguous_trade_identity(error):
+        app.logger.error("[Trade] Multiple accounts map to the same trade identity: %s", error)
+        return jsonify({"success": False, "error": "ambiguous trade player identity"}), 409
+
+    def _player_db_paths():
         database = db.engine.url.database
         if not database:
             raise RuntimeError("Primary player database path is unavailable")
         if not os.path.isabs(database):
             database = os.path.join(app.instance_path, database)
-        return database
+        local = local_db_path()
+        paths = []
+        for path in (local, database):
+            if path and os.path.isfile(path) and os.path.abspath(path) not in paths:
+                paths.append(os.path.abspath(path))
+        return paths
 
     def _load_player(player_id):
-        path = _player_db_path(player_id)
-        if not os.path.isfile(path):
-            return None
-        conn = sqlite3.connect(path, timeout=15)
-        try:
-            row = conn.execute(
-                'SELECT username, game, multiplayer_name, friends FROM "player" WHERE username = ?',
-                (player_id,)
-            ).fetchone()
-        finally:
-            conn.close()
+        row = None
+        path = None
+        for candidate in _player_db_paths():
+            conn = sqlite3.connect(candidate, timeout=15)
+            try:
+                matches = conn.execute(
+                    """SELECT username, game, multiplayer_name, friends FROM "player"
+                       WHERE replace(username, '-', '_') = ? LIMIT 2""",
+                    (player_id,)
+                ).fetchall()
+            finally:
+                conn.close()
+            for match in matches:
+                if row is not None and row[0] != match[0]:
+                    raise AmbiguousTradeIdentity(player_id)
+                if row is None:
+                    row, path = match, candidate
         if row is None:
             return None
         game_text = row[1]
         save = decrypt_game_data(game_text)
         if not isinstance(save, dict):
-            return None
+            raise ValueError("Trade player save could not be decoded for " + row[0])
         return {
             "username": row[0],
             "game": game_text,
@@ -281,7 +321,7 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
             return None
         return item
 
-    def _reserved(conn, player_id, unique_id):
+    def _reserved(conn, player_id, unique_id, include_olympic=True):
         row = conn.execute(
             "SELECT 1 FROM trade_inventory_delta WHERE player_id=? AND unique_id=? AND action='remove'",
             (player_id, unique_id)
@@ -293,6 +333,11 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
             (player_id, unique_id)
         ).fetchone()
         if row:
+            return True
+        if include_olympic and conn.execute(
+            "SELECT 1 FROM olympic_creatures WHERE owner_id=? AND unique_id=? LIMIT 1",
+            (player_id, unique_id)
+        ).fetchone():
             return True
         # Active offers have already put their give items into the delta table.
         return False
@@ -449,7 +494,8 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
             return _error("player_id mismatch", 403)
         conn = _connect()
         try:
-            return _response({"coins": _wallet(conn, player_id)})
+            balance = _wallet(conn, player_id)
+            return _response({"TradeCurrency": balance, "coins": balance})
         finally:
             conn.close()
 
@@ -516,6 +562,11 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
 
     @app.route("/persist/trade_browseDW/", methods=["POST"])
     def TradeBrowseDW():
+        player_id, player, failure = _current_player()
+        if failure:
+            return failure
+        if player is None:
+            return _error("player not found", 404)
         payload = _request_data()
         start = _int(payload.get("startpos"), 1, 1, 1000000)
         end = _int(payload.get("endpos"), 30, 1, 1000000)
@@ -946,3 +997,13 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
                 conn.close()
 
     app.logger.info("[Trade] Registered SQServer trade endpoints.")
+    return {
+        "connect": _connect,
+        "transaction": _transaction,
+        "current_player": _current_player,
+        "load_player": _load_player,
+        "normal_id": _normal_id,
+        "request_data": _request_data,
+        "reserved": _reserved,
+        "lock": _TRADE_LOCK,
+    }
