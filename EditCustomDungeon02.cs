@@ -19,8 +19,7 @@ public class EditCustomDungeon02 : MonoBehaviour
     [Header("Current Quests")]
     public UIStreamingGrid QuestGrid;
     public UIScrollView QuestScrollView;
-    public GameObject QuestTilePrefab;
-    public UILabel CurrentQuestsTitle;
+    public GameObject EditQuestTilePrefab;
     public UILabel QuestStatus;
 
     [Header("Creature selection")]
@@ -118,7 +117,6 @@ public class EditCustomDungeon02 : MonoBehaviour
         }
 
         Panel.SetActive(true);
-        if (CurrentQuestsTitle != null) CurrentQuestsTitle.text = "Current Quests";
         IsSelectingQuest = true;
         mEditing = null;
         if (CurrentQuestsPanel != null) CurrentQuestsPanel.SetActive(true);
@@ -138,7 +136,7 @@ public class EditCustomDungeon02 : MonoBehaviour
         bool valid = Panel != null && CurrentQuestsPanel != null && EditorPanel != null &&
             QuestGrid != null && QuestScrollView != null && questParent == QuestScrollView &&
             QuestScrollView.movement == UIScrollView.Movement.Vertical &&
-            QuestTilePrefab != null && QuestTilePrefab.GetComponent<QuestSelectQuest>() != null &&
+            EditQuestTilePrefab != null && EditQuestTilePrefab.GetComponent<EditQuestTile>() != null &&
             QuestGrid.cellWidth > 0f && QuestGrid.cellHeight > 0f &&
             CreatureGrid != null && CreatureScrollView != null && creatureParent == CreatureScrollView &&
             CreatureScrollView.movement == UIScrollView.Movement.Vertical &&
@@ -195,7 +193,7 @@ public class EditCustomDungeon02 : MonoBehaviour
         if (index >= ids.Count)
         {
             SetQuestStatus(mEntries.Count == 0 ? "No current quests." : string.Empty);
-            if (mEntries.Count > 0) mQuestData.Init(QuestGrid, QuestTilePrefab, mEntries, true);
+            if (mEntries.Count > 0) mQuestData.Init(QuestGrid, EditQuestTilePrefab, mEntries, true);
             return;
         }
 
@@ -282,6 +280,7 @@ public class EditCustomDungeon02 : MonoBehaviour
     {
         if (!IsSelectingQuest || mBusy || entry == null || entry.Controller != mReturnController) return;
         mEditing = entry;
+        mQuestData.RepopulateObjects();
         IsSelectingQuest = true;
         if (CurrentQuestsPanel != null) CurrentQuestsPanel.SetActive(true);
         if (EditorPanel != null) EditorPanel.SetActive(true);
@@ -689,8 +688,9 @@ public class EditCustomDungeon02 : MonoBehaviour
             ? Convert.ToString(error) : "The server could not complete the request.";
     }
 
-    private static void ShowMessage(string message)
+    private void ShowMessage(string message)
     {
-        Singleton<SimplePopupController>.Instance.ShowMessage("Olympic Dungeon", message);
+        Debug.LogWarning("[Olympic Edit02] " + message);
+        if (QuestStatus != null) QuestStatus.text = message;
     }
 }
