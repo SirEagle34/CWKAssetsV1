@@ -160,7 +160,7 @@ def register_olympic_routes(app, trade, decode_game_save, encode_game_save):
                 raise ValueError("Invalid or duplicate reward type")
             seen.add(kind)
             amount = integer(item.get("amount"), 1)
-            if (edit and amount % edit_prices[kind][0]) or (not edit and amount not in prices[kind]):
+            if (edit and amount % edit_prices[kind][0] and not (kind == "pvp" and amount == 250)) or (not edit and amount not in prices[kind]):
                 raise ValueError("Invalid reward amount")
             item_id = item.get("item_id", "")
             valid_ids = {"cake": cakes, "shard": shards, "key": keys}
@@ -240,8 +240,11 @@ def register_olympic_routes(app, trade, decode_game_save, encode_game_save):
         total = 0
         for row in rewards:
             unit, price = edit_prices[row["type"]]
-            amount = max(0, row["amount"] - old.get((row["type"], row["item_id"]), 0))
-            total += amount // unit * price
+            amount = row["amount"]
+            old_amount = old.get((row["type"], row["item_id"]), 0)
+            new_units = (amount + unit - 1) // unit
+            old_units = (old_amount + unit - 1) // unit
+            total += max(0, new_units - old_units) * price
         return total
 
     def payload():
@@ -341,8 +344,6 @@ def register_olympic_routes(app, trade, decode_game_save, encode_game_save):
                             conn.rollback()
                             return fail("Dungeon not found", 404)
                         old_rewards = json.loads(row["rewards"])
-                        if any(row["amount"] % edit_prices[row["type"]][0] for row in old_rewards):
-                            raise ValueError("Editing this quest is not available yet")
                     owned = {
                         integer(item.get("UniqueID"), 1): item
                         for item in inventory(save)
