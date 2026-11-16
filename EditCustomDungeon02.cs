@@ -12,10 +12,6 @@ public class EditCustomDungeon02 : MonoBehaviour
     public GameObject Panel;
     public GameObject CurrentQuestsPanel;
     public GameObject EditorPanel;
-    public GameObject SaveConfirmPopup;
-    public GameObject RemoveConfirmPopup;
-    public UILabel SavePopupMessage;
-    public UILabel RemovePopupMessage;
 
     [Header("Current Quests")]
     public UIStreamingGrid QuestGrid;
@@ -518,19 +514,13 @@ public class EditCustomDungeon02 : MonoBehaviour
             ShowMessage("Choose exactly 12 creatures and enter a valid quest name (1-60 characters).");
             return;
         }
-        if (SaveConfirmPopup == null)
+        SimplePopupController popup = Singleton<SimplePopupController>.Instance;
+        if (popup == null)
         {
-            ShowMessage("Assign the Save Confirm popup in the Inspector.");
+            Debug.LogError("[Olympic Edit02] SimplePopupController is unavailable.");
             return;
         }
-        if (SavePopupMessage != null) SavePopupMessage.text = "Save changes to " + name + "?";
-        SaveConfirmPopup.SetActive(true);
-    }
-
-    public void OnClickConfirmAccepted()
-    {
-        if (SaveConfirmPopup != null) SaveConfirmPopup.SetActive(false);
-        SaveChanges();
+        popup.ShowMessage("Olympic Dungeon", "Save changes to " + name + "?", SaveChanges);
     }
 
     private void SaveChanges()
@@ -582,18 +572,17 @@ public class EditCustomDungeon02 : MonoBehaviour
     public void OnClickRemove()
     {
         if (mBusy || mEditing == null) return;
-        if (RemoveConfirmPopup == null)
+        SimplePopupController popup = Singleton<SimplePopupController>.Instance;
+        if (popup == null)
         {
-            ShowMessage("Assign the Remove Confirm popup in the Inspector.");
+            Debug.LogError("[Olympic Edit02] SimplePopupController is unavailable.");
             return;
         }
-        if (RemovePopupMessage != null) RemovePopupMessage.text = "Permanently remove " + mEditing.Name + "?";
-        RemoveConfirmPopup.SetActive(true);
+        popup.ShowMessage("Olympic Dungeon", "Permanently remove " + mEditing.Name + "?", DeleteSelectedQuest);
     }
 
-    public void OnClickRemoveAccepted()
+    private void DeleteSelectedQuest()
     {
-        if (RemoveConfirmPopup != null) RemoveConfirmPopup.SetActive(false);
         if (mBusy || mEditing == null) return;
         string playerCode = Singleton<PlayerInfoScript>.Instance.GetPlayerCode();
         int id = mEditing.Id;
@@ -612,12 +601,6 @@ public class EditCustomDungeon02 : MonoBehaviour
             }
             else ShowMessage(ReadError(response));
         });
-    }
-
-    public void OnClickCancelPopup()
-    {
-        if (SaveConfirmPopup != null) SaveConfirmPopup.SetActive(false);
-        if (RemoveConfirmPopup != null) RemoveConfirmPopup.SetActive(false);
     }
 
     public void OnClickBack()
@@ -698,5 +681,7 @@ public class EditCustomDungeon02 : MonoBehaviour
     {
         Debug.LogWarning("[Olympic Edit02] " + message);
         if (QuestStatus != null) QuestStatus.text = message;
+        SimplePopupController popup = Singleton<SimplePopupController>.Instance;
+        if (popup != null) popup.ShowMessage("Olympic Dungeon", message);
     }
 }
