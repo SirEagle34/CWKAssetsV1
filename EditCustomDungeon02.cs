@@ -282,8 +282,8 @@ public class EditCustomDungeon02 : MonoBehaviour
     {
         if (!IsSelectingQuest || mBusy || entry == null || entry.Controller != mReturnController) return;
         mEditing = entry;
-        IsSelectingQuest = false;
-        if (CurrentQuestsPanel != null) CurrentQuestsPanel.SetActive(false);
+        IsSelectingQuest = true;
+        if (CurrentQuestsPanel != null) CurrentQuestsPanel.SetActive(true);
         if (EditorPanel != null) EditorPanel.SetActive(true);
         LoadEditor(entry);
     }
