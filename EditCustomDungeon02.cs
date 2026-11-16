@@ -276,6 +276,11 @@ public class EditCustomDungeon02 : MonoBehaviour
         if (QuestStatus != null) QuestStatus.text = value;
     }
 
+    public bool IsQuestSelected(CustomQuestController.QuestEntry entry)
+    {
+        return entry != null && mEditing != null && entry.Id == mEditing.Id;
+    }
+
     public void SelectQuest(CustomQuestController.QuestEntry entry)
     {
         if (!IsSelectingQuest || mBusy || entry == null || entry.Controller != mReturnController) return;
