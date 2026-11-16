@@ -157,7 +157,13 @@ public class EditCustomDungeon02 : MonoBehaviour
         SetQuestStatus("Loading current quests...");
 
         string ownerId = Singleton<PlayerInfoScript>.Instance.GetPlayerCode();
-        Server.OlympicQuests(ownerId, 0, delegate(Dictionary<string, object> response, HttpStatusCode status)
+        LoadQuestIdPage(ownerId, 0, new List<int>(), request);
+    }
+
+    private void LoadQuestIdPage(string ownerId, int offset, List<int> ids, int request)
+    {
+        if (request != mRequest) return;
+        Server.OlympicQuests(ownerId, offset, delegate(Dictionary<string, object> response, HttpStatusCode status)
         {
             if (this == null || request != mRequest || Panel == null || !Panel.activeInHierarchy) return;
             object data;
@@ -165,7 +171,6 @@ public class EditCustomDungeon02 : MonoBehaviour
             List<object> rows = data as List<object>;
             if (rows == null) { SetQuestStatus("Invalid quest list."); return; }
 
-            List<int> ids = new List<int>();
             foreach (object value in rows)
             {
                 Dictionary<string, object> row = value as Dictionary<string, object>;
@@ -177,7 +182,8 @@ public class EditCustomDungeon02 : MonoBehaviour
                 }
                 ids.Add(id);
             }
-            LoadQuestDetails(ids, 0, request);
+            if (rows.Count == 30) LoadQuestIdPage(ownerId, offset + 30, ids, request);
+            else LoadQuestDetails(ids, 0, request);
         });
     }
 
@@ -670,7 +676,7 @@ public class EditCustomDungeon02 : MonoBehaviour
         object raw;
         value = 0;
         return row != null && row.TryGetValue(key, out raw) &&
-            row.TryGetValue(key, out raw) && int.TryParse(Convert.ToString(raw), out value);
+            int.TryParse(Convert.ToString(raw), out value);
     }
 
     private static string ReadError(Dictionary<string, object> response)
