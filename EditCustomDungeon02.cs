@@ -329,6 +329,7 @@ public class EditCustomDungeon02 : MonoBehaviour
                 }
             }
         }
+        mCreatureData.Clear();
         BuildCreatureGrid();
         RefreshSelection();
         RefreshLeader();
