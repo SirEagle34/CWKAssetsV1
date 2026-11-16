@@ -130,6 +130,8 @@ public class CustomQuestController : MonoBehaviour
 		{
 			if (StatusLabel != null) StatusLabel.text = "The existing quest editor is not configured.";
 			Debug.LogError("[Olympic] The existing quest editor is not configured.");
+			SimplePopupController popup = Singleton<SimplePopupController>.Instance;
+			if (popup != null) popup.ShowMessage("Olympic Dungeon", "The existing quest editor is not configured.");
 			return;
 		}
 		if (EditDungeon02.ShowFrom(this))
