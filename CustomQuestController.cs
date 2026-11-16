@@ -58,6 +58,8 @@ public class CustomQuestController : MonoBehaviour
 	public UILabel RewardsLabel;
 	public CustomPreMatchController PreMatch;
 	public EditCustomDungeon EditDungeon;
+	public EditCustomDungeon02 EditDungeon02;
+	private bool mEditingExistingDungeon02;
 
 	private readonly UIStreamingGridDataSource<LeagueEntry> mLeagueData = new UIStreamingGridDataSource<LeagueEntry>();
 	private readonly UIStreamingGridDataSource<QuestEntry> mQuestData = new UIStreamingGridDataSource<QuestEntry>();
@@ -119,6 +121,35 @@ public class CustomQuestController : MonoBehaviour
 			mRequest++;
 			gameObject.SetActive(false);
 		}
+	}
+
+	public void OnClickEditCustomDungeon02()
+	{
+		if (!mIsOpen || mTransitioning || mEditingDungeon) return;
+		if (EditDungeon02 == null)
+		{
+			Singleton<SimplePopupController>.Instance.ShowMessage("Olympic Dungeon", "The existing quest editor is not configured.");
+			return;
+		}
+		if (EditDungeon02.ShowFrom(this))
+		{
+			mEditingDungeon = true;
+			mEditingExistingDungeon02 = true;
+			mRequest++;
+			gameObject.SetActive(false);
+		}
+	}
+
+	internal void OnEditCustomDungeon02Closed()
+	{
+		if (!mEditingExistingDungeon02) return;
+		mEditingExistingDungeon02 = false;
+		mEditingDungeon = false;
+		if (!mIsOpen) return;
+		gameObject.SetActive(true);
+		mShowingQuest = false;
+		mOffset = 0;
+		ShowList();
 	}
 
 	internal void OnEditCustomDungeonClosed(bool created)
@@ -685,6 +716,11 @@ public class CustomQuestController : MonoBehaviour
 	{
 		if (questObject != null)
 		{
+			if (mEditingExistingDungeon02 && EditDungeon02 != null && EditDungeon02.IsSelectingQuest)
+			{
+				EditDungeon02.SelectQuest(questObject.OlympicEntry);
+				return;
+			}
 			ShowPreMatch(questObject.OlympicEntry);
 		}
 	}
