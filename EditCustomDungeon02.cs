@@ -14,7 +14,8 @@ public class EditCustomDungeon02 : MonoBehaviour
     public GameObject EditorPanel;
     public GameObject SaveConfirmPopup;
     public GameObject RemoveConfirmPopup;
-    public UILabel PopupMessage;
+    public UILabel SavePopupMessage;
+    public UILabel RemovePopupMessage;
 
     [Header("Current Quests")]
     public UIStreamingGrid QuestGrid;
@@ -522,7 +523,7 @@ public class EditCustomDungeon02 : MonoBehaviour
             ShowMessage("Assign the Save Confirm popup in the Inspector.");
             return;
         }
-        if (PopupMessage != null) PopupMessage.text = "Save changes to " + name + "?";
+        if (SavePopupMessage != null) SavePopupMessage.text = "Save changes to " + name + "?";
         SaveConfirmPopup.SetActive(true);
     }
 
@@ -586,7 +587,7 @@ public class EditCustomDungeon02 : MonoBehaviour
             ShowMessage("Assign the Remove Confirm popup in the Inspector.");
             return;
         }
-        if (PopupMessage != null) PopupMessage.text = "Permanently remove " + mEditing.Name + "?";
+        if (RemovePopupMessage != null) RemovePopupMessage.text = "Permanently remove " + mEditing.Name + "?";
         RemoveConfirmPopup.SetActive(true);
     }
 
