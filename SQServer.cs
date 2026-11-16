@@ -592,10 +592,10 @@ public class SQServer
 		});
 	}
 
-	public void OlympicEdit(string requestId, int dungeonId, string name, List<int> creatures,
-		List<Dictionary<string, object>> rewards, TFServer.JsonResponseHandler callback)
+	public void OlympicEdit(string requestId, int dungeonId, string name, string leaderId,
+		List<int> creatures, List<Dictionary<string, object>> rewards, TFServer.JsonResponseHandler callback)
 	{
-		OlympicSave("olympic_editDW", requestId, dungeonId, name, null, 0, creatures, rewards, callback);
+		OlympicSave("olympic_editDW", requestId, dungeonId, name, leaderId, 0, creatures, rewards, callback);
 	}
 
 	private void OlympicSave(string endpoint, string requestId, int dungeonId, string name, string leaderId, int expectedCost,
@@ -618,6 +618,7 @@ public class SQServer
 		if (dungeonId > 0)
 		{
 			data["id"] = dungeonId;
+			if (!string.IsNullOrEmpty(leaderId)) data["leader_id"] = leaderId;
 		}
 		else
 		{
