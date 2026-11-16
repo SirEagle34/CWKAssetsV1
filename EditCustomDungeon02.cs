@@ -20,6 +20,7 @@ public class EditCustomDungeon02 : MonoBehaviour
     public UIStreamingGrid QuestGrid;
     public UIScrollView QuestScrollView;
     public GameObject QuestTilePrefab;
+    public UILabel CurrentQuestsTitle;
     public UILabel QuestStatus;
 
     [Header("Creature selection")]
@@ -117,6 +118,7 @@ public class EditCustomDungeon02 : MonoBehaviour
         }
 
         Panel.SetActive(true);
+        if (CurrentQuestsTitle != null) CurrentQuestsTitle.text = "Current Quests";
         IsSelectingQuest = true;
         mEditing = null;
         if (CurrentQuestsPanel != null) CurrentQuestsPanel.SetActive(true);
