@@ -314,11 +314,11 @@ def register_olympic_routes(app, trade, decode_game_save, encode_game_save):
             rewards = reward_list(data.get("rewards"), edit)
             dungeon_id = integer(data.get("id"), 1) if edit else None
             action = "edit" if edit else "create"
-            leader_id = data.get("leader_id") if not edit else None
+            leader_id = data.get("leader_id")
             expected_cost = integer(data.get("expected_cost"), 1) if not edit else None
-            canonical_values = [dungeon_id, name, creatures, rewards]
+            canonical_values = [dungeon_id, name, creatures, rewards, leader_id]
             if not edit:
-                canonical_values.extend([leader_id, expected_cost])
+                canonical_values.append(expected_cost)
             canonical = json.dumps(canonical_values, ensure_ascii=False,
                                    sort_keys=True, separators=(",", ":"))
             with trade["lock"]:
@@ -331,7 +331,7 @@ def register_olympic_routes(app, trade, decode_game_save, encode_game_save):
                         conn.rollback()
                         return success(prior)
                     old_rewards = []
-                    leader = requested_leader(save, leader_id) if not edit else None
+                    leader = requested_leader(save, leader_id)
                     if edit:
                         row = conn.execute(
                             "SELECT rewards FROM olympic_dungeons WHERE id=? AND owner_id=?",
@@ -380,9 +380,11 @@ def register_olympic_routes(app, trade, decode_game_save, encode_game_save):
                     reward_json = json.dumps(rewards, ensure_ascii=False, separators=(",", ":"))
                     if edit:
                         conn.execute(
-                            """UPDATE olympic_dungeons SET name=?, rewards=?, revision=revision+1,
-                               updated_at=? WHERE id=? AND owner_id=?""",
-                            (name, reward_json, now, dungeon_id, owner),
+                            """UPDATE olympic_dungeons
+                               SET name=?, rewards=?, leader_id=?, leader_skin=?,
+                                   revision=revision+1, updated_at=?
+                               WHERE id=? AND owner_id=?""",
+                            (name, reward_json, leader["id"], leader["skin"], now, dungeon_id, owner),
                         )
                         conn.execute("DELETE FROM olympic_creatures WHERE dungeon_id=?", (dungeon_id,))
                     else:
