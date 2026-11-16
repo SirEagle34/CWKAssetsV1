@@ -9,7 +9,7 @@ The new editor is in `EditCustomDungeon02.cs`. The existing create screen `EditC
 3. Add a UI button for opening the existing-quest editor and bind it to
    `CustomQuestController.OnClickEditCustomDungeon02`.
 
-The editor root and its Panel must be outside the `CustomQuestController` hierarchy. The editor uses the existing `QuestSelectQuest` prefab and its `OnQuestClicked` event; do not replace that event.
+The editor root and its Panel must be outside the `CustomQuestController` hierarchy. The editor uses its own minimal `EditQuestTile` prefab. It does not use `QuestSelectQuest` or `SimplePopupController`.
 
 ## EditCustomDungeon02 Inspector references
 
@@ -17,8 +17,8 @@ The editor root and its Panel must be outside the `CustomQuestController` hierar
 - `Panel`: whole editor panel.
 - `CurrentQuestsPanel`: left quest list area.
 - `EditorPanel`: creature, hero, reward and rename area.
-- `SaveConfirmPopup`, `RemoveConfirmPopup`: separate confirmation popups.
-- `PopupMessage`: optional UILabel inside the active popup.
+- `SaveConfirmPopup`, `RemoveConfirmPopup`: separate confirmation popup GameObjects. Their confirm buttons call the matching accepted method; cancel buttons call `OnClickCancelPopup`.
+- `PopupMessage`: optional UILabel used to display the confirmation text in the active popup. The editor does not require `SimplePopupController`.
 
 ### Current Quests
 - `QuestGrid`: vertical UIStreamingGrid for quest tiles.
