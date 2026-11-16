@@ -18,7 +18,7 @@ The editor root and its Panel must be outside the `CustomQuestController` hierar
 - `CurrentQuestsPanel`: left quest list area.
 - `EditorPanel`: creature, hero, reward and rename area.
 - `SaveConfirmPopup`, `RemoveConfirmPopup`: separate confirmation popup GameObjects. Their confirm buttons call the matching accepted method; cancel buttons call `OnClickCancelPopup`.
-- `PopupMessage`: optional UILabel used to display the confirmation text in the active popup. The editor does not require `SimplePopupController`.
+- `SavePopupMessage` and `RemovePopupMessage`: each points to the UILabel inside its matching confirmation popup. The editor does not require `SimplePopupController`.
 
 ### Current Quests
 - `QuestGrid`: vertical UIStreamingGrid for quest tiles.
