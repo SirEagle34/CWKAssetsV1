@@ -23,9 +23,8 @@ The editor root and its Panel must be outside the `CustomQuestController` hierar
 ### Current Quests
 - `QuestGrid`: vertical UIStreamingGrid for quest tiles.
 - `QuestScrollView`: the UIScrollView containing QuestGrid; movement must be Vertical.
-- `QuestTilePrefab`: existing prefab with QuestSelectQuest and its OnQuestClicked event.
-- `CurrentQuestsTitle`: optional header UILabel; set to **Current Quests**.
-- `QuestStatus`: optional loading / empty / error UILabel.
+- `EditQuestTilePrefab`: prefab with `EditQuestTile`; it has only `SelectedLabel` (GameObject) and `QuestName` (UILabel). Bind its click event to `EditQuestTile.OnClick`.
+- `QuestStatus`: UILabel for loading, empty, and validation/error messages.
 
 ### Creatures
 - `CreatureGrid`: vertical UIStreamingGrid.
