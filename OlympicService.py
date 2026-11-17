@@ -647,9 +647,6 @@ def register_olympic_routes(app, trade, decode_game_save, encode_game_save):
             return fail("player not found", 404)
         payload = trade["request_data"]()
         dungeon_id = integer(payload.get("id"), 1)
-        amount = integer(payload.get("amount"), 1)
-        if amount > 1000000000:
-            return fail("trade reward amount is too large")
         with trade["lock"]:
             conn = trade["transaction"]()
             try:
@@ -662,11 +659,24 @@ def register_olympic_routes(app, trade, decode_game_save, encode_game_save):
                     )
                 """)
                 dungeon = conn.execute(
-                    "SELECT id FROM olympic_dungeons WHERE id=?", (dungeon_id,)
+                    "SELECT rewards FROM olympic_dungeons WHERE id=?", (dungeon_id,)
                 ).fetchone()
                 if dungeon is None:
                     conn.rollback()
                     return fail("Dungeon not found", 404)
+
+                rewards = json.loads(dungeon["rewards"])
+                if not isinstance(rewards, list):
+                    conn.rollback()
+                    return fail("Dungeon rewards are invalid", 409)
+                amount = 0
+                for reward in rewards:
+                    if isinstance(reward, dict) and reward.get("type") == "trade":
+                        amount += integer(reward.get("amount"), 1)
+                if amount <= 0 or amount > 1000000000:
+                    conn.rollback()
+                    return fail("Dungeon has no valid trade reward", 409)
+
                 cursor = conn.execute(
                     """INSERT OR IGNORE INTO olympic_reward_claims
                        (player_id, dungeon_id, claimed_at) VALUES (?, ?, ?)""",
