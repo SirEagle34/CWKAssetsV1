@@ -122,15 +122,12 @@ public static class OlympicBattleData
 		{
 			bool requestDone = false;
 			bool requestSucceeded = false;
-			Dictionary<string, object> responseData = null;
 			HttpStatusCode responseStatus = HttpStatusCode.ServiceUnavailable;
 
 			SessionManager.Instance.theSession.Server.OlympicClaimTradeReward(
 				dungeon.Id,
-				tradeAmount,
 				delegate(Dictionary<string, object> response, HttpStatusCode status)
 				{
-					responseData = response;
 					responseStatus = status;
 					object successValue;
 					requestSucceeded = status == HttpStatusCode.OK && response != null &&
