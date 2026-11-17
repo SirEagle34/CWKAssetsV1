@@ -231,6 +231,7 @@ public class BattleResultsController : Singleton<BattleResultsController>
 
 	public void ShowVictory()
 	{
+		if (OlympicBattleData.IsActive) OlympicBattleData.MarkVictory();
 		Singleton<SLOTAudioManager>.Instance.StopSound("SFX_BoardAmb_Badlands");
 		Singleton<SLOTAudioManager>.Instance.StopSound("SFX_BoardAmb_CandyKingdom");
 		Singleton<SLOTAudioManager>.Instance.StopSound("SFX_BoardAmb_FireKingdom");
@@ -271,7 +272,9 @@ public class BattleResultsController : Singleton<BattleResultsController>
 		mCurrentRewardAmounts[2] = saveData.PvPCurrency;
 		mCurrentRewardAmounts[3] = saveData.HardCurrency;
 		mCurrentRewardAmounts[0] = saveData.RankXP;
-		mQuestRewards = RewardManager.AccumulateRewards(true);
+		mQuestRewards = OlympicBattleData.IsActive
+			? new RewardManager.QuestRewards()
+			: RewardManager.AccumulateRewards(true);
 		mAmountsToGive[1] = mQuestRewards.SoftCurrency;
 		mAmountsToGive[2] = mQuestRewards.SocialCurrency;
 		mAmountsToGive[3] = mQuestRewards.HardCurrency;

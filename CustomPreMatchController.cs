@@ -30,6 +30,7 @@ public class CustomPreMatchController : MonoBehaviour
 	private readonly List<GameObject> mRewardTiles = new List<GameObject>();
 	private CustomQuestController.QuestEntry mDungeon;
 	private bool mShowingPortrait;
+	private bool mStartingBattle;
 
 	public bool Show(CustomQuestController.QuestEntry dungeon)
 	{
@@ -231,7 +232,57 @@ public class CustomPreMatchController : MonoBehaviour
 
 	public void OnClickPlay()
 	{
-		Singleton<SimplePopupController>.Instance.ShowMessage("Olympic Dungeon", "Olympic battles are not available yet.");
+		if (mDungeon == null || mStartingBattle) return;
+
+		PlayerInfoScript player = Singleton<PlayerInfoScript>.Instance;
+		Loadout loadout = player != null ? player.GetCurrentLoadout() : null;
+		if (player == null || loadout == null || loadout.Leader == null ||
+			loadout.CreatureSet == null || !loadout.IsUsable() ||
+			mDungeon.OwnerLeader == null || mDungeon.Creatures == null || mDungeon.Creatures.Count != 12)
+		{
+			Singleton<SimplePopupController>.Instance.ShowMessage("Olympic Dungeon", "The player or opponent team is incomplete.");
+			return;
+		}
+
+		if (loadout.GetTeamCost() > player.RankData.TeamCost)
+		{
+			Singleton<SimplePopupController>.Instance.ShowMessage(string.Empty, KFFLocalization.Get("!!EXCEEDS_WEIGHT"));
+			return;
+		}
+
+		QuestData safeQuest = QuestDataManager.Instance.GetData(0);
+		if (safeQuest == null)
+		{
+			Singleton<SimplePopupController>.Instance.ShowMessage("Olympic Dungeon", "The battle configuration is unavailable.");
+			return;
+		}
+
+		GameStateData stateData = player.StateData;
+		stateData.MultiplayerMode = false;
+		stateData.SelectedHelper = null;
+		stateData.CurrentActiveQuest = safeQuest;
+		stateData.CurrentLoadout = loadout.Copy();
+		stateData.ActiveQuestBonus = QuestBonusType.None;
+
+		OlympicBattleData.Begin(mDungeon);
+		mStartingBattle = true;
+		UICamera.LockInput();
+		if (Panel != null) Panel.SetActive(false);
+		StartCoroutine(PlayOlympicBattle());
+	}
+
+	private IEnumerator PlayOlympicBattle()
+	{
+		if (Singleton<FrontEndPIPController>.Instance != null)
+		{
+			Singleton<FrontEndPIPController>.Instance.PlayBattleStartAnim();
+			yield return new WaitForSeconds(2.5f);
+		}
+
+		Singleton<ScreenFadeController>.Instance.ShowLoadScreen(delegate
+		{
+			DetachedSingleton<SceneFlowManager>.Instance.LoadBattleScene();
+		});
 	}
 
 	public void OnClickAddHelper()
@@ -248,6 +299,7 @@ public class CustomPreMatchController : MonoBehaviour
 
 	public void Unload()
 	{
+		mStartingBattle = false;
 		ClearTiles(mMyTiles);
 		ClearTiles(mEnemyTiles);
 		ClearTiles(mRewardTiles);

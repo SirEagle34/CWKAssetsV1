@@ -638,5 +638,70 @@ def register_olympic_routes(app, trade, decode_game_save, encode_game_save):
         except ValueError as error:
             return fail(str(error))
 
+    @app.route("/persist/olympic_reward_claimDW/", methods=["POST"])
+    def OlympicRewardClaimDW():
+        player_id, player, failure = trade["current_player"]()
+        if failure:
+            return failure
+        if player is None:
+            return fail("player not found", 404)
+        try:
+            if integer(player["save"].get("RankXP")) < rank_threshold:
+                return fail("Olympic unlocks at level 70", 403)
+        except ValueError as error:
+            return fail(str(error))
+        payload = trade["request_data"]()
+        dungeon_id = integer(payload.get("id"), 1)
+        with trade["lock"]:
+            conn = trade["transaction"]()
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS olympic_reward_claims (
+                        player_id TEXT NOT NULL,
+                        dungeon_id INTEGER NOT NULL,
+                        claimed_at INTEGER NOT NULL,
+                        PRIMARY KEY(player_id, dungeon_id)
+                    )
+                """)
+                dungeon = conn.execute(
+                    "SELECT rewards FROM olympic_dungeons WHERE id=?", (dungeon_id,)
+                ).fetchone()
+                if dungeon is None:
+                    conn.rollback()
+                    return fail("Dungeon not found", 404)
+
+                rewards = json.loads(dungeon["rewards"])
+                if not isinstance(rewards, list):
+                    conn.rollback()
+                    return fail("Dungeon rewards are invalid", 409)
+                amount = 0
+                for reward in rewards:
+                    if isinstance(reward, dict) and reward.get("type") == "trade":
+                        amount += integer(reward.get("amount"), 1)
+                if amount <= 0 or amount > 1000000000:
+                    conn.rollback()
+                    return fail("Dungeon has no valid trade reward", 409)
+
+                cursor = conn.execute(
+                    """INSERT OR IGNORE INTO olympic_reward_claims
+                       (player_id, dungeon_id, claimed_at) VALUES (?, ?, ?)""",
+                    (player_id, dungeon_id, int(time.time())),
+                )
+                if cursor.rowcount == 1:
+                    trade["add_wallet"](conn, player_id, amount)
+                balance = trade["wallet"](conn, player_id)
+                conn.commit()
+                return success({
+                    "dungeon_id": dungeon_id,
+                    "trade_currency": balance,
+                    "already_claimed": cursor.rowcount != 1,
+                })
+            except Exception:
+                conn.rollback()
+                app.logger.exception("[Olympic] Trade reward claim failed")
+                return fail("internal: reward claim failed", 500)
+            finally:
+                conn.close()
+
     app.logger.info("[Olympic] Registered dungeon endpoints")
 
