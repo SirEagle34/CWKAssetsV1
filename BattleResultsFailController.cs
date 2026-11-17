@@ -98,7 +98,6 @@ public class BattleResultsFailController : Singleton<BattleResultsFailController
 
 	public void Show()
 	{
-		if (OlympicBattleData.IsActive) OlympicBattleData.Clear();
 		if (Singleton<PlayerInfoScript>.Instance.StateData.MultiplayerMode)
 		{
 			MultiplayerShowTween.Play();
@@ -272,6 +271,12 @@ public class BattleResultsFailController : Singleton<BattleResultsFailController
 
 	public void OnClickReplay()
 	{
+		if (OlympicBattleData.IsActive)
+		{
+			DetachedSingleton<SceneFlowManager>.Instance.LoadBattleScene();
+			return;
+		}
+
 		QuestData currentActiveQuest = Singleton<PlayerInfoScript>.Instance.StateData.CurrentActiveQuest;
 		if (DetachedSingleton<StaminaManager>.Instance.GetStamina(StaminaType.Quests) < currentActiveQuest.StaminaCost)
 		{
@@ -304,6 +309,7 @@ public class BattleResultsFailController : Singleton<BattleResultsFailController
 
 	public void GoToMap()
 	{
+		if (OlympicBattleData.IsActive) OlympicBattleData.Clear();
 		Singleton<SLOTMusic>.Instance.StopMusic(0.5f);
 		Singleton<ScreenFadeController>.Instance.ShowLoadScreen(delegate
 		{
@@ -313,6 +319,7 @@ public class BattleResultsFailController : Singleton<BattleResultsFailController
 
 	public void OnClickTown()
 	{
+		if (OlympicBattleData.IsActive) OlympicBattleData.Clear();
 		Singleton<SLOTMusic>.Instance.StopMusic(0.5f);
 		Singleton<ScreenFadeController>.Instance.ShowLoadScreen(delegate
 		{
