@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Net;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -102,11 +104,56 @@ public static class OlympicBattleData
 			return;
 		}
 
+		player.StartCoroutine(GrantRewardsCo(player, Dungeon));
+	}
+
+	private static IEnumerator GrantRewardsCo(PlayerInfoScript player, CustomQuestController.QuestEntry dungeon)
+	{
+		int tradeAmount = 0;
+		foreach (CustomQuestController.RewardEntry reward in dungeon.Rewards)
+		{
+			if (reward != null && reward.Type == "trade")
+			{
+				checked { tradeAmount += reward.Amount; }
+			}
+		}
+
+		if (tradeAmount > 0)
+		{
+			bool requestDone = false;
+			bool requestSucceeded = false;
+			Dictionary<string, object> responseData = null;
+			HttpStatusCode responseStatus = HttpStatusCode.ServiceUnavailable;
+
+			SessionManager.Instance.theSession.Server.OlympicClaimTradeReward(
+				dungeon.Id,
+				tradeAmount,
+				delegate(Dictionary<string, object> response, HttpStatusCode status)
+				{
+					responseData = response;
+					responseStatus = status;
+					object successValue;
+					requestSucceeded = status == HttpStatusCode.OK && response != null &&
+						response.TryGetValue("success", out successValue) && successValue is bool && (bool)successValue;
+					requestDone = true;
+				});
+
+			while (!requestDone) yield return null;
+
+			if (!requestSucceeded)
+			{
+				Debug.LogError("[Olympic] Trade reward claim failed: " + responseStatus);
+				Singleton<SimplePopupController>.Instance.ShowMessage(
+					"Olympic Dungeon",
+					"Your trade currency reward could not be claimed. Please try the dungeon again.");
+				Clear();
+				yield break;
+			}
+		}
+
 		try
 		{
-			player.SaveData.ClaimedOlympicDungeonRewards.Add(dungeonId);
-
-			foreach (CustomQuestController.RewardEntry reward in Dungeon.Rewards)
+			foreach (CustomQuestController.RewardEntry reward in dungeon.Rewards)
 			{
 				if (reward == null || reward.Amount <= 0)
 				{
@@ -116,7 +163,6 @@ public static class OlympicBattleData
 				switch (reward.Type)
 				{
 				case "trade":
-					player.SaveData.CustomizationCurrency += reward.Amount;
 					break;
 
 				case "craft":
@@ -165,9 +211,17 @@ public static class OlympicBattleData
 		catch (Exception exception)
 		{
 			Debug.LogError("[Olympic] Reward grant failed: " + exception);
-			player.SaveData.ClaimedOlympicDungeonRewards.Remove(dungeonId);
-			mProcessingResult = false;
-			return;
+			Singleton<SimplePopupController>.Instance.ShowMessage(
+				"Olympic Dungeon",
+				"Some rewards could not be added. Please contact support before replaying this dungeon.");
+			Clear();
+			yield break;
+		}
+
+		int dungeonId = dungeon.Id;
+		if (!player.SaveData.ClaimedOlympicDungeonRewards.Contains(dungeonId))
+		{
+			player.SaveData.ClaimedOlympicDungeonRewards.Add(dungeonId);
 		}
 
 		player.Save(delegate(bool success)
