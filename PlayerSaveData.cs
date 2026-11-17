@@ -322,6 +322,8 @@ public class PlayerSaveData
 
 	private ObscuredInt _CraftCurrency;
 
+	private ObscuredInt _TradeCurrency;
+
 	public CalendarTable ActiveCalendar;
 
 	public DateTime LastOneTimeCalendarDateClaimed;
@@ -333,6 +335,7 @@ public class PlayerSaveData
 	public int FriendInvites;
 
 	public List<string> FBInviteRewards = new List<string>();
+	public List<int> ClaimedOlympicDungeonRewards = new List<int>();
 
 	public List<string> TutorialsDone = new List<string>();
 
@@ -545,6 +548,52 @@ public class PlayerSaveData
 		{
 			_CraftCurrency = value;
 		}
+	}
+
+	public int TradeCurrency
+	{
+		get { return _TradeCurrency; }
+	}
+
+	public void RefreshTradeCurrency(Action<int> onSuccess, Action<string> onError)
+	{
+		SessionManager.Instance.theSession.Server.TradeGetBalance(delegate(Dictionary<string, object> response, HttpStatusCode status)
+		{
+			object success;
+			object dataValue;
+			object balanceValue;
+			int balance;
+			Dictionary<string, object> data = null;
+			if (response != null && response.TryGetValue("data", out dataValue))
+			{
+				data = dataValue as Dictionary<string, object>;
+			}
+			if (status != HttpStatusCode.OK || response == null ||
+				!response.TryGetValue("success", out success) || !(success is bool) || !(bool)success ||
+				data == null ||
+				(!data.TryGetValue("TradeCurrency", out balanceValue) && !data.TryGetValue("coins", out balanceValue)) ||
+				balanceValue == null || !int.TryParse(balanceValue.ToString(), out balance) || balance < 0)
+			{
+				object error;
+				string message = response != null && response.TryGetValue("error", out error) && error != null
+					? TradeErrorText.Friendly(error.ToString())
+					: "Invalid or unavailable TradeCurrency balance response.";
+				if (onError != null)
+				{
+					onError(message);
+				}
+				else
+				{
+					Debug.LogError("[Trade] Could not refresh TradeCurrency: " + message);
+				}
+				return;
+			}
+			_TradeCurrency = balance;
+			if (onSuccess != null)
+			{
+				onSuccess(balance);
+			}
+		});
 	}
 
 	public int EvolutionShards
