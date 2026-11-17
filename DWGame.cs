@@ -195,7 +195,15 @@ public class DWGame : Singleton<DWGame>
 		}
 		if (!instance.StateData.MultiplayerMode)
 		{
-			OpLoadout = BuildOpponentLoadout(currentActiveQuest);
+			OpLoadout = OlympicBattleData.IsActive
+				? OlympicBattleData.BuildOpponentLoadout()
+				: BuildOpponentLoadout(currentActiveQuest);
+
+			if (OpLoadout == null || OpLoadout.Leader == null || !OpLoadout.IsUsable())
+			{
+				Debug.LogError("[Olympic] Opponent loadout could not be created. Battle setup aborted.");
+				return;
+			}
 		}
 		else
 		{
