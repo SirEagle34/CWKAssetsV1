@@ -1005,5 +1005,7 @@ def register_trade_routes(app, db, Player, decrypt_game_data,
         "normal_id": _normal_id,
         "request_data": _request_data,
         "reserved": _reserved,
+        "wallet": _wallet,
+        "add_wallet": _add_wallet,
         "lock": _TRADE_LOCK,
     }
