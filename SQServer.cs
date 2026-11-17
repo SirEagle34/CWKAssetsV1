@@ -511,10 +511,10 @@ public class SQServer
 			new Dictionary<string, object> { { "id", dungeonId } }, callback);
 	}
 
-	public void OlympicClaimTradeReward(int dungeonId, int amount, TFServer.JsonResponseHandler callback)
+	public void OlympicClaimTradeReward(int dungeonId, TFServer.JsonResponseHandler callback)
 	{
 		tfServer.PostToJSON(SQSettings.SERVER_URL + "persist/olympic_reward_claimDW/",
-			new Dictionary<string, object> { { "id", dungeonId }, { "amount", amount } }, callback);
+			new Dictionary<string, object> { { "id", dungeonId } }, callback);
 	}
 
 	public void OlympicGetLocks(TFServer.JsonResponseHandler callback)
