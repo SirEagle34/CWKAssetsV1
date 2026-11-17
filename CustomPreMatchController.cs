@@ -30,6 +30,7 @@ public class CustomPreMatchController : MonoBehaviour
 	private readonly List<GameObject> mRewardTiles = new List<GameObject>();
 	private CustomQuestController.QuestEntry mDungeon;
 	private bool mShowingPortrait;
+	private bool mStartingBattle;
 
 	public bool Show(CustomQuestController.QuestEntry dungeon)
 	{
@@ -231,7 +232,7 @@ public class CustomPreMatchController : MonoBehaviour
 
 	public void OnClickPlay()
 	{
-		if (mDungeon == null) return;
+		if (mDungeon == null || mStartingBattle) return;
 
 		PlayerInfoScript player = Singleton<PlayerInfoScript>.Instance;
 		Loadout loadout = player != null ? player.GetCurrentLoadout() : null;
@@ -258,11 +259,13 @@ public class CustomPreMatchController : MonoBehaviour
 
 		GameStateData stateData = player.StateData;
 		stateData.MultiplayerMode = false;
+		stateData.SelectedHelper = null;
 		stateData.CurrentActiveQuest = safeQuest;
 		stateData.CurrentLoadout = loadout.Copy();
 		stateData.ActiveQuestBonus = QuestBonusType.None;
 
 		OlympicBattleData.Begin(mDungeon);
+		mStartingBattle = true;
 		UICamera.LockInput();
 		if (Panel != null) Panel.SetActive(false);
 		StartCoroutine(PlayOlympicBattle());
@@ -296,6 +299,7 @@ public class CustomPreMatchController : MonoBehaviour
 
 	public void Unload()
 	{
+		mStartingBattle = false;
 		ClearTiles(mMyTiles);
 		ClearTiles(mEnemyTiles);
 		ClearTiles(mRewardTiles);
