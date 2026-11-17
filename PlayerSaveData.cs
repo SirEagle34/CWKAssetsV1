@@ -333,6 +333,7 @@ public class PlayerSaveData
 	public int FriendInvites;
 
 	public List<string> FBInviteRewards = new List<string>();
+	public List<int> ClaimedOlympicDungeonRewards = new List<int>();
 
 	public List<string> TutorialsDone = new List<string>();
 
