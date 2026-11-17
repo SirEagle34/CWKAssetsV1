@@ -509,7 +509,7 @@ def register_olympic_routes(app, trade, decode_game_save, encode_game_save):
 
     @app.route("/persist/olympic_ownersDW/", methods=["POST"])
     def OlympicOwnersDW():
-        _, player, failure = current_player()
+        owner, player, failure = current_player()
         if failure:
             return failure
         try:
@@ -530,24 +530,37 @@ def register_olympic_routes(app, trade, decode_game_save, encode_game_save):
 
     @app.route("/persist/olympic_questsDW/", methods=["POST"])
     def OlympicQuestsDW():
-        _, player, failure = current_player()
+        owner, player, failure = current_player()
         if failure:
             return failure
+
         try:
             if integer(player["save"].get("RankXP")) < rank_threshold:
                 return fail("Olympic unlocks at level 70", 403)
+
             data = trade["request_data"]()
             owner_id = data.get("owner_id")
-            if not isinstance(owner_id, str) or not owner_id:
+
+            # Edit ekranı kendi questlerini istediğinde,
+            # authenticated oyuncunun gerçek owner_id değerini kullan.
+            if owner_id == "__self__":
+                owner_id = owner
+            elif not isinstance(owner_id, str) or not owner_id:
                 raise ValueError("Dungeon owner is required")
+
             offset = integer(data.get("offset", 0))
+
         except ValueError as error:
             return fail(str(error))
+
         with closing(trade["connect"]()) as conn:
             rows = conn.execute(
-                """SELECT id, name FROM olympic_dungeons WHERE owner_id=?
-                   ORDER BY id DESC LIMIT 30 OFFSET ?""", (owner_id, offset),
+                """SELECT id, name FROM olympic_dungeons
+                   WHERE owner_id=?
+                   ORDER BY id DESC LIMIT 30 OFFSET ?""",
+                (owner_id, offset),
             ).fetchall()
+
         return success([dict(row) for row in rows])
 
     @app.route("/persist/olympic_getDW/", methods=["POST"])
@@ -626,3 +639,4 @@ def register_olympic_routes(app, trade, decode_game_save, encode_game_save):
             return fail(str(error))
 
     app.logger.info("[Olympic] Registered dungeon endpoints")
+
