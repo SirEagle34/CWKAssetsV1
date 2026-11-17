@@ -4,7 +4,7 @@ using UnityEngine;
 /// Minimal quest tile used only by EditCustomDungeon02.
 /// The prefab needs only a SelectedLabel object and a QuestName UILabel.
 /// </summary>
-public class EditQuestTile : UIStreamingGridListItem
+public class EditQuestTile : MonoBehaviour
 {
     public GameObject SelectedLabel;
     public UILabel QuestName;
@@ -19,7 +19,7 @@ public class EditQuestTile : UIStreamingGridListItem
         mEditor = NGUITools.FindInParents<EditCustomDungeon02>(transform);
     }
 
-    public override void Populate(object dataObj)
+    public void Populate(object dataObj)
     {
         mEntry = dataObj as CustomQuestController.QuestEntry;
         if (mEditor == null) mEditor = NGUITools.FindInParents<EditCustomDungeon02>(transform);
@@ -53,9 +53,4 @@ public class EditQuestTile : UIStreamingGridListItem
         if (mEditor != null) mEditor.SelectQuest(mEntry);
     }
 
-    public override void Unload()
-    {
-        base.Unload();
-        mEntry = null;
-    }
 }

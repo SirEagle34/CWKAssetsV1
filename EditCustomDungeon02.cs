@@ -10,17 +10,18 @@ using UnityEngine;
 public class EditCustomDungeon02 : MonoBehaviour
 {
     public GameObject Panel;
+    public GameObject EditPanel01;
     public GameObject CurrentQuestsPanel;
     public GameObject EditorPanel;
 
     [Header("Current Quests")]
-    public UIStreamingGrid QuestGrid;
+    public UIGrid QuestGrid;
     public UIScrollView QuestScrollView;
     public GameObject EditQuestTilePrefab;
     public UILabel QuestStatus;
 
     [Header("Creature selection")]
-    public UIStreamingGrid CreatureGrid;
+    public UIGrid CreatureGrid;
     public UIScrollView CreatureScrollView;
     public UILabel SelectionLabel;
 
@@ -60,14 +61,10 @@ public class EditCustomDungeon02 : MonoBehaviour
         new RewardOption("cake", 3), new RewardOption("cake", 10)
     };
 
-    private readonly UIStreamingGridDataSource<CustomQuestController.QuestEntry> mQuestData =
-        new UIStreamingGridDataSource<CustomQuestController.QuestEntry>();
-    private readonly UIStreamingGridDataSource<InventorySlotItem> mCreatureData =
-        new UIStreamingGridDataSource<InventorySlotItem>();
-    private readonly List<CustomQuestController.QuestEntry> mEntries =
-        new List<CustomQuestController.QuestEntry>();
-    private readonly List<int> mSelectedCreatures = new List<int>();
+    private readonly List<CustomQuestController.QuestEntry> mEntries = new List<CustomQuestController.QuestEntry>();
+
     private readonly List<InventorySlotItem> mOwnedCreatures = new List<InventorySlotItem>();
+    private readonly List<int> mSelectedCreatures = new List<int>();
     private readonly List<Dictionary<string, object>> mRewards =
         new List<Dictionary<string, object>>();
 
@@ -149,12 +146,13 @@ public class EditCustomDungeon02 : MonoBehaviour
     private void LoadCurrentQuests()
     {
         int request = ++mRequest;
+
         mEntries.Clear();
-        mQuestData.Clear();
+        ClearQuestGrid();
+
         SetQuestStatus("Loading current quests...");
 
-        string ownerId = Singleton<PlayerInfoScript>.Instance.GetPlayerCode();
-        LoadQuestIdPage(ownerId, 0, new List<int>(), request);
+        LoadQuestIdPage("__self__", 0, new List<int>(), request);
     }
 
     private void LoadQuestIdPage(string ownerId, int offset, List<int> ids, int request)
@@ -187,24 +185,78 @@ public class EditCustomDungeon02 : MonoBehaviour
     private void LoadQuestDetails(List<int> ids, int index, int request)
     {
         if (request != mRequest) return;
+
         if (index >= ids.Count)
         {
-            SetQuestStatus(mEntries.Count == 0 ? "No current quests." : string.Empty);
-            if (mEntries.Count > 0) mQuestData.Init(QuestGrid, EditQuestTilePrefab, mEntries, true);
+            ClearQuestGrid();
+
+            if (ids.Count == 0)
+            {
+                SetQuestStatus("No current quests.");
+            }
+            else if (mEntries.Count == 0)
+            {
+                SetQuestStatus("Quests were found, but their details could not be loaded. Check the logs.");
+            }
+            else
+            {
+                SetQuestStatus(string.Empty);
+            }
+
+            foreach (CustomQuestController.QuestEntry entry in mEntries)
+            {
+                GameObject obj = NGUITools.AddChild(
+                    QuestGrid.gameObject,
+                    EditQuestTilePrefab
+                );
+
+                EditQuestTile tile = obj.GetComponent<EditQuestTile>();
+
+                if (tile == null)
+                {
+                    NGUITools.Destroy(obj);
+                    continue;
+                }
+
+                tile.Populate(entry);
+            }
+
+            QuestGrid.Reposition();
+            QuestScrollView.ResetPosition();
+
             return;
         }
 
-        Server.OlympicGet(ids[index], delegate(Dictionary<string, object> response, HttpStatusCode status)
+        Server.OlympicGet(ids[index],
+            delegate(Dictionary<string, object> response, HttpStatusCode status)
         {
-            if (this == null || request != mRequest || Panel == null || !Panel.activeInHierarchy) return;
+            if (this == null || request != mRequest ||
+                Panel == null || !Panel.activeInHierarchy)
+                return;
+
             object data;
+
             if (TryResponse(response, status, out data))
             {
                 CustomQuestController.QuestEntry entry;
-                if (TryBuildEntry(data as Dictionary<string, object>, ids[index], out entry))
+
+                if (TryBuildEntry(
+                    data as Dictionary<string, object>,
+                    ids[index],
+                    out entry))
+                {
                     mEntries.Add(entry);
-                else Debug.LogWarning("[Olympic Edit02] Skipped invalid quest " + ids[index]);
+                }
+                else
+                {
+                    Debug.LogWarning(
+                        "[Olympic Edit02] Failed to load quest " +
+                        ids[index] + ": " + ReadError(response) +
+                        " (HTTP " + status + ")"
+                    );
+                }
             }
+
             LoadQuestDetails(ids, index + 1, request);
         });
     }
@@ -278,14 +330,24 @@ public class EditCustomDungeon02 : MonoBehaviour
         return entry != null && mEditing != null && entry.Id == mEditing.Id;
     }
 
-    public void SelectQuest(CustomQuestController.QuestEntry entry)
+   public void SelectQuest(CustomQuestController.QuestEntry entry)
     {
-        if (!IsSelectingQuest || mBusy || entry == null || entry.Controller != mReturnController) return;
+        if (!IsSelectingQuest || mBusy ||
+            entry == null || entry.Controller != mReturnController)
+            return;
+
         mEditing = entry;
-        mQuestData.RepopulateObjects();
+
+        RefreshQuestTiles();
+
         IsSelectingQuest = true;
-        if (CurrentQuestsPanel != null) CurrentQuestsPanel.SetActive(true);
-        if (EditorPanel != null) EditorPanel.SetActive(true);
+
+        if (CurrentQuestsPanel != null)
+            CurrentQuestsPanel.SetActive(true);
+
+        if (EditorPanel != null)
+            EditorPanel.SetActive(true);
+
         LoadEditor(entry);
     }
 
@@ -330,7 +392,7 @@ public class EditCustomDungeon02 : MonoBehaviour
                 }
             }
         }
-        mCreatureData.Clear();
+        ClearCreatureGrid();
         BuildCreatureGrid();
         RefreshSelection();
         RefreshLeader();
@@ -340,45 +402,160 @@ public class EditCustomDungeon02 : MonoBehaviour
     private void BuildCreatureGrid()
     {
         PlayerInfoScript player = Singleton<PlayerInfoScript>.Instance;
+
+        if (player == null || player.SaveData == null ||
+            player.SaveData.InventorySlots == null)
+            return;
+
         GameObject prefab = Singleton<PrefabReferences>.Instance.InventoryTile;
+
+        if (prefab == null)
+        {
+            ShowMessage("Inventory tile prefab is missing.");
+            return;
+        }
+
         InventoryTile tilePrefab = prefab.GetComponent<InventoryTile>();
-        UIPanel gridPanel = NGUITools.FindInParents<UIPanel>(CreatureGrid.transform.parent);
+
+        if (tilePrefab == null)
+        {
+            ShowMessage("Invalid inventory tile prefab.");
+            return;
+        }
+
+        UIPanel gridPanel =
+            NGUITools.FindInParents<UIPanel>(CreatureGrid.transform.parent);
+
+        if (gridPanel == null)
+        {
+            ShowMessage("Creature grid panel is missing.");
+            return;
+        }
+
         gridPanel.ResetAndUpdateAnchors();
+
         float width = gridPanel.GetViewSize().x;
+
         if (width <= 0f)
         {
             ShowMessage("The creature grid has no available width.");
             return;
         }
+
         CreatureGrid.cellWidth = width / 3.001f;
 
+        ClearCreatureGrid();
         mOwnedCreatures.Clear();
+
         foreach (InventorySlotItem item in player.SaveData.InventorySlots)
-            if (item != null && item.SlotType == InventorySlotType.Creature && item.Creature != null)
+        {
+            if (item != null &&
+                item.SlotType == InventorySlotType.Creature &&
+                item.Creature != null)
+            {
                 mOwnedCreatures.Add(item);
+            }
+        }
 
-        InventoryTile.SetDelegates(InventorySlotType.Creature, null, null, null,
-            RefreshCreatureOverlay, null, null, ClickCreature);
-        mCreatureData.Init(CreatureGrid, prefab, mOwnedCreatures, true);
+        InventoryTile.SetDelegates(
+            InventorySlotType.Creature,
+            null,
+            null,
+            null,
+            RefreshCreatureOverlay,
+            null,
+            null,
+            ClickCreature
+        );
 
-        float tileWidth = Mathf.Max(tilePrefab.FrameSprite.width, tilePrefab.PortraitCollider.size.x);
-        float tileHeight = Mathf.Max(tilePrefab.FrameSprite.height, tilePrefab.PortraitCollider.size.y);
-        float scale = 0.9f * Mathf.Min(CreatureGrid.cellWidth / tileWidth, CreatureGrid.cellHeight / tileHeight);
-        for (int i = 0; i < CreatureGrid.transform.childCount; i++)
-            CreatureGrid.transform.GetChild(i).localScale = Vector3.one * scale;
+        float tileWidth = Mathf.Max(
+            tilePrefab.FrameSprite.width,
+            tilePrefab.PortraitCollider.size.x
+        );
+
+        float tileHeight = Mathf.Max(
+            tilePrefab.FrameSprite.height,
+            tilePrefab.PortraitCollider.size.y
+        );
+
+        float scale = 0.9f * Mathf.Min(
+            CreatureGrid.cellWidth / tileWidth,
+            CreatureGrid.cellHeight / tileHeight
+        );
+
+        foreach (InventorySlotItem item in mOwnedCreatures)
+        {
+            GameObject obj = NGUITools.AddChild(
+                CreatureGrid.gameObject,
+                prefab
+            );
+
+            obj.ChangeLayer(CreatureGrid.gameObject.layer);
+
+            InventoryTile tile = obj.GetComponent<InventoryTile>();
+
+            if (tile == null)
+            {
+                NGUITools.Destroy(obj);
+                continue;
+            }
+
+            tile.Populate(item);
+
+            obj.transform.localScale = Vector3.one * scale;
+
+            RefreshCreatureOverlay(tile);
+        }
+
+        CreatureGrid.Reposition();
+        CreatureScrollView.ResetPosition();
+
+        RefreshSelection();
     }
 
     private bool ClickCreature(InventoryTile tile)
     {
-        if (mBusy || tile == null || tile.InventoryItem == null || tile.InventoryItem.Creature == null) return false;
+        if (mBusy || tile == null ||
+            tile.InventoryItem == null ||
+            tile.InventoryItem.Creature == null)
+            return false;
+
         int id = tile.InventoryItem.Creature.UniqueId;
-        if (id <= 0) return false;
-        if (mSelectedCreatures.Contains(id)) mSelectedCreatures.Remove(id);
-        else if (mSelectedCreatures.Count < 12) mSelectedCreatures.Add(id);
-        else ShowMessage("A Custom Dungeon requires exactly 12 creatures.");
-        mCreatureData.RepopulateObjects();
+
+        if (id <= 0)
+            return false;
+
+        if (mSelectedCreatures.Contains(id))
+        {
+            mSelectedCreatures.Remove(id);
+        }
+        else if (mSelectedCreatures.Count < 12)
+        {
+            mSelectedCreatures.Add(id);
+        }
+        else
+        {
+            ShowMessage("A Custom Dungeon requires exactly 12 creatures.");
+        }
+
+        RefreshAllCreatureOverlays();
         RefreshSelection();
+
         return false;
+    }
+
+    private void RefreshAllCreatureOverlays()
+    {
+        if (CreatureGrid == null) return;
+
+        for (int i = 0; i < CreatureGrid.transform.childCount; i++)
+        {
+            InventoryTile tile =
+                CreatureGrid.transform.GetChild(i).GetComponent<InventoryTile>();
+
+            if (tile != null)
+                RefreshCreatureOverlay(tile);
+        }
     }
 
     private void RefreshCreatureOverlay(InventoryTile tile)
@@ -602,47 +779,132 @@ public class EditCustomDungeon02 : MonoBehaviour
             else ShowMessage(ReadError(response));
         });
     }
-
+    
     public void OnClickBack()
     {
         if (mBusy) return;
-        if (mEditing != null) ReturnToQuestList();
-        else Close();
+
+        mRequest++;
+        ClearQuestGrid();
+        ClearCreatureGrid();
+
+        mEntries.Clear();
+        mOwnedCreatures.Clear();
+        mSelectedCreatures.Clear();
+        InventoryTile.ClearDelegates(true);
+
+        if (mRewardTile != null)
+            NGUITools.Destroy(mRewardTile);
+
+        mRewardTile = null;
+
+        if (LeaderPortrait != null)
+            LeaderPortrait.UnloadTexture();
+
+        if (Panel != null)
+            Panel.SetActive(false);
+
+        if (CurrentQuestsPanel != null)
+            CurrentQuestsPanel.SetActive(false);
+
+        if (EditorPanel != null)
+            EditorPanel.SetActive(false);
+
+        IsSelectingQuest = false;
+        mEditing = null;
+
+        EditCustomDungeon creationEditor =
+            EditPanel01 != null
+                ? EditPanel01.GetComponent<EditCustomDungeon>()
+                : null;
+
+        if (creationEditor == null && EditPanel01 != null)
+            creationEditor = EditPanel01.GetComponentInChildren<EditCustomDungeon>(true);
+
+        if (creationEditor == null)
+        {
+            Debug.LogError("[Olympic Edit02] EditCustomDungeon component was not found.");
+            return;
+        }
+
+        if (!creationEditor.gameObject.activeSelf)
+            creationEditor.gameObject.SetActive(true);
+
+        if (creationEditor.Panel != null)
+            creationEditor.Panel.SetActive(true);
+
+        if (creationEditor.EditPanel02 != null)
+            creationEditor.EditPanel02.SetActive(false);
     }
+
 
     private void ReturnToQuestList()
     {
         mEditing = null;
-        mCreatureData.Clear();
+
+        ClearCreatureGrid();
+        mOwnedCreatures.Clear();
+        mSelectedCreatures.Clear();
+
         InventoryTile.ClearDelegates(true);
-        if (mRewardTile != null) NGUITools.Destroy(mRewardTile);
+
+        if (mRewardTile != null)
+            NGUITools.Destroy(mRewardTile);
+
         mRewardTile = null;
-        LeaderPortrait.UnloadTexture();
-        if (EditorPanel != null) EditorPanel.SetActive(false);
-        if (CurrentQuestsPanel != null) CurrentQuestsPanel.SetActive(true);
+
+        if (LeaderPortrait != null)
+            LeaderPortrait.UnloadTexture();
+
+        if (EditorPanel != null)
+            EditorPanel.SetActive(false);
+
+        if (CurrentQuestsPanel != null)
+            CurrentQuestsPanel.SetActive(true);
+
         IsSelectingQuest = true;
+
         LoadCurrentQuests();
     }
 
     public void Close()
     {
         if (mBusy) return;
+
         mRequest++;
-        mQuestData.Clear();
-        mCreatureData.Clear();
+
+        ClearQuestGrid();
+        ClearCreatureGrid();
+
+        mEntries.Clear();
+        mOwnedCreatures.Clear();
+        mSelectedCreatures.Clear();
+
         InventoryTile.ClearDelegates(true);
-        if (mRewardTile != null) NGUITools.Destroy(mRewardTile);
+
+        if (mRewardTile != null)
+            NGUITools.Destroy(mRewardTile);
+
         mRewardTile = null;
-        if (LeaderPortrait != null) LeaderPortrait.UnloadTexture();
-        if (Panel != null) Panel.SetActive(false);
-        if (mDeactivateRootOnClose) gameObject.SetActive(false);
+
+        if (LeaderPortrait != null)
+            LeaderPortrait.UnloadTexture();
+
+        if (Panel != null)
+            Panel.SetActive(false);
+
+        if (mDeactivateRootOnClose)
+            gameObject.SetActive(false);
+
         mDeactivateRootOnClose = false;
         IsSelectingQuest = false;
         mEditing = null;
 
         CustomQuestController controller = mReturnController;
         mReturnController = null;
-        if (controller != null) controller.OnEditCustomDungeon02Closed();
+
+        if (controller != null)
+            controller.OnEditCustomDungeon02Closed();
     }
 
     private static bool ValidName(string value)
@@ -683,5 +945,42 @@ public class EditCustomDungeon02 : MonoBehaviour
         if (QuestStatus != null) QuestStatus.text = message;
         SimplePopupController popup = Singleton<SimplePopupController>.Instance;
         if (popup != null) popup.ShowMessage("Olympic Dungeon", message);
+    }
+
+    private void ClearGrid(UIGrid grid)
+    {
+        if (grid == null) return;
+
+        for (int i = grid.transform.childCount - 1; i >= 0; i--)
+        {
+            Transform child = grid.transform.GetChild(i);
+            NGUITools.Destroy(child.gameObject);
+        }
+
+        grid.Reposition();
+    }
+
+    private void ClearQuestGrid()
+    {
+        ClearGrid(QuestGrid);
+    }
+
+    private void ClearCreatureGrid()
+    {
+        ClearGrid(CreatureGrid);
+    }
+
+    private void RefreshQuestTiles()
+    {
+        if (QuestGrid == null) return;
+
+        for (int i = 0; i < QuestGrid.transform.childCount; i++)
+        {
+            EditQuestTile tile =
+                QuestGrid.transform.GetChild(i).GetComponent<EditQuestTile>();
+
+            if (tile != null)
+                tile.RefreshSelectedState();
+        }
     }
 }

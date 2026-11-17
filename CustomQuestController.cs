@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Net;
 using UnityEngine;
 
-public class CustomQuestController : MonoBehaviour
+public class CustomQuestController : Singleton<CustomQuestController>
 {
 	public class LeagueEntry
 	{
@@ -37,15 +37,13 @@ public class CustomQuestController : MonoBehaviour
 		public EvoMaterialData Shard;
 		public GachaSlotData Key;
 	}
-
+	public GameObject PanelMain;
 	public GameObject LeagueTilePrefab;
 	public GameObject QuestTilePrefab;
 	public UIStreamingGrid LeagueGrid;
 	public UIScrollView LeagueScrollView;
 	public UIStreamingGrid QuestGrid;
 	public UIScrollView QuestScrollView;
-	public GameObject LeaguePanel;
-	public GameObject QuestPanel;
 	public GameObject BackButton;
 	public GameObject ScrollBar;
 	public UITweenController ShowTween;
@@ -75,51 +73,103 @@ public class CustomQuestController : MonoBehaviour
 	private Coroutine mHideRoutine;
 
 	private SQServer Server => SessionManager.Instance.theSession.Server;
+
+	public void Populate()
+	{
+		Open();
+	}
+
 	public void Open()
 	{
 		gameObject.SetActive(true);
+
 		CancelHideTransition();
+
 		mIsOpen = true;
 		mShowingQuest = false;
 		mTransitioning = false;
 		mOffset = 0;
-		if (ShowTween == null || ShowQuestsTween == null || HideQuestsTween == null ||
-			TitleLabel == null || PlayerStamina == null || PlayerStaminaTimer == null)
-		{
-			Debug.LogWarning("[Olympic] Assign the optional tweens and header labels to enable the full selection screen.");
-		}
-		if (TitleLabel != null) TitleLabel.text = "Olympic Dungeons";
-		if (ShowTween != null) ShowTween.Play();
+
+		if (TitleLabel != null)
+			TitleLabel.text = "Olympic Dungeons";
+
+		if (ShowTween != null)
+			ShowTween.Play();
+
 		UpdateTimers();
 		ShowList();
 	}
 
+	
 	public void Close()
 	{
 		CancelHideTransition();
+
 		mRequest++;
 		mIsOpen = false;
 		mShowingQuest = false;
 		mTransitioning = false;
+
 		ClearTiles();
-		if (BackButton != null) BackButton.SetActive(false);
+
+		if (BackButton != null)
+			BackButton.SetActive(false);
+
 		gameObject.SetActive(false);
+
+		TownHudController townHud = Singleton<TownHudController>.Instance;
+
+		if (townHud != null)
+		{
+			townHud.ReturnToTownView();
+		}
+		else
+		{
+			Debug.LogError("[CustomQuestController] TownHudController bulunamadı. ReturnToTownView çağrılamadı.");
+		}
 	}
 
+
+
+	public static bool CanOpenOlympic()
+	{
+		PlayerRankData unlock = PlayerRankDataManager.Instance.UnlockRanks.Find((PlayerRankData rank) => rank.UnlockType == UnlockTypeEnum.Building && rank.UnlockId == "TBuilding_Olympic");
+		PlayerInfoScript player = Singleton<PlayerInfoScript>.Instance;
+		if (unlock == null || player == null || player.RankXpLevelData == null)
+		{
+			Debug.LogError("[Olympic] Olympic unlock or player rank is unavailable.");
+			return false;
+		}
+		if (player.RankXpLevelData.mCurrentLevel >= unlock.Level)
+		{
+			return true;
+		}
+		TownBuildingData building = TownBuildingDataManager.Instance.GetData("TBuilding_Olympic");
+		if (building != null && Singleton<TownHudController>.Instance != null)
+		{
+			Singleton<TownHudController>.Instance.ShowLockedBuilding(building);
+		}
+		else
+		{
+			Debug.LogWarning("[Olympic] Olympic unlocks at level " + unlock.Level + ".");
+		}
+		return false;
+	}
 	public void OnClickEditCustomDungeon()
 	{
-		if (!mIsOpen || mTransitioning || mEditingDungeon) return;
 		if (EditDungeon == null)
 		{
-			Debug.LogError("[Olympic] Assign the quest editor to CustomQuestController.");
-			Singleton<SimplePopupController>.Instance.ShowMessage("Olympic Dungeon", "The quest editor is not configured.");
+			Debug.LogError("[Olympic] EditCustomDungeon reference is missing.");
 			return;
 		}
+
 		if (EditDungeon.ShowFrom(this))
 		{
 			mEditingDungeon = true;
 			mRequest++;
-			gameObject.SetActive(false);
+
+			if (PanelMain != null)
+				PanelMain.SetActive(false);
 		}
 	}
 
@@ -268,7 +318,7 @@ public class CustomQuestController : MonoBehaviour
 		if (LeagueScrollView == null) LeagueScrollView = leagueParent;
 		if (QuestScrollView == null) QuestScrollView = questParent;
 		if (LeagueTilePrefab != null && QuestTilePrefab != null && LeagueGrid != null &&
-			QuestGrid != null && LeagueGrid != QuestGrid && LeaguePanel != null && QuestPanel != null &&
+			QuestGrid != null && LeagueGrid != QuestGrid &&
 			StatusLabel != null &&
 			league != null && league.Name != null && league.Battles != null && league.BossPortrait != null &&
 			quest != null && quest.Name != null && quest.CreatureNodeParent != null &&
@@ -311,8 +361,6 @@ public class CustomQuestController : MonoBehaviour
 		int request = ++mRequest;
 		mHasNext = false;
 		ClearTiles();
-		LeaguePanel.SetActive(true);
-		QuestPanel.SetActive(false);
 		if (BackButton != null) BackButton.SetActive(false);
 		if (ScrollBar != null) ScrollBar.SetActive(true);
 		if (RewardsLabel != null) RewardsLabel.text = string.Empty;
@@ -367,8 +415,6 @@ public class CustomQuestController : MonoBehaviour
 		mOwnerId = ownerId;
 		mQuestOffset = 0;
 		mShowingQuest = true;
-		LeaguePanel.SetActive(false);
-		QuestPanel.SetActive(true);
 		if (BackButton != null) BackButton.SetActive(true);
 		if (ShowQuestsTween != null) ShowQuestsTween.Play();
 		ShowDungeonPage();
@@ -548,6 +594,9 @@ public class CustomQuestController : MonoBehaviour
 
 	public void PopulateLeague(QuestSelectLeague league, LeagueEntry entry)
 	{
+		if (league.BonusText != null)
+        	league.BonusText.gameObject.SetActive(false);
+
 		league.Name.text = entry.Name;
 		league.Battles.text = entry.QuestCount + (entry.QuestCount == 1 ? " Quest" : " Quests");
 		if (league.Lock != null) league.Lock.SetActive(false);
@@ -557,6 +606,21 @@ public class CustomQuestController : MonoBehaviour
 
 	public void PopulateQuest(QuestSelectQuest quest, QuestEntry entry)
 	{
+		if (quest.Stars != null)
+		{
+			foreach (GameObject Star in quest.Stars)
+			{
+				if (Star != null)
+					Star.SetActive(false);
+			}
+		}
+
+		if (quest.Stamina != null)
+        	quest.Stamina.gameObject.SetActive(false);
+
+		if (quest.MapCount != null)
+        	quest.MapCount.gameObject.SetActive(false);
+
 		InventoryTile.ClearDelegates(false);
 		quest.Name.text = entry.Name;
 		if (quest.Index != null) quest.Index.text = string.Empty;

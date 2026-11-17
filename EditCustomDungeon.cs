@@ -42,25 +42,30 @@ public class EditCustomDungeon : MonoBehaviour
 
 	private static readonly RewardOption[] Options =
 	{
-		new RewardOption("key", 1, 500),
-		new RewardOption("shard", 1, 2000),
-		new RewardOption("shard", 3, 5000),
+		//new RewardOption("key", 1, 500),
+		//new RewardOption("shard", 1, 2000),
+		//new RewardOption("shard", 3, 5000),
 		new RewardOption("pvp", 100, 300),
 		new RewardOption("pvp", 250, 500),
 		new RewardOption("pvp", 500, 750),
+		new RewardOption("pvp", 1000, 1200),
 		new RewardOption("craft", 1, 1500),
 		new RewardOption("craft", 3, 2500),
 		new RewardOption("craft", 6, 4000),
+		new RewardOption("craft", 9, 6000),
 		new RewardOption("trade", 100, 3000),
 		new RewardOption("trade", 300, 5000),
 		new RewardOption("trade", 500, 7000),
 		new RewardOption("trade", 1000, 11000),
 		new RewardOption("cake", 3, 300),
-		new RewardOption("cake", 10, 1000)
+		new RewardOption("cake", 10, 1000),
+		new RewardOption("cake", 20, 1600)
 	};
 
 	public GameObject Panel;
-	public UIStreamingGrid CreatureGrid;
+	public GameObject EditPanel02;
+
+	public UIGrid CreatureGrid;
 	public UIScrollView CreatureScrollView;
 	public UITexture LeaderPortrait;
 	public UILabel LeaderName;
@@ -75,7 +80,7 @@ public class EditCustomDungeon : MonoBehaviour
 	[Tooltip("Optional custom XP material ID; leave empty to use XPMaterial.")]
 	public string XPMaterialId;
 
-	private readonly UIStreamingGridDataSource<InventorySlotItem> mGrid = new UIStreamingGridDataSource<InventorySlotItem>();
+	private readonly List<InventoryTile> mCreatureTiles = new List<InventoryTile>();
 	private readonly List<int> mSelected = new List<int>();
 	private GameObject mRewardTile;
 	private int mLeaderIndex;
@@ -104,15 +109,25 @@ public class EditCustomDungeon : MonoBehaviour
 
 	public bool ShowFrom(CustomQuestController controller)
 	{
-		if (controller == null || Panel == null || transform.IsChildOf(controller.transform) ||
+		if (controller == null || Panel == null ||
+			transform.IsChildOf(controller.transform) ||
 			Panel.transform.IsChildOf(controller.transform))
 		{
 			Debug.LogError("[Olympic] The quest editor must be outside the quest selection hierarchy.");
-			Singleton<SimplePopupController>.Instance.ShowMessage("Olympic Dungeon", "The quest editor is not configured correctly.");
+			Singleton<SimplePopupController>.Instance.ShowMessage(
+				"Olympic Dungeon",
+				"The quest editor is not configured correctly.");
 			return false;
 		}
-		if (!TryShow()) return false;
+
+		if (!TryShow())
+			return false;
+
 		mReturnController = controller;
+
+		Debug.Log("[Olympic] ShowFrom assigned return controller: " +
+			(mReturnController != null ? mReturnController.name : "NULL"));
+
 		return true;
 	}
 
@@ -126,7 +141,7 @@ public class EditCustomDungeon : MonoBehaviour
 		UIScrollView gridScroll = CreatureGrid != null ? NGUITools.FindInParents<UIScrollView>(CreatureGrid.transform.parent) : null;
 		if (Panel == null || CreatureGrid == null || CreatureScrollView == null || gridScroll != CreatureScrollView ||
 			CreatureScrollView.movement != UIScrollView.Movement.Vertical || gridPanel == null ||
-			CreatureGrid.cellHeight <= 0f || tilePrefab == null || tilePrefab.PortraitCollider == null || tilePrefab.FrameSprite == null ||
+			CreatureGrid.cellWidth <= 0f || CreatureGrid.cellHeight <= 0f || tilePrefab == null || tilePrefab.PortraitCollider == null || tilePrefab.FrameSprite == null ||
 			tilePrefab.PortraitCollider.size.x <= 0f || tilePrefab.PortraitCollider.size.y <= 0f ||
 			LeaderPortrait == null || LeaderName == null || RewardNode == null || RewardName == null ||
 			CostLabel == null || QuestName == null || player == null || player.SaveData == null ||
@@ -177,27 +192,72 @@ public class EditCustomDungeon : MonoBehaviour
 		}
 		QuestName.enabled = !mUncertain;
 		gridPanel.ResetAndUpdateAnchors();
-		float width = gridPanel.GetViewSize().x;
-		if (width <= 0f)
-		{
-			Debug.LogError("[Olympic] Creature grid panel has no width.");
-			Singleton<SimplePopupController>.Instance.ShowMessage("Olympic Dungeon", "The creature grid is not configured.");
-			Panel.SetActive(false);
-			if (mDeactivateRootOnClose) gameObject.SetActive(false);
-			return false;
-		}
-		CreatureGrid.cellWidth = width / 3.001f;
+
+		ClearCreatureTiles();
+
 		List<InventorySlotItem> creatures = new List<InventorySlotItem>();
+
 		foreach (InventorySlotItem item in player.SaveData.InventorySlots)
-			if (item != null && item.SlotType == InventorySlotType.Creature && item.Creature != null)
+		{
+			if (item != null &&
+				item.SlotType == InventorySlotType.Creature &&
+				item.Creature != null)
+			{
 				creatures.Add(item);
-		InventoryTile.SetDelegates(InventorySlotType.Creature, null, null, null, RefreshOverlay, null, null, ClickCreature);
-		mGrid.Init(CreatureGrid, tile, creatures, true);
-		float tileWidth = Mathf.Max(tilePrefab.FrameSprite.width, tilePrefab.PortraitCollider.size.x);
-		float tileHeight = Mathf.Max(tilePrefab.FrameSprite.height, tilePrefab.PortraitCollider.size.y);
-		float scale = 0.9f * Mathf.Min(CreatureGrid.cellWidth / tileWidth, CreatureGrid.cellHeight / tileHeight);
-		for (int i = 0; i < CreatureGrid.transform.childCount; i++)
-			CreatureGrid.transform.GetChild(i).localScale = Vector3.one * scale;
+			}
+		}
+
+		InventoryTile.SetDelegates(
+			InventorySlotType.Creature,
+			null,
+			null,
+			null,
+			RefreshOverlay,
+			null,
+			null,
+			ClickCreature
+		);
+
+		float tileWidth = Mathf.Max(
+			tilePrefab.FrameSprite.width,
+			tilePrefab.PortraitCollider.size.x
+		);
+
+		float tileHeight = Mathf.Max(
+			tilePrefab.FrameSprite.height,
+			tilePrefab.PortraitCollider.size.y
+		);
+
+		float scale = 0.9f * Mathf.Min(
+			CreatureGrid.cellWidth / tileWidth,
+			CreatureGrid.cellHeight / tileHeight
+		);
+
+		foreach (InventorySlotItem item in creatures)
+		{
+			GameObject tileObject =
+				CreatureGrid.transform.InstantiateAsChild(tile);
+
+			if (tileObject == null)
+				continue;
+
+			InventoryTile inventoryTile =
+				tileObject.GetComponent<InventoryTile>();
+
+			if (inventoryTile == null)
+			{
+				NGUITools.Destroy(tileObject);
+				continue;
+			}
+
+			inventoryTile.transform.localScale = Vector3.one * scale;
+
+			inventoryTile.Populate(item);
+
+			mCreatureTiles.Add(inventoryTile);
+		}
+
+		CreatureGrid.Reposition();
 		RefreshLeader();
 		RefreshReward();
 		RefreshSelection();
@@ -219,11 +279,30 @@ public class EditCustomDungeon : MonoBehaviour
 		if (mSelected.Contains(id)) mSelected.Remove(id);
 		else if (mSelected.Count < 12) mSelected.Add(id);
 		else Singleton<SimplePopupController>.Instance.ShowMessage("Olympic Dungeon", "Choose exactly 12 creatures.");
-		mGrid.RepopulateObjects();
+		foreach (InventoryTile creatureTile in mCreatureTiles)
+		{
+			if (creatureTile != null)
+				RefreshOverlay(creatureTile);
+		}
 		RefreshSelection();
 		return false;
 	}
+    private void ClearCreatureTiles()
+	{
+		foreach (InventoryTile tile in mCreatureTiles)
+		{
+			if (tile == null)
+				continue;
 
+			tile.Unload();
+			NGUITools.Destroy(tile.gameObject);
+		}
+
+		mCreatureTiles.Clear();
+
+		if (CreatureGrid != null)
+			CreatureGrid.Reposition();
+	}
 	private void RefreshOverlay(InventoryTile tile)
 	{
 		bool selected = tile.InventoryItem.Creature != null && mSelected.Contains(tile.InventoryItem.Creature.UniqueId);
@@ -234,10 +313,66 @@ public class EditCustomDungeon : MonoBehaviour
 	{
 		if (SelectionLabel != null) SelectionLabel.text = mSelected.Count + " / 12";
 	}
+	
+	public void OnClickEdit()
+	{
+		if (mSaving || mUncertain) return;
+
+		if (mReturnController == null)
+		{
+			Debug.LogError("[Olympic] Cannot open quest editor: return controller is missing.");
+			Singleton<SimplePopupController>.Instance.ShowMessage(
+				"Olympic Dungeon",
+				"The quest editor was not opened correctly. Please reopen it from the quest selection screen."
+			);
+			return;
+		}
+
+		if (EditPanel02 == null)
+		{
+			Debug.LogError("[Olympic] EditPanel02 is not assigned.");
+			return;
+		}
+
+		EditCustomDungeon02 editor = EditPanel02.GetComponent<EditCustomDungeon02>();
+
+		if (editor == null)
+			editor = EditPanel02.GetComponentInChildren<EditCustomDungeon02>(true);
+
+		if (editor == null)
+			editor = EditPanel02.GetComponentInParent<EditCustomDungeon02>();
+
+		if (editor == null)
+		{
+			Debug.LogError("[Olympic] EditCustomDungeon02 component was not found.");
+			Singleton<SimplePopupController>.Instance.ShowMessage(
+				"Olympic Dungeon",
+				"The quest editor component is missing."
+			);
+			return;
+		}
+
+		bool wasActive = EditPanel02.activeSelf;
+
+		if (!wasActive)
+			EditPanel02.SetActive(true);
+
+		if (!editor.ShowFrom(mReturnController))
+		{
+			if (!wasActive)
+				EditPanel02.SetActive(false);
+
+			return;
+		}
+
+		// Only close the creation screen after the existing-quest editor opens.
+		if (Panel != null)
+			Panel.SetActive(false);
+	}
+
 
 	public void OnClickPreviousLeader() { ChangeLeader(-1); }
 	public void OnClickNextLeader() { ChangeLeader(1); }
-
 	private void ChangeLeader(int direction)
 	{
 		if (mSaving || mUncertain) return;
@@ -514,19 +649,38 @@ public class EditCustomDungeon : MonoBehaviour
 		CloseEditor(false);
 	}
 
+	
 	private void CloseEditor(bool created)
 	{
 		if (mSaving) return;
-		mGrid.Clear();
+
+		ClearCreatureTiles();
 		InventoryTile.ClearDelegates(true);
-		if (mRewardTile != null) NGUITools.Destroy(mRewardTile);
+
+		if (mRewardTile != null)
+			NGUITools.Destroy(mRewardTile);
+
 		mRewardTile = null;
-		LeaderPortrait.UnloadTexture();
-		if (Panel != null) Panel.SetActive(false);
-		if (mDeactivateRootOnClose) gameObject.SetActive(false);
+
+		if (LeaderPortrait != null)
+			LeaderPortrait.UnloadTexture();
+
+		if (Panel != null)
+			Panel.SetActive(false);
+
+		if (mDeactivateRootOnClose)
+			gameObject.SetActive(false);
+
 		mDeactivateRootOnClose = false;
+
 		CustomQuestController controller = mReturnController;
 		mReturnController = null;
-		if (controller != null) controller.OnEditCustomDungeonClosed(created);
+
+		if (controller != null)
+		{
+			controller.PanelMain.SetActive(true);
+			controller.Populate();
+		}
 	}
+
 }

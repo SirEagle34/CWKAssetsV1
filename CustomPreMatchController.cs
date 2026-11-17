@@ -242,6 +242,7 @@ public class CustomPreMatchController : MonoBehaviour
 	public void OnCloseClicked()
 	{
 		Unload();
+		Singleton<FrontEndPIPController>.Instance.HideModelPortrait();
 		if (Panel != null) Panel.SetActive(false);
 	}
 
