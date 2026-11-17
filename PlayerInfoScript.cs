@@ -320,6 +320,7 @@ public class PlayerInfoScript : Singleton<PlayerInfoScript>
 
 	private void Update()
 	{
+		OlympicBattleData.TryProcessFrontEndResult(this);
 		if (inServerCall == ServerCall.IDLE)
 		{
 			return;
@@ -653,6 +654,7 @@ public class PlayerInfoScript : Singleton<PlayerInfoScript>
 		stringBuilder.Append("\"ExCardSort\":" + SerializeExCardSorts() + ",");
 		stringBuilder.Append("\"HelperSort\":" + SerializeHelperSorts() + ",");
 		stringBuilder.Append("\"FBInviteRewards\":" + SerializeFBRewards() + ",");
+		stringBuilder.Append("\"ClaimedOlympicDungeonRewards\":" + SerializeClaimedOlympicDungeonRewards() + ",");
 		stringBuilder.Append("\"DeletedMail\":" + SerializeDeletedMail() + ",");
 		stringBuilder.Append("\"UsedRedeemCodes\":" + SerializeUsedRedeemCodes() + ",");
 		stringBuilder.Append("\"SpecialQuests\":" + SerializeDoneSpecialQuests() + ",");
@@ -930,6 +932,10 @@ public class PlayerInfoScript : Singleton<PlayerInfoScript>
 			if (dictionary.ContainsKey("FBInviteRewards"))
 			{
 				DeserializeFBRewards((object[])dictionary["FBInviteRewards"]);
+			}
+			if (dictionary.ContainsKey("ClaimedOlympicDungeonRewards"))
+			{
+				DeserializeClaimedOlympicDungeonRewards((object[])dictionary["ClaimedOlympicDungeonRewards"]);
 			}
 			if (dictionary.ContainsKey("DeletedMail"))
 			{
@@ -2185,6 +2191,25 @@ public class PlayerInfoScript : Singleton<PlayerInfoScript>
 		{
 			string item = (string)FBRewardsArray[i];
 			SaveData.FBInviteRewards.Add(item);
+		}
+	}
+
+	private string SerializeClaimedOlympicDungeonRewards()
+	{
+		return "[" + string.Join(",", SaveData.ClaimedOlympicDungeonRewards) + "]";
+	}
+
+	private void DeserializeClaimedOlympicDungeonRewards(object[] values)
+	{
+		SaveData.ClaimedOlympicDungeonRewards.Clear();
+		for (int i = 0; i < values.Length; i++)
+		{
+			int id;
+			if (int.TryParse(Convert.ToString(values[i]), out id) && id > 0 &&
+				!SaveData.ClaimedOlympicDungeonRewards.Contains(id))
+			{
+				SaveData.ClaimedOlympicDungeonRewards.Add(id);
+			}
 		}
 	}
 
