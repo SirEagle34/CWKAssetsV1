@@ -645,6 +645,11 @@ def register_olympic_routes(app, trade, decode_game_save, encode_game_save):
             return failure
         if player is None:
             return fail("player not found", 404)
+        try:
+            if integer(player["save"].get("RankXP")) < rank_threshold:
+                return fail("Olympic unlocks at level 70", 403)
+        except ValueError as error:
+            return fail(str(error))
         payload = trade["request_data"]()
         dungeon_id = integer(payload.get("id"), 1)
         with trade["lock"]:
