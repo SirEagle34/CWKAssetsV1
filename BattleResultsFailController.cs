@@ -98,6 +98,7 @@ public class BattleResultsFailController : Singleton<BattleResultsFailController
 
 	public void Show()
 	{
+		if (OlympicBattleData.IsActive) OlympicBattleData.Clear();
 		if (Singleton<PlayerInfoScript>.Instance.StateData.MultiplayerMode)
 		{
 			MultiplayerShowTween.Play();
