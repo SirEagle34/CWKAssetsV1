@@ -3616,7 +3616,6 @@ def AdminAssetBundles():
         config = {"allow_manifest": True, "refresh_days": 60}
         error = error or ("Could not load settings: " + str(exc))
 
-    checked = " checked" if config["allow_manifest"] else ""
     disabled_note = (
         "Automatic manifest, patch and bundle-size refresh is disabled. "
         "The game will continue using its local cached metadata."
@@ -3624,49 +3623,13 @@ def AdminAssetBundles():
         else "Android, Windows and iOS clients may refresh their cached metadata after the interval below."
     )
 
-    html = """<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Asset Bundle Settings</title>
-<style>
-body{{font-family:Arial,sans-serif;background:#101522;color:#e8edf7;margin:0;padding:32px}}
-main{{max-width:680px;margin:auto;background:#1a2334;padding:28px;border-radius:14px}}
-h1{{margin-top:0}}label{{display:block;margin:18px 0 8px}}
-input{{box-sizing:border-box;width:100%;padding:11px;border-radius:7px;border:1px solid #43516a;background:#101522;color:#fff}}
-.check{{display:flex;align-items:center;gap:10px}}.check input{{width:auto}}
-button{{margin-top:22px;padding:12px 20px;border:0;border-radius:7px;background:#20b8a5;color:#07151b;font-weight:bold;cursor:pointer}}
-.note{{color:#aebbd0;line-height:1.5}}.success{{color:#48df9b}}.error{{color:#ff7d89}}
-a{{color:#62c9ff}}
-</style>
-</head>
-<body><main>
-<h1>Asset Bundle Settings</h1>
-<p class="note">One shared automatic manifest refresh control for Android, Windows and iOS.</p>
-{feedback}
-<form method="post" action="/admin/asset-bundles">
-<label class="check">
-<input type="checkbox" name="allow_manifest" value="true"{checked}>
-Allow automatic manifest refresh
-</label>
-<label for="refresh_days">Refresh interval (days)</label>
-<input id="refresh_days" name="refresh_days" type="number" min="1" max="3650" value="{refresh_days}" required>
-<p class="note">{disabled_note}</p>
-<button type="submit">Save Settings</button>
-</form>
-<p class="note">Shared public control URL: <code>/persist/static/allow_manifest.json</code></p>
-<p><a href="/admin">Back to Admin</a></p>
-</main></body></html>""".format(
-        feedback=(
-            '<p class="success">{}</p>'.format(message) if message else
-            '<p class="error">{}</p>'.format(error) if error else ""
-        ),
-        checked=checked,
-        refresh_days=config["refresh_days"],
+    return render_template(
+        "admin_asset_bundles.html",
+        config=config,
+        message=message,
+        error=error,
         disabled_note=disabled_note
     )
-    return make_response(html)
 
 
 @app.route("/persist/static/manifest.json")
