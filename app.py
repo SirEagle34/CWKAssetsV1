@@ -3449,6 +3449,268 @@ class MonthlyStorePurchase(db.Model):
 def Index():
 	return "200 App server running"
 
+
+# ============================================================
+# ASSET_BUNDLE_MANIFEST_REFRESH_CONTROL
+# ASSET BUNDLE MANIFEST REFRESH CONTROL
+# ============================================================
+# Unity requests:
+#   /persist/static/Android/allow_manifest.json
+#   /persist/static/iOS/allow_manifest.json
+#
+# Each platform has its own control file under:
+#   data/persist/static/<Platform>/allow_manifest.json
+ASSET_BUNDLE_PLATFORMS = {
+    "Android",
+    "iOS",
+    "StandaloneWindows64",
+    "StandaloneOSX",
+}
+
+
+def _asset_bundle_control_path(platform):
+    platform = str(platform or "").strip()
+    if platform not in ASSET_BUNDLE_PLATFORMS:
+        return None
+    return os.path.join(
+        app.root_path,
+        "data",
+        "persist",
+        "static",
+        platform,
+        "allow_manifest.json"
+    )
+
+
+def _load_asset_bundle_control(platform):
+    path = _asset_bundle_control_path(platform)
+    if path is None:
+        raise ValueError("Unsupported asset bundle platform.")
+
+    default_config = {
+        "allow_manifest": True,
+        "refresh_days": 60
+    }
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if not os.path.isfile(path):
+        _save_asset_bundle_control(platform, default_config)
+        return default_config
+
+    with open(path, "r", encoding="utf-8") as stream:
+        config = json.load(stream)
+
+    if not isinstance(config, dict):
+        raise ValueError("Asset bundle control must be a JSON object.")
+
+    allow_manifest = config.get("allow_manifest", True)
+    refresh_days = config.get("refresh_days", 60)
+
+    if not isinstance(allow_manifest, bool):
+        raise ValueError("'allow_manifest' must be true or false.")
+
+    if isinstance(refresh_days, bool) or not isinstance(refresh_days, int):
+        raise ValueError("'refresh_days' must be an integer.")
+
+    refresh_days = max(1, min(refresh_days, 3650))
+    return {
+        "allow_manifest": allow_manifest,
+        "refresh_days": refresh_days
+    }
+
+
+def _save_asset_bundle_control(platform, config):
+    path = _asset_bundle_control_path(platform)
+    if path is None:
+        raise ValueError("Unsupported asset bundle platform.")
+
+    if not isinstance(config, dict):
+        raise ValueError("Asset bundle control must be a JSON object.")
+
+    allow_manifest = config.get("allow_manifest")
+    refresh_days = config.get("refresh_days")
+
+    if not isinstance(allow_manifest, bool):
+        raise ValueError("'allow_manifest' must be true or false.")
+
+    if isinstance(refresh_days, bool) or not isinstance(refresh_days, int):
+        raise ValueError("'refresh_days' must be an integer.")
+
+    refresh_days = max(1, min(refresh_days, 3650))
+    normalized = {
+        "allow_manifest": allow_manifest,
+        "refresh_days": refresh_days
+    }
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary_path = path + ".tmp"
+    with open(temporary_path, "w", encoding="utf-8") as stream:
+        json.dump(normalized, stream, indent=2)
+        stream.write("\n")
+    os.replace(temporary_path, path)
+    return normalized
+
+
+@app.route(
+    "/persist/static/<string:platform>/allow_manifest.json",
+    methods=["GET"]
+)
+def AssetBundleManifestControl(platform):
+    if platform not in ASSET_BUNDLE_PLATFORMS:
+        return make_response("Unsupported platform", 404)
+
+    try:
+        config = _load_asset_bundle_control(platform)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        app.logger.exception(
+            "Could not load asset bundle manifest control for %s",
+            platform
+        )
+        return make_response("Asset bundle control unavailable: " + str(exc), 500)
+
+    response = make_response(jsonify(config))
+    # The client checks this small control file once per app session.
+    # Do not let a CDN/browser retain an old true/false value.
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
+@app.route(
+    "/persist/static/<string:platform>/<path:filename>",
+    methods=["GET"]
+)
+def AssetBundlePlatformFile(platform, filename):
+    """Serve the platform's Unity manifest, bundle files and metadata JSON."""
+    if platform not in ASSET_BUNDLE_PLATFORMS:
+        return make_response("Unsupported platform", 404)
+
+    platform_root = os.path.join(
+        app.root_path, "data", "persist", "static", platform
+    )
+    if not os.path.isdir(platform_root):
+        return make_response("Asset bundle platform directory not found", 404)
+
+    try:
+        response = make_response(send_from_directory(
+            platform_root,
+            filename,
+            conditional=True
+        ))
+        response.headers["Cache-Control"] = "public, max-age=300"
+        return response
+    except Exception:
+        return make_response("Asset bundle file not found", 404)
+
+
+@app.route("/admin/asset-bundles", methods=["GET", "POST"])
+@login_required
+def AdminAssetBundles():
+    if not isAdmin(current_user):
+        return abort(404)
+
+    platform = request.values.get("platform", "Android").strip()
+    if platform not in ASSET_BUNDLE_PLATFORMS:
+        platform = "Android"
+
+    message = ""
+    error = ""
+
+    if request.method == "POST":
+        allow_manifest = request.form.get("allow_manifest") == "true"
+        try:
+            refresh_days = int(request.form.get("refresh_days", "60"))
+            if refresh_days < 1 or refresh_days > 3650:
+                raise ValueError("Refresh interval must be between 1 and 3650 days.")
+
+            _save_asset_bundle_control(platform, {
+                "allow_manifest": allow_manifest,
+                "refresh_days": refresh_days
+            })
+            Log(
+                "admin",
+                current_user.username
+                + " updated asset bundle manifest control for "
+                + platform
+                + ": allow_manifest="
+                + str(allow_manifest).lower()
+                + ", refresh_days="
+                + str(refresh_days)
+            )
+            message = "Settings saved successfully."
+        except (TypeError, ValueError, OSError) as exc:
+            error = str(exc)
+
+    try:
+        config = _load_asset_bundle_control(platform)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        config = {"allow_manifest": True, "refresh_days": 60}
+        error = error or ("Could not load settings: " + str(exc))
+
+    platform_options = "".join(
+        '<option value="{0}"{1}>{0}</option>'.format(
+            name,
+            " selected" if name == platform else ""
+        )
+        for name in sorted(ASSET_BUNDLE_PLATFORMS)
+    )
+    checked = " checked" if config["allow_manifest"] else ""
+    disabled_note = (
+        "Automatic manifest, patch and bundle-size refresh is disabled. "
+        "The game will continue using its local cached metadata."
+        if not config["allow_manifest"]
+        else "The game may refresh its cached metadata after the interval below."
+    )
+
+    html = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asset Bundle Settings</title>
+<style>
+body{{font-family:Arial,sans-serif;background:#101522;color:#e8edf7;margin:0;padding:32px}}
+main{{max-width:680px;margin:auto;background:#1a2334;padding:28px;border-radius:14px}}
+h1{{margin-top:0}}label{{display:block;margin:18px 0 8px}}
+select,input{{box-sizing:border-box;width:100%;padding:11px;border-radius:7px;border:1px solid #43516a;background:#101522;color:#fff}}
+.check{{display:flex;align-items:center;gap:10px}}.check input{{width:auto}}
+button{{margin-top:22px;padding:12px 20px;border:0;border-radius:7px;background:#20b8a5;color:#07151b;font-weight:bold;cursor:pointer}}
+.note{{color:#aebbd0;line-height:1.5}}.success{{color:#48df9b}}.error{{color:#ff7d89}}
+a{{color:#62c9ff}}
+</style>
+</head>
+<body><main>
+<h1>Asset Bundle Settings</h1>
+<p class="note">Control automatic manifest metadata refresh for each Unity platform.</p>
+{feedback}
+<form method="post" action="/admin/asset-bundles">
+<label for="platform">Platform</label>
+<select id="platform" name="platform" onchange="window.location.href='/admin/asset-bundles?platform='+encodeURIComponent(this.value)">{platform_options}</select>
+<label class="check">
+<input type="checkbox" name="allow_manifest" value="true"{checked}>
+Allow automatic manifest refresh
+</label>
+<label for="refresh_days">Refresh interval (days)</label>
+<input id="refresh_days" name="refresh_days" type="number" min="1" max="3650" value="{refresh_days}" required>
+<p class="note">{disabled_note}</p>
+<button type="submit">Save Settings</button>
+</form>
+<p class="note">Public control URL: <code>/persist/static/{platform}/allow_manifest.json</code></p>
+<p><a href="/admin">Back to Admin</a></p>
+</main></body></html>""".format(
+        feedback=(
+            '<p class="success">{}</p>'.format(message) if message else
+            '<p class="error">{}</p>'.format(error) if error else ""
+        ),
+        platform_options=platform_options,
+        checked=checked,
+        refresh_days=config["refresh_days"],
+        disabled_note=disabled_note,
+        platform=platform
+    )
+    return make_response(html)
+
+
 @app.route("/persist/static/manifest.json")
 def Manifest():
 	with open("data/persist/manifest.json", "r") as f:
