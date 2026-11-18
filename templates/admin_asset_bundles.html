@@ -1,115 +1,92 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Asset Bundle Settings</title>
-    <style>
-        * { box-sizing: border-box; }
-        body {
-            font-family: Arial, sans-serif;
-            background: #101522;
-            color: #e8edf7;
-            margin: 0;
-            padding: 32px 18px;
-        }
-        main {
-            width: 100%;
-            max-width: 680px;
-            margin: 24px auto;
-            padding: 28px;
-            background: #1a2334;
-            border: 1px solid #2b3850;
-            border-radius: 14px;
-            box-shadow: 0 12px 36px rgba(0, 0, 0, .22);
-        }
-        h1 { margin: 0 0 10px; font-size: 25px; }
-        label { display: block; margin: 20px 0 9px; }
-        input[type="number"] {
-            width: 100%;
-            padding: 11px 12px;
-            border: 1px solid #43516a;
-            border-radius: 7px;
-            background: #101522;
-            color: #fff;
-            font-size: 15px;
-        }
-        .check {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            line-height: 1.4;
-        }
-        .check input { width: 18px; height: 18px; accent-color: #20b8a5; }
-        button {
-            margin-top: 22px;
-            padding: 12px 20px;
-            border: 0;
-            border-radius: 7px;
-            background: #20b8a5;
-            color: #07151b;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        button:hover { background: #35d0bc; }
-        .note { color: #aebbd0; line-height: 1.55; }
-        .success, .error {
-            padding: 11px 13px;
-            border-radius: 7px;
-            line-height: 1.45;
-        }
-        .success { color: #48df9b; background: rgba(72, 223, 155, .08); }
-        .error { color: #ff7d89; background: rgba(255, 125, 137, .08); }
-        a { color: #62c9ff; }
-        code { overflow-wrap: anywhere; color: #c9d8f1; }
-    </style>
-</head>
-<body>
-<main>
-    <h1>Asset Bundle Settings</h1>
-    <p class="note">
-        One shared automatic manifest refresh control for Android, Windows and iOS.
-        Platform-specific manifests and bundle metadata remain hosted separately.
-    </p>
+{% extends "admin_base.html" %}
 
-    {% if message %}
-        <p class="success">{{ message }}</p>
-    {% endif %}
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% endif %}
+{% block content %}
+<style>
+    .asset-bundle-settings {
+        max-width: 760px;
+        margin: 28px auto;
+    }
+    .asset-bundle-settings .setting-note {
+        color: var(--bs-secondary-color);
+        line-height: 1.55;
+    }
+    .asset-bundle-settings .setting-status {
+        overflow-wrap: anywhere;
+    }
+    .asset-bundle-settings code {
+        overflow-wrap: anywhere;
+    }
+</style>
 
-    <form method="post" action="{{ url_for('AdminAssetBundles') }}">
-        <label class="check">
-            <input
-                type="checkbox"
-                name="allow_manifest"
-                value="true"
-                {% if config.allow_manifest %}checked{% endif %}
-            >
-            Allow automatic manifest refresh
-        </label>
+<div class="asset-bundle-settings">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+        <div>
+            <h1 class="h2 mb-1">Asset Bundle Settings</h1>
+            <p class="setting-note mb-0">
+                Shared automatic manifest refresh control for Android, Windows and iOS.
+            </p>
+        </div>
+        <span class="badge text-bg-info">Shared Settings</span>
+    </div>
 
-        <label for="refresh_days">Refresh interval (days)</label>
-        <input
-            id="refresh_days"
-            name="refresh_days"
-            type="number"
-            min="1"
-            max="3650"
-            value="{{ config.refresh_days }}"
-            required
-        >
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <p class="setting-note">
+                This setting controls the shared permission for automatic manifest refresh.
+                Platform-specific manifests and bundle metadata remain hosted separately.
+            </p>
 
-        <p class="note">{{ disabled_note }}</p>
-        <button type="submit">Save Settings</button>
-    </form>
+            {% if message %}
+                <div class="alert alert-success setting-status" role="alert">{{ message }}</div>
+            {% endif %}
+            {% if error %}
+                <div class="alert alert-danger setting-status" role="alert">{{ error }}</div>
+            {% endif %}
 
-    <p class="note">
-        Shared public control URL:
+            <form method="post" action="{{ url_for('AdminAssetBundles') }}">
+                <div class="form-check form-switch mb-4">
+                    <input
+                        class="form-check-input"
+                        type="checkbox"
+                        role="switch"
+                        id="allow_manifest"
+                        name="allow_manifest"
+                        value="true"
+                        {% if config.allow_manifest %}checked{% endif %}
+                    >
+                    <label class="form-check-label fw-semibold" for="allow_manifest">
+                        Allow automatic manifest refresh
+                    </label>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" for="refresh_days">
+                        Refresh interval (days)
+                    </label>
+                    <input
+                        class="form-control"
+                        id="refresh_days"
+                        name="refresh_days"
+                        type="number"
+                        min="1"
+                        max="3650"
+                        value="{{ config.refresh_days }}"
+                        required
+                    >
+                    <div class="form-text">{{ disabled_note }}</div>
+                </div>
+
+                <button class="btn btn-primary" type="submit">
+                    <i class="bi bi-save me-1"></i>
+                    Save Settings
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="alert alert-secondary mt-3 mb-0">
+        <div class="fw-semibold mb-1">Shared public control URL</div>
         <code>/persist/static/allow_manifest.json</code>
-    </p>
-    <p><a href="/admin">Back to Admin</a></p>
-</main>
-</body>
-</html>
+    </div>
+</div>
+{% endblock %}
